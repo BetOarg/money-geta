@@ -4,14 +4,14 @@ Subject: [PATCH] live: isolate each recording run in a unique directory
 Audited upstream base: Bodila51/gtavi-claudecode scripts/live.py
 Audited blob: c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a
 
-This patch is pinned to the audited source. Re-check the blob before applying.
+Pinned to the audited source; re-check the blob before applying.
 
 --- a/scripts/live.py
 +++ b/scripts/live.py
 @@ -12,1 +12,1 @@
 -import argparse, json, re, subprocess, sys, time
 +import argparse, json, re, subprocess, sys, time, uuid
-@@ -216,8 +216,8 @@
+@@ -216,7 +216,7 @@
      d = job_dir(a.url)
 -    ld = d / "live"
 -    ld.mkdir(exist_ok=True)
