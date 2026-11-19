@@ -28,6 +28,7 @@ def env_path(name: str) -> Path | None:
 def doctor() -> int:
     git_path = shutil.which("git")
     ffmpeg_path = shutil.which("ffmpeg")
+    ffprobe_path = shutil.which("ffprobe")
     mpt_dir = env_path("MONEYPRINTERTURBO_DIR")
     if not ffmpeg_path and mpt_dir:
         bundled = mpt_dir / "lib/python/Lib/site-packages/imageio_ffmpeg/binaries"
@@ -38,6 +39,7 @@ def doctor() -> int:
         ("Python", Path(sys.executable).exists(), sys.version.split()[0]),
         ("Git", git_path is not None, git_path or "not found"),
         ("FFmpeg", ffmpeg_path is not None, ffmpeg_path or "not found on PATH or MPT bundled runtime"),
+        ("FFprobe", ffprobe_path is not None, ffprobe_path or "not found on PATH"),
     ]
     for label, ok, detail in checks:
         print(f"{'PASS' if ok else 'PENDING'} {label}: {detail}")
@@ -169,7 +171,7 @@ def run_moments(args: argparse.Namespace) -> int:
     for line in completed.stdout.splitlines():
         if line.startswith("job: "):
             print(f"SESSION: {session}")
-            print(f"NEXT: money-geta cut-video --job-dir \"{line[5:]}\\\" --pick 1")
+            print(f'NEXT: money-geta cut-video --job-dir "{line[5:]}" --pick 1')
             return 0
     print("FAIL: moments.py completed without returning a job directory.")
     return 1
