@@ -22,7 +22,7 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     mpt = tmp_path / "mpt"
     mpt.mkdir()
     (mpt / "cli.py").write_text("# fake CLI", encoding="utf-8")
-    (mpt / "config.toml").write_text("upload_post_auto_upload = false\\n", encoding="utf-8")
+    (mpt / "config.toml").write_text("upload_post_auto_upload = false\n", encoding="utf-8")
     python_exe = mpt / "python.exe"
     python_exe.write_text("fake interpreter", encoding="utf-8")
     campaign = tmp_path / "campaign.json"
@@ -126,7 +126,7 @@ def test_render_blocks_mpt_automatic_cross_post(tmp_path, monkeypatch):
     mpt = tmp_path / "mpt"
     mpt.mkdir()
     (mpt / "cli.py").write_text("# fake CLI", encoding="utf-8")
-    (mpt / "config.toml").write_text("upload_post_auto_upload = true\\n", encoding="utf-8")
+    (mpt / "config.toml").write_text("upload_post_auto_upload = true\n", encoding="utf-8")
     python_exe = mpt / "python.exe"
     python_exe.write_text("fake interpreter", encoding="utf-8")
     campaign = tmp_path / "campaign.json"
