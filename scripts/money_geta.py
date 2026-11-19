@@ -109,10 +109,36 @@ def verify_patches(upstream: Path, apply: bool = False) -> int:
     return 0
 
 
+
+def resolve_mpt_python(mpt_dir: Path, override: Path | None = None) -> Path:
+    if override is not None:
+        candidate = override.expanduser().resolve()
+        if not candidate.is_file():
+            raise FileNotFoundError(f"MoneyPrinterTurbo Python runtime not found: {candidate}")
+        return candidate
+    candidates = [
+        mpt_dir / ".venv/Scripts/python.exe",
+        mpt_dir / "venv/Scripts/python.exe",
+        mpt_dir / "lib/python/python.exe",
+        mpt_dir / ".venv/bin/python",
+        mpt_dir / "venv/bin/python",
+        mpt_dir / "lib/python/bin/python",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return Path(sys.executable).resolve()
+
+
 def run_mpt(args: argparse.Namespace) -> int:
     mpt_dir = args.mpt_dir.expanduser().resolve()
     cli_file = mpt_dir / "cli.py"
     config_file = mpt_dir / "config.toml"
+    try:
+        mpt_python = resolve_mpt_python(mpt_dir, args.mpt_python)
+    except FileNotFoundError as exc:
+        print(f"INCOMPLETE: {exc}")
+        return 2
     if not cli_file.is_file() or not config_file.is_file():
         print(f"INCOMPLETE: MoneyPrinterTurbo requires cli.py and config.toml in {mpt_dir}")
         return 2
@@ -138,7 +164,7 @@ def run_mpt(args: argparse.Namespace) -> int:
         return 2
 
     help_result = subprocess.run(
-        [sys.executable, str(cli_file), "--help"],
+        [str(mpt_python), str(cli_file), "--help"],
         cwd=mpt_dir, capture_output=True, text=True, check=False,
     )
     if help_result.returncode != 0:
@@ -156,7 +182,7 @@ def run_mpt(args: argparse.Namespace) -> int:
         return 2
 
     command = [
-        sys.executable, str(cli_file),
+        str(mpt_python), str(cli_file),
         "--video-subject", args.subject,
         "--video-source", "local",
         "--video-materials", ",".join(str(item) for item in materials),
@@ -188,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     campaign.add_argument("--campaign", type=Path, required=True)
     render = sub.add_parser("render", help="run MoneyPrinterTurbo with a gated campaign and local media")
     render.add_argument("--mpt-dir", type=Path, default=env_path("MONEYPRINTERTURBO_DIR"))
+    render.add_argument("--mpt-python", type=Path, default=env_path("MONEYPRINTERTURBO_PYTHON"))
     render.add_argument("--campaign", type=Path, required=True)
     render.add_argument("--subject", required=True)
     render.add_argument("--materials", type=Path, nargs="+", required=True)
