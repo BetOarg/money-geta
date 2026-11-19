@@ -15,8 +15,6 @@ ROOT = Path(__file__).resolve().parents[1]
 PATCHES = {
     "live.py": ("scripts/live.py", "c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a",
                 ROOT / "patches/gtavi-claudecode/live-session-isolation.patch"),
-    "check.py": ("scripts/check.py", "c71ad730e009e4a5b5aea113a34e20dabd37620b",
-                 ROOT / "patches/gtavi-claudecode/campaign-check-fail-closed.patch"),
     "secrets_map.py": ("scripts/secrets_map.py", "1d2b50963c3a2f4986911449679809d7390a4c09",
                        ROOT / "patches/gtavi-claudecode/secrets-map-evidence.patch"),
 }
