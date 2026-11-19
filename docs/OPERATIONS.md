@@ -4,7 +4,13 @@ Money-Geta is the local orchestration layer. MoneyPrinterTurbo remains the rende
 
 ## Install (Windows PowerShell)
 
-From the Money-Geta checkout:
+From the Money-Geta checkout, run the bootstrap with the actual GTA VI ClaudeCode folder:
+
+```powershell
+.\install_windows.ps1 -GtaviDir "C:\\path\\to\\gtavi-claudecode"
+```
+
+The installer creates a local venv only if one does not exist, installs Money-Geta, detects the separate upstream Python runtimes, and saves the path settings for the current Windows user. It does not overwrite upstream files, config, credentials or media. To install manually instead:
 
 ```powershell
 py -3.11 -m venv .venv
@@ -36,7 +42,7 @@ money-geta upstream-check --apply
 money-geta render --campaign .\campaign.json --subject "GTA VI: ..." --materials .\media\clip1.mp4 .\media\clip2.mp4
 ```
 
-- `doctor`: checks Python, Git, FFmpeg and configured upstream directories. It does not test provider credentials or perform a render.
+- `doctor`: checks Python, Git, FFmpeg, FFprobe and configured upstream directories. It does not test provider credentials or perform a render.
 - `new-session`: creates a unique UTC work directory and never clears old recordings.
 - `record-live`: starts a YouTube/Twitch recording only after explicit `--confirm-recording` and after verifying the session-isolation patch is applied.
 - `analyze-video`: runs the upstream moment-finder on a local video only, in a fresh isolated job directory; requires the GTA VI Python dependencies, FFmpeg and FFprobe.
@@ -51,4 +57,4 @@ Start from `config/campaign.example.json`. The permissions and credits booleans 
 
 ## Boundaries
 
-Money-Geta does not auto-publish, accept paid provider terms, spend credits, or certify copyright. The first integrated production chain is local-VOD analysis → candidate clip cutting → campaign gate → MoneyPrinterTurbo rendering. Trend research, online source acquisition, Twitch/YouTube live recording and auto-publication remain separate integrations until each has a tested adapter.
+Money-Geta does not auto-publish, accept paid provider terms, spend credits, or certify copyright. The first integrated production chain is local-VOD analysis → candidate clip cutting → campaign gate → MoneyPrinterTurbo rendering. Trend research, online source acquisition and auto-publication remain separate integrations until each has a tested adapter.
