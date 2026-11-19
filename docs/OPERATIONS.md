@@ -7,7 +7,7 @@ Money-Geta is the local orchestration layer. MoneyPrinterTurbo remains the rende
 From the Money-Geta checkout, run the bootstrap with the actual GTA VI ClaudeCode folder:
 
 ```powershell
-.\install_windows.ps1 -GtaviDir "C:\\path\\to\\gtavi-claudecode"
+.\install_windows.ps1 -GtaviDir "C:\path\to\gtavi-claudecode"
 ```
 
 The installer creates a local venv only if one does not exist, installs Money-Geta, detects the separate upstream Python runtimes, and saves the path settings for the current Windows user. It does not overwrite upstream files, config, credentials or media. To install manually instead:
@@ -16,13 +16,13 @@ The installer creates a local venv only if one does not exist, installs Money-Ge
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[test]"
-$env:GTAVI_CLAUDECODE_DIR = "C:\\path\\to\\gtavi-claudecode"
+$env:GTAVI_CLAUDECODE_DIR = "C:\path\to\gtavi-claudecode"
 # Optional only if the GTA VI project uses a separate Python environment:
-$env:GTAVI_CLAUDECODE_PYTHON = "C:\\path\\to\\gtavi-claudecode\\.venv\\Scripts\\python.exe"
-$env:MONEYPRINTERTURBO_DIR = "C:\\MoneyPrinterTurbo"
+$env:GTAVI_CLAUDECODE_PYTHON = "C:\path\to\gtavi-claudecode\.venv\Scripts\python.exe"
+$env:MONEYPRINTERTURBO_DIR = "C:\MoneyPrinterTurbo"
 # Optional only if the MPT Python runtime is not auto-detected:
-$env:MONEYPRINTERTURBO_PYTHON = "C:\\MoneyPrinterTurbo\\lib\\python\\python.exe"
-$env:MONEY_GETA_JOBS_DIR = "C:\\Money-Geta-Data\\jobs"
+$env:MONEYPRINTERTURBO_PYTHON = "C:\MoneyPrinterTurbo\lib\python\python.exe"
+$env:MONEY_GETA_JOBS_DIR = "C:\Money-Geta-Data\jobs"
 money-geta doctor
 ```
 
@@ -34,7 +34,7 @@ Keep MoneyPrinterTurbo's existing `config.toml`, OAuth data, API keys, jobs and 
 money-geta doctor
 money-geta new-session gta6-weekly
 money-geta record-live --url "https://www.youtube.com/watch?v=..." --minutes 60 --confirm-recording
-money-geta analyze-video --source .\\media\\gameplay.mp4
+money-geta analyze-video --source .\media\gameplay.mp4
 money-geta cut-video --job-dir "<job path printed by analyze-video>" --pick 1 --layout blur --hook "GTA VI: ..." 
 money-geta campaign-check --campaign .\campaign.json
 money-geta upstream-check
