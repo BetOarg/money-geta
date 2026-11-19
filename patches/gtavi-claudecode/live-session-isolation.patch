@@ -7,8 +7,8 @@ Audited blob: c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a
 Pinned to the audited source; re-check the blob before applying.
 
 diff --git a/scripts/live.py b/scripts/live.py
-index 0000000..0000000 100644
---- a/scripts/live.pyscripts/live.py
+index c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a..0000000 100644
+--- a/scripts/live.py
 +++ b/scripts/live.py
 @@ -11,7 +11,7 @@
  """
