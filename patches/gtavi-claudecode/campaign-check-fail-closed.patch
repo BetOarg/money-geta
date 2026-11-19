@@ -20,7 +20,7 @@ index c71ad730e009e4a5b5aea113a34e20dabd37620b..0000000 100644
 +    if not m: return rules, False
 +    rules["max"] = float(m.group(1))
 +    if rules["min"] <= 0 or rules["max"] < rules["min"]: return rules, False
-     m = re.search(r"required_hashtags:\\s*(.+)", txt, re.I)
+     m = re.search(r"required_hashtags:\s*(.+)", txt, re.I)
 @@ -58,2 +61,7 @@
      rules, have_campaign = parse_campaign(a.campaign)
 +    if not have_campaign:
