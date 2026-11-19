@@ -6,11 +6,19 @@ Audited blob: c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a
 
 Pinned to the audited source; re-check the blob before applying.
 
---- a/scripts/live.py
+diff --git a/scripts/live.py b/scripts/live.py
+index 0000000..0000000 100644
+--- a/scripts/live.pyscripts/live.py
 +++ b/scripts/live.py
-@@ -12,1 +12,1 @@
+@@ -11,7 +11,7 @@
+ """
 -import argparse, json, re, subprocess, sys, time
 +import argparse, json, re, subprocess, sys, time, uuid
+ from collections import Counter
+ from datetime import datetime, timezone
+ from pathlib import Path
+ sys.path.insert(0, str(Path(__file__).parent))
+ from common import job_dir, run, save_json, tool, ytdlp_base
 @@ -216,7 +216,7 @@
      d = job_dir(a.url)
 -    ld = d / "live"
