@@ -8,7 +8,7 @@ Pinned to the audited source; re-check the blob before applying.
 
 --- a/scripts/check.py
 +++ b/scripts/check.py
-@@ -21,5 +21,8 @@
+@@ -21,4 +21,7 @@
      m = re.search(r"min_seconds:\s*(\d+(?:\.\d+)?)", txt, re.I)
 -    if m: rules["min"] = float(m.group(1))
 +    if not m: return rules, False
