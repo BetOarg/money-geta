@@ -42,7 +42,7 @@ money-geta upstream-check --apply
 money-geta render --campaign .\campaign.json --subject "GTA VI: ..." --materials .\media\clip1.mp4 .\media\clip2.mp4
 ```
 
-- `doctor`: checks Python, Git, FFmpeg, FFprobe and configured upstream directories. It does not test provider credentials or perform a render.
+- `doctor`: checks Python, Git, FFmpeg, FFprobe, both upstream Python runtimes, the MoneyPrinterTurbo CLI contract and the GTA VI analysis dependencies. It does not test provider credentials or perform a render.
 - `new-session`: creates a unique UTC work directory and never clears old recordings.
 - `record-live`: starts a YouTube/Twitch recording only after explicit `--confirm-recording` and after verifying the session-isolation patch is applied.
 - `analyze-video`: runs the upstream moment-finder on a local video only, in a fresh isolated job directory; requires the GTA VI Python dependencies, FFmpeg and FFprobe.
