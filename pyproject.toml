@@ -1,8 +1,11 @@
 [project]
 name = "money-geta"
-version = "0.1.0"
-description = "Safety and integration utilities for a local-first GTA 6 content workflow"
+version = "0.2.0"
+description = "Operational control plane for a local-first GTA VI video workflow"
 requires-python = ">=3.10"
+
+[project.scripts]
+money-geta = "scripts.money_geta:main"
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]
