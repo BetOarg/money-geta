@@ -151,7 +151,7 @@ def run_live(args: argparse.Namespace) -> int:
     if reverse.returncode:
         print("BLOCKED: live-session safety patch is not applied. Run money-geta upstream-check --apply first.")
         return 2
-    missing_tools = [name for name in ("ffmpeg", "yt-dlp") if not shutil.which(name)]
+    missing_tools = [name for name in ("ffmpeg",) if not shutil.which(name)]
     if missing_tools:
         print("INCOMPLETE: live recording requires on-PATH tools: " + ", ".join(missing_tools))
         return 2
@@ -193,6 +193,16 @@ def run_moments(args: argparse.Namespace) -> int:
         print(f"INCOMPLETE: {exc}")
         return 2
 
+    dependency_check = subprocess.run(
+        [str(python_exe), "-c", "import numpy, faster_whisper"],
+        cwd=gtavi_dir, capture_output=True, text=True, check=False,
+    )
+    if dependency_check.returncode:
+        print("INCOMPLETE: GTA VI Python environment needs numpy and faster-whisper.")
+        if dependency_check.stderr:
+            print(dependency_check.stderr.strip())
+        return 2
+
     root = args.jobs_root.expanduser().resolve()
     session = create_session_dir(root, f"analysis-{source.stem}")
     env = os.environ.copy()
@@ -225,6 +235,14 @@ def run_cut(args: argparse.Namespace) -> int:
     job_dir = args.job_dir.expanduser().resolve()
     if not script.is_file() or not (job_dir / "candidates.json").is_file() or not (job_dir / "transcript.json").is_file():
         print("INCOMPLETE: cut.py, candidates.json or transcript.json is missing.")
+        return 2
+    try:
+        candidates = json.loads((job_dir / "candidates.json").read_text(encoding="utf-8")).get("candidates", [])
+    except (OSError, json.JSONDecodeError):
+        print("FAIL: candidates.json is unreadable.")
+        return 2
+    if not any(item.get("n") == args.pick for item in candidates):
+        print(f"FAIL: candidate {args.pick} does not exist in {job_dir}.")
         return 2
     required_tools = ["ffmpeg"] + (["ffprobe"] if args.layout in {"facecam", "react"} else [])
     missing_tools = [name for name in required_tools if not shutil.which(name)]
