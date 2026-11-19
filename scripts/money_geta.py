@@ -28,23 +28,33 @@ def env_path(name: str) -> Path | None:
 
 
 def doctor() -> int:
+    git_path = shutil.which("git")
+    ffmpeg_path = shutil.which("ffmpeg")
+    mpt_dir = env_path("MONEYPRINTERTURBO_DIR")
+    if not ffmpeg_path and mpt_dir:
+        bundled = mpt_dir / "lib/python/Lib/site-packages/imageio_ffmpeg/binaries"
+        candidates = list(bundled.glob("ffmpeg*.exe")) if bundled.is_dir() else []
+        ffmpeg_path = str(candidates[0]) if candidates else None
+
     checks = [
         ("Python", Path(sys.executable).exists(), sys.version.split()[0]),
-        ("Git", shutil.which("git") is not None, shutil.which("git") or "not found"),
-        ("FFmpeg", shutil.which("ffmpeg") is not None, shutil.which("ffmpeg") or "not found"),
+        ("Git", git_path is not None, git_path or "not found"),
+        ("FFmpeg", ffmpeg_path is not None, ffmpeg_path or "not found on PATH or MPT bundled runtime"),
     ]
     for label, ok, detail in checks:
         print(f"{'PASS' if ok else 'PENDING'} {label}: {detail}")
-    for label, env, marker in [
-        ("GTA VI ClaudeCode", "GTAVI_CLAUDECODE_DIR", Path("scripts/live.py")),
-        ("MoneyPrinterTurbo", "MONEYPRINTERTURBO_DIR", Path("config.toml")),
-    ]:
-        path = env_path(env)
-        ok = bool(path and (path / marker).is_file())
-        print(f"{'PASS' if ok else 'PENDING'} {label}: {path or f'set {env}'}")
-    print("NOTE API credentials, Codex login, TTS, image provider and render are not tested by doctor.")
-    return 0 if all(x[1] for x in checks) else 2
 
+    configured = [
+        ("GTA VI ClaudeCode", env_path("GTAVI_CLAUDECODE_DIR"), Path("scripts/live.py")),
+        ("MoneyPrinterTurbo", mpt_dir, Path("config.toml")),
+    ]
+    for label, path, marker in configured:
+        ok = bool(path and (path / marker).is_file())
+        print(f"{'PASS' if ok else 'PENDING'} {label}: {path or 'environment variable not set'}")
+        checks.append((label, ok, str(path or "not configured")))
+
+    print("NOTE API credentials, Codex/Gemini login, image generation, TTS and a full render are not tested by doctor.")
+    return 0 if all(item[1] for item in checks) else 2
 
 def verify_patches(upstream: Path, apply: bool = False) -> int:
     git = shutil.which("git")
