@@ -1,0 +1,12 @@
+[project]
+name = "money-geta"
+version = "0.1.0"
+description = "Safety and integration utilities for a local-first GTA 6 content workflow"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
