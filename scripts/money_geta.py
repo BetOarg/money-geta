@@ -568,6 +568,7 @@ def main(argv: list[str] | None = None) -> int:
         return show_status(args.jobs_root, args.limit)
     if args.command == "new-session":
         path = create_session_dir(args.root, args.job_id)
+        write_manifest(path, stage="created", job_id=args.job_id)
         print(path)
         return 0
     if args.command == "campaign-check":
