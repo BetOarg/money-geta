@@ -55,6 +55,7 @@ def verify_patches(upstream: Path, apply: bool = False) -> int:
         print(f"FAIL not a Git checkout: {upstream}")
         return 2
 
+    ready: list[tuple[str, Path]] = []
     failures = 0
     for label, (relative, expected, patch) in PATCHES.items():
         source = upstream / relative
@@ -69,23 +70,33 @@ def verify_patches(upstream: Path, apply: bool = False) -> int:
             print(f"BLOCKED {label}: upstream blob differs; expected {expected}, got {actual.stdout.strip() or 'unavailable'}")
             failures += 1
             continue
-        command = [git, "apply", "--check", str(patch)]
-        checked = subprocess.run(command, cwd=upstream, capture_output=True, text=True, check=False)
+        checked = subprocess.run(
+            [git, "apply", "--check", str(patch)], cwd=upstream,
+            capture_output=True, text=True, check=False
+        )
         if checked.returncode:
             print(f"FAIL {label}: git apply --check: {(checked.stderr or checked.stdout).strip()}")
             failures += 1
             continue
-        if apply:
-            done = subprocess.run([git, "apply", str(patch)], cwd=upstream, capture_output=True, text=True, check=False)
+        ready.append((label, patch))
+
+    if failures:
+        print("NO PATCHES APPLIED: resolve every compatibility failure first.")
+        return 1
+    if apply:
+        for label, patch in ready:
+            done = subprocess.run(
+                [git, "apply", str(patch)], cwd=upstream,
+                capture_output=True, text=True, check=False
+            )
             if done.returncode:
                 print(f"FAIL {label}: apply failed: {(done.stderr or done.stdout).strip()}")
-                failures += 1
-                continue
+                return 1
             print(f"APPLIED {label}")
-        else:
+    else:
+        for label, _ in ready:
             print(f"PASS {label}: exact upstream blob; patch applies cleanly")
-    return 1 if failures else 0
-
+    return 0
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="money-geta", description=__doc__)
