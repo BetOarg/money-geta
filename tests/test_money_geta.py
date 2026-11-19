@@ -23,6 +23,8 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     mpt.mkdir()
     (mpt / "cli.py").write_text("# fake CLI", encoding="utf-8")
     (mpt / "config.toml").write_text("# local-only test config", encoding="utf-8")
+    python_exe = mpt / "python.exe"
+    python_exe.write_text("fake interpreter", encoding="utf-8")
     campaign = tmp_path / "campaign.json"
     campaign.write_text(json.dumps({
         "campaign_name": "test",
@@ -50,7 +52,7 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
 
     monkeypatch.setattr(money_geta.subprocess, "run", fake_run)
     args = Namespace(
-        mpt_dir=mpt, campaign=campaign, materials=[media],
+        mpt_dir=mpt, mpt_python=python_exe, campaign=campaign, materials=[media],
         subject="GTA VI test", aspect="9:16", count=1,
         language="en-US", voice=None,
     )
