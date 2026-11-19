@@ -1,0 +1,16 @@
+# Merge these settings into your existing MoneyPrinterTurbo config.toml.
+# Do NOT replace the upstream full config with this partial overlay.
+# Keep real credentials and OAuth storage local; never commit them.
+
+listen_host = "127.0.0.1"
+listen_port = 8080
+
+[diagnostics]
+log_requests = false
+
+[app]
+# The current upstream config supports OpenAI - Codex device-code login.
+# Select the model in MoneyPrinterTurbo's UI after authenticating.
+openai_codex_model_name = ""
+# Separate Codex image model selection; availability depends on the model/tool.
+codex_image_model_name = ""
