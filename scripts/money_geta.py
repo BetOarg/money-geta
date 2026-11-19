@@ -137,6 +137,24 @@ def run_mpt(args: argparse.Namespace) -> int:
         print("FAIL: material paths cannot contain commas (MoneyPrinterTurbo CLI delimiter).")
         return 2
 
+    help_result = subprocess.run(
+        [sys.executable, str(cli_file), "--help"],
+        cwd=mpt_dir, capture_output=True, text=True, check=False,
+    )
+    if help_result.returncode != 0:
+        print("FAIL: MoneyPrinterTurbo CLI help could not be executed.")
+        if help_result.stderr:
+            print(help_result.stderr.strip())
+        return 2
+    required_flags = (
+        "--video-subject", "--video-source", "--video-materials",
+        "--video-aspect", "--video-count", "--stop-at",
+    )
+    missing_flags = [flag for flag in required_flags if flag not in help_result.stdout]
+    if missing_flags:
+        print("INCOMPATIBLE: installed MoneyPrinterTurbo CLI is missing required flags: " + ", ".join(missing_flags))
+        return 2
+
     command = [
         sys.executable, str(cli_file),
         "--video-subject", args.subject,
