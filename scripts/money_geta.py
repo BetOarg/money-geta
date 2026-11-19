@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from scripts.campaign_check import check_file
@@ -24,6 +25,44 @@ def env_path(name: str) -> Path | None:
     value = os.environ.get(name)
     return Path(value).expanduser().resolve() if value else None
 
+
+
+def write_manifest(session_dir: Path, **fields) -> Path:
+    session_dir.mkdir(parents=True, exist_ok=True)
+    manifest = session_dir / "money-geta.json"
+    current = {}
+    if manifest.exists():
+        current = json.loads(manifest.read_text(encoding="utf-8"))
+    current.update(fields)
+    current["updated_at"] = datetime.now(timezone.utc).isoformat()
+    temp = manifest.with_suffix(".json.tmp")
+    temp.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp.replace(manifest)
+    return manifest
+
+
+def show_status(root: Path, limit: int = 20) -> int:
+    root = root.expanduser().resolve()
+    if not root.is_dir():
+        print(f"INCOMPLETE: jobs directory does not exist: {root}")
+        return 2
+    manifests = sorted(
+        root.rglob("money-geta.json"),
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )[:limit]
+    if not manifests:
+        print(f"No Money-Geta runs recorded in {root}")
+        return 0
+    for manifest in manifests:
+        try:
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            print(f"WARNING: unreadable run manifest: {manifest}")
+            continue
+        label = data.get("subject") or data.get("source") or data.get("source_url") or "untitled"
+        print(f"{data.get('updated_at', 'unknown')} | {data.get('stage', 'unknown')} | {label} | {manifest.parent}")
+    return 0
 
 def doctor() -> int:
     git_path = shutil.which("git")
