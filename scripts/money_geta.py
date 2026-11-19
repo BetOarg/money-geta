@@ -313,7 +313,7 @@ def run_mpt(args: argparse.Namespace) -> int:
     except OSError as exc:
         print(f"FAIL: cannot read MoneyPrinterTurbo config.toml: {exc}")
         return 2
-    if re.search(r"(?im)^\\s*upload_post_auto_upload\\s*=\\s*true\\s*(?:#.*)?$", config_text):
+    if re.search(r"(?im)^\s*upload_post_auto_upload\s*=\s*true\s*(?:#.*)?$", config_text):
         print("BLOCKED: MoneyPrinterTurbo automatic cross-platform publishing is enabled. Set upload_post_auto_upload = false before using Money-Geta render.")
         return 2
     if not args.campaign.is_file():
