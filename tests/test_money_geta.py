@@ -4,7 +4,7 @@ from scripts.money_geta import PATCHES, verify_patches
 
 
 def test_patch_manifest_is_complete():
-    assert set(PATCHES) == {"live.py", "check.py", "secrets_map.py"}
+    assert set(PATCHES) == {"live.py", "secrets_map.py"}
     for _, (_, blob, patch) in PATCHES.items():
         assert len(blob) == 40
         assert patch.is_file()
