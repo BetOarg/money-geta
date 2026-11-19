@@ -231,8 +231,10 @@ def run_live(args: argparse.Namespace) -> int:
     except FileNotFoundError as exc:
         print(f"INCOMPLETE: {exc}")
         return 2
+    session = create_session_dir(args.jobs_root, "live-recording")
+    write_manifest(session, stage="recording", source_url=args.url.split("?")[0], requested_minutes=args.minutes)
     env = os.environ.copy()
-    env["CLIP_DESK_HOME"] = str(args.jobs_root.expanduser().resolve())
+    env["CLIP_DESK_HOME"] = str(session)
     command = [
         str(python_exe), str(script), args.url,
         "--minutes", str(args.minutes),
@@ -242,7 +244,10 @@ def run_live(args: argparse.Namespace) -> int:
         "--cooldown", str(args.cooldown),
     ]
     print("RECORDING: explicit operator confirmation received; unique session isolation verified.")
-    return subprocess.run(command, cwd=gtavi_dir, env=env, check=False).returncode
+    result = subprocess.run(command, cwd=gtavi_dir, env=env, check=False)
+    write_manifest(session, stage="recorded" if result.returncode == 0 else "recording_failed", exit_code=result.returncode)
+    print(f"SESSION: {session}")
+    return result.returncode
 
 def run_moments(args: argparse.Namespace) -> int:
     gtavi_dir = args.gtavi_dir.expanduser().resolve()
@@ -276,6 +281,8 @@ def run_moments(args: argparse.Namespace) -> int:
 
     root = args.jobs_root.expanduser().resolve()
     session = create_session_dir(root, f"analysis-{source.stem}")
+    write_manifest(session, stage="analyzing", source_path=str(source), requested_top=args.top,
+                   min_seconds=args.min_seconds, max_seconds=args.max_seconds)
     env = os.environ.copy()
     env["CLIP_DESK_HOME"] = str(session)
     command = [
@@ -289,10 +296,17 @@ def run_moments(args: argparse.Namespace) -> int:
     if completed.stderr:
         print(completed.stderr.strip())
     if completed.returncode:
+        write_manifest(session, stage="analysis_failed", exit_code=completed.returncode)
         print(f"FAIL: moments analysis exited {completed.returncode}")
         return completed.returncode
     for line in completed.stdout.splitlines():
         if line.startswith("job: "):
+            job_path = Path(line[5:]).resolve()
+            try:
+                candidate_count = len(json.loads((job_path / "candidates.json").read_text(encoding="utf-8")).get("candidates", []))
+            except (OSError, json.JSONDecodeError):
+                candidate_count = None
+            write_manifest(session, stage="analyzed", job_dir=str(job_path), candidate_count=candidate_count)
             print(f"SESSION: {session}")
             print(f'NEXT: money-geta cut-video --job-dir "{line[5:]}" --pick 1')
             return 0
@@ -344,6 +358,9 @@ def run_cut(args: argparse.Namespace) -> int:
     if output is None or not output.is_file():
         print("FAIL: cut.py did not produce a verifiable MP4 path.")
         return 1
+    session_dir = job_dir.parent.parent
+    write_manifest(session_dir, stage="clip_ready", job_dir=str(job_dir), selected_candidate=args.pick,
+                   layout=args.layout, clip_path=str(output.resolve()))
     print(f"CLIP: {output.resolve()}")
     return 0
 
@@ -442,6 +459,10 @@ def run_mpt(args: argparse.Namespace) -> int:
 
     print("CAMPAIGN FIELDS: PASS")
     print("HUMAN REVIEW REQUIRED: confirm actual footage rights, creator credits and final export.")
+    session = create_session_dir(args.jobs_root, f"render-{args.subject[:32]}")
+    write_manifest(session, stage="rendering", subject=args.subject, campaign_path=str(args.campaign.resolve()),
+                   input_media=[str(item) for item in materials], aspect=args.aspect, count=args.count,
+                   engine="MoneyPrinterTurbo")
     print("Starting MoneyPrinterTurbo local-media pipeline...")
     completed = subprocess.run(command, cwd=mpt_dir, capture_output=True, text=True, check=False)
     if completed.stdout:
@@ -449,26 +470,37 @@ def run_mpt(args: argparse.Namespace) -> int:
     if completed.stderr:
         print(completed.stderr.strip())
     if completed.returncode:
+        write_manifest(session, stage="render_failed", exit_code=completed.returncode)
         print(f"MoneyPrinterTurbo exit code: {completed.returncode}")
+        print(f"SESSION: {session}")
         return completed.returncode
     try:
         payload = json.loads(completed.stdout)
         videos = payload.get("result", {}).get("videos", [])
     except (json.JSONDecodeError, AttributeError, TypeError):
+        write_manifest(session, stage="render_failed", failure="invalid task JSON")
         print("FAIL: MoneyPrinterTurbo returned no verifiable JSON task result.")
+        print(f"SESSION: {session}")
         return 1
     if not videos:
+        write_manifest(session, stage="render_failed", failure="no final video paths")
         print("FAIL: MoneyPrinterTurbo reported success without final video paths.")
+        print(f"SESSION: {session}")
         return 1
     for item in videos:
         video = Path(item)
         if not video.is_absolute():
             video = mpt_dir / video
         if not video.is_file():
+            write_manifest(session, stage="render_failed", failure=f"missing artifact: {video}")
             print(f"FAIL: MoneyPrinterTurbo reported a missing video artifact: {video}")
+            print(f"SESSION: {session}")
             return 1
         print(f"VIDEO: {video.resolve()}")
+    write_manifest(session, stage="rendered", mpt_task_id=payload.get("task_id"),
+                   output_videos=[str((Path(item) if Path(item).is_absolute() else mpt_dir / item).resolve()) for item in videos])
     print(f"VERIFIED: {len(videos)} final video file(s) exist.")
+    print(f"SESSION: {session}")
     return 0
 
 
@@ -476,6 +508,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="money-geta", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor", help="check local tools and configured upstream installations")
+    status = sub.add_parser("status", help="list recent Money-Geta workflow sessions")
+    status.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
+    status.add_argument("--limit", type=int, choices=range(1, 101), default=20)
     session = sub.add_parser("new-session", help="allocate a unique, non-destructive recording workspace")
     session.add_argument("job_id")
     session.add_argument("--root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
@@ -521,6 +556,7 @@ def main(argv: list[str] | None = None) -> int:
     render.add_argument("--voice", default=None, help="MPT voice identifier; defaults to installed config")
     render.add_argument("--aspect", choices=["9:16", "16:9", "1:1"], default="9:16")
     render.add_argument("--count", type=int, choices=range(1, 21), default=1)
+    render.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     upstream = sub.add_parser("upstream-check", help="verify pinned upstream blobs and patch applicability")
     upstream.add_argument("--path", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
     upstream.add_argument("--apply", action="store_true", help="apply patches after all per-file checks; use on a clean clone")
@@ -528,6 +564,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "doctor":
         return doctor()
+    if args.command == "status":
+        return show_status(args.jobs_root, args.limit)
     if args.command == "new-session":
         path = create_session_dir(args.root, args.job_id)
         print(path)
