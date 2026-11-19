@@ -12,11 +12,13 @@ py -3.11 -m venv .venv
 python -m pip install -e ".[test]"
 $env:GTAVI_CLAUDECODE_DIR = "C:\\path\\to\\gtavi-claudecode"
 $env:MONEYPRINTERTURBO_DIR = "C:\\MoneyPrinterTurbo"
+# Optional only if the MPT Python runtime is not auto-detected:
+$env:MONEYPRINTERTURBO_PYTHON = "C:\\MoneyPrinterTurbo\\lib\\python\\python.exe"
 $env:MONEY_GETA_JOBS_DIR = "C:\\Money-Geta-Data\\jobs"
 money-geta doctor
 ```
 
-Keep MoneyPrinterTurbo's existing `config.toml`, OAuth data, API keys, jobs and exports outside this repository. The tool never copies credentials into Money-Geta.
+Keep MoneyPrinterTurbo's existing `config.toml`, OAuth data, API keys, jobs and exports outside this repository. The tool never copies credentials into Money-Geta. Money-Geta invokes MoneyPrinterTurbo with its own Python environment (auto-detects `.venv`, `venv` or `lib/python`); set `MONEYPRINTERTURBO_PYTHON` if your installation uses another location.
 
 ## Commands
 
