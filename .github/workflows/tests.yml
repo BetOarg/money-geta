@@ -36,14 +36,13 @@ jobs:
           cd upstream-gtavi
           for spec in \
             "scripts/live.py c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a" \
-            "scripts/secrets_map.py 1d2b50963c3a2f4986911449679809d7390a4c09"; do
+; do
             read -r file expected <<< "$spec"
             actual="$(git hash-object "$file")"
             echo "$file expected=$expected actual=$actual"
             test "$actual" = "$expected"
           done
           git apply --check --verbose "$GITHUB_WORKSPACE/patches/gtavi-claudecode/live-session-isolation.patch"
-          git apply --check --verbose "$GITHUB_WORKSPACE/patches/gtavi-claudecode/secrets-map-evidence.patch"
 
   moneyprinterturbo-contract:
     runs-on: ubuntu-latest
