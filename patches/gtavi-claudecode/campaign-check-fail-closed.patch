@@ -4,12 +4,11 @@ Subject: [PATCH] check: reject missing or incomplete campaign rules
 Audited upstream base: Bodila51/gtavi-claudecode scripts/check.py
 Audited blob: c71ad730e009e4a5b5aea113a34e20dabd37620b
 
-This patch is pinned to the audited source. Re-check the blob before applying.
+Pinned to the audited source; re-check the blob before applying.
 
 --- a/scripts/check.py
 +++ b/scripts/check.py
-@@ -21,9 +21,11 @@
-     txt = Path(path).read_text(encoding="utf-8", errors="replace")
+@@ -21,5 +21,8 @@
      m = re.search(r"min_seconds:\\s*(\\d+(?:\\.\\d+)?)", txt, re.I)
 -    if m: rules["min"] = float(m.group(1))
 +    if not m: return rules, False
@@ -19,9 +18,7 @@ This patch is pinned to the audited source. Re-check the blob before applying.
 +    if not m: return rules, False
 +    rules["max"] = float(m.group(1))
 +    if rules["min"] <= 0 or rules["max"] < rules["min"]: return rules, False
-     m = re.search(r"required_hashtags:\\s*(.+)", txt, re.I)
-@@ -58,6 +60,11 @@
-     meta = load_json(side) if side.exists() else {}
+@@ -58,1 +61,6 @@
      rules, have_campaign = parse_campaign(a.campaign)
 +    if not have_campaign:
 +        print("RESULT: INCOMPLETE")
@@ -29,7 +26,7 @@ This patch is pinned to the audited source. Re-check the blob before applying.
 +        print("Provide valid min_seconds and max_seconds in the campaign file.")
 +        sys.exit(2)
      p = ffprobe(clip)
-@@ -81,2 +88,0 @@
+@@ -81,3 +88,0 @@
 -    if not have_campaign:
 -        add("campaign rules file", True, "none given, defaults used (NOT a rules check)")
 -
