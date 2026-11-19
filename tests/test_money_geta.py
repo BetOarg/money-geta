@@ -185,6 +185,7 @@ def test_cut_video_rejects_unknown_candidate_before_running_upstream(tmp_path, m
 
 
 def test_run_manifest_updates_and_status_lists_it(tmp_path, capsys):
+    import json
     from scripts.money_geta import show_status, write_manifest
 
     session = tmp_path / "jobs" / "session-1"
