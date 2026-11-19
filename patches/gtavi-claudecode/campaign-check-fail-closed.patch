@@ -6,7 +6,9 @@ Audited blob: c71ad730e009e4a5b5aea113a34e20dabd37620b
 
 Pinned to the audited source; re-check the blob before applying.
 
---- a/scripts/check.py
+diff --git a/scripts/check.py b/scripts/check.py
+index 0000000..0000000 100644
+--- a/scripts/check.pyscripts/check.py
 +++ b/scripts/check.py
 @@ -21,4 +21,7 @@
      m = re.search(r"min_seconds:\s*(\d+(?:\.\d+)?)", txt, re.I)
