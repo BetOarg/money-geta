@@ -27,14 +27,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Clone pinned upstream source
-        run: git clone --depth 1 https://github.com/Bodila51/gtavi-claudecode.git upstream
-      - name: Verify pinned blobs and patch applicability
+      - name: Clone GTA VI ClaudeCode source
+        run: git clone --depth 1 https://github.com/Bodila51/gtavi-claudecode.git upstream-gtavi
+      - name: Verify GTA VI pinned blobs and patches
+        shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C upstream hash-object scripts/live.py)" = "c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a"
-          test "$(git -C upstream hash-object scripts/check.py)" = "c71ad730e009e4a5b5aea113a34e20dabd37620b"
-          test "$(git -C upstream hash-object scripts/secrets_map.py)" = "1d2b50963c3a2f4986911449679809d7390a4c09"
-          git -C upstream apply --check "$GITHUB_WORKSPACE/patches/gtavi-claudecode/live-session-isolation.patch"
-          git -C upstream apply --check "$GITHUB_WORKSPACE/patches/gtavi-claudecode/campaign-check-fail-closed.patch"
-          git -C upstream apply --check "$GITHUB_WORKSPACE/patches/gtavi-claudecode/secrets-map-evidence.patch"
+          cd upstream-gtavi
+          for spec in \
+            "scripts/live.py c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a" \
+            "scripts/check.py c71ad730e009e4a5b5aea113a34e20dabd37620b" \
+            "scripts/secrets_map.py 1d2b50963c3a2f4986911449679809d7390a4c09"; do
+            read -r file expected <<< "$spec"
+            actual="$(git hash-object "$file")"
+            echo "$file expected=$expected actual=$actual"
+            test "$actual" = "$expected"
+          done
+          git apply --check --verbose "$GITHUB_WORKSPACE/patches/gtavi-claudecode/live-session-isolation.patch"
+          git apply --check --verbose "$GITHUB_WORKSPACE/patches/gtavi-claudecode/campaign-check-fail-closed.patch"
+          git apply --check --verbose "$GITHUB_WORKSPACE/patches/gtavi-claudecode/secrets-map-evidence.patch"
+
+  moneyprinterturbo-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone pinned MoneyPrinterTurbo source
+        run: git clone --depth 1 https://github.com/harry0703/MoneyPrinterTurbo.git upstream-mpt
+      - name: Verify supported CLI revision
+        run: |
+          set -euo pipefail
+          test "$(git -C upstream-mpt rev-parse HEAD)" = "bdd8d328cc366fe70d9fa67ffd0443ba34b4a3e1"
+          test "$(git -C upstream-mpt hash-object upstream-mpt/cli.py)" = "e7dbda8e41de4a632e15392ae317e18aa0f30cca"
