@@ -22,7 +22,7 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     mpt = tmp_path / "mpt"
     mpt.mkdir()
     (mpt / "cli.py").write_text("# fake CLI", encoding="utf-8")
-    (mpt / "config.toml").write_text("# local-only test config", encoding="utf-8")
+    (mpt / "config.toml").write_text("upload_post_auto_upload = false\\n", encoding="utf-8")
     python_exe = mpt / "python.exe"
     python_exe.write_text("fake interpreter", encoding="utf-8")
     campaign = tmp_path / "campaign.json"
@@ -40,15 +40,24 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
 
     class Result:
         returncode = 0
-        stdout = "--video-subject --video-source --video-materials --video-aspect --video-count --stop-at"
         stderr = ""
+
+    video = mpt / "storage" / "tasks" / "test-task" / "final-1.mp4"
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b"mocked output artifact")
 
     calls = []
     def fake_run(command, cwd, check, **kwargs):
         calls.append(command)
         captured["command"] = command
         captured["cwd"] = cwd
-        return Result()
+        result = Result()
+        result.stdout = (
+            "--video-subject --video-source --video-materials --video-aspect --video-count --video-language --voice-name --stop-at"
+            if command[-1] == "--help"
+            else json.dumps({"task_id": "test-task", "result": {"videos": [str(video)]}})
+        )
+        return result
 
     monkeypatch.setattr(money_geta.subprocess, "run", fake_run)
     args = Namespace(
@@ -106,3 +115,35 @@ def test_analyze_video_uses_isolated_session_and_local_source(tmp_path, monkeypa
     assert captured["env"]["CLIP_DESK_HOME"].startswith(str(tmp_path / "jobs"))
     assert str(source) in captured["command"]
     assert "--top" in captured["command"]
+
+
+
+def test_render_blocks_mpt_automatic_cross_post(tmp_path, monkeypatch):
+    import json
+    from argparse import Namespace
+    from scripts import money_geta
+
+    mpt = tmp_path / "mpt"
+    mpt.mkdir()
+    (mpt / "cli.py").write_text("# fake CLI", encoding="utf-8")
+    (mpt / "config.toml").write_text("upload_post_auto_upload = true\\n", encoding="utf-8")
+    python_exe = mpt / "python.exe"
+    python_exe.write_text("fake interpreter", encoding="utf-8")
+    campaign = tmp_path / "campaign.json"
+    campaign.write_text(json.dumps({
+        "campaign_name": "test", "platform": "YouTube Shorts",
+        "permissions_confirmed": True, "credits_confirmed": True,
+        "sources": ["https://example.test/source"], "required_disclosures": [],
+    }), encoding="utf-8")
+    media = tmp_path / "clip.mp4"
+    media.write_bytes(b"local media")
+
+    def forbidden_run(*args, **kwargs):
+        raise AssertionError("MPT must not be launched while auto-publishing is enabled")
+
+    monkeypatch.setattr(money_geta.subprocess, "run", forbidden_run)
+    args = Namespace(
+        mpt_dir=mpt, mpt_python=python_exe, campaign=campaign, materials=[media],
+        subject="GTA VI test", aspect="9:16", count=1, language="en-US", voice=None,
+    )
+    assert money_geta.run_mpt(args) == 2
