@@ -129,6 +129,50 @@ def resolve_gtavi_python(gtavi_dir: Path, override: Path | None = None) -> Path:
     return Path(sys.executable).resolve()
 
 
+
+def run_live(args: argparse.Namespace) -> int:
+    gtavi_dir = args.gtavi_dir.expanduser().resolve()
+    script = gtavi_dir / "scripts/live.py"
+    patch = ROOT / "patches/gtavi-claudecode/live-session-isolation.patch"
+    if not script.is_file() or not patch.is_file():
+        print("INCOMPLETE: live.py or the verified session-isolation patch is missing.")
+        return 2
+    if not args.confirm_recording:
+        print("BLOCKED: recording requires explicit --confirm-recording.")
+        return 2
+    git = shutil.which("git")
+    if not git or not (gtavi_dir / ".git").exists():
+        print("INCOMPLETE: use a Git checkout of GTA VI ClaudeCode to verify the safety patch.")
+        return 2
+    reverse = subprocess.run(
+        [git, "apply", "--reverse", "--check", str(patch)],
+        cwd=gtavi_dir, capture_output=True, text=True, check=False,
+    )
+    if reverse.returncode:
+        print("BLOCKED: live-session safety patch is not applied. Run money-geta upstream-check --apply first.")
+        return 2
+    missing_tools = [name for name in ("ffmpeg", "yt-dlp") if not shutil.which(name)]
+    if missing_tools:
+        print("INCOMPLETE: live recording requires on-PATH tools: " + ", ".join(missing_tools))
+        return 2
+    try:
+        python_exe = resolve_gtavi_python(gtavi_dir, args.gtavi_python)
+    except FileNotFoundError as exc:
+        print(f"INCOMPLETE: {exc}")
+        return 2
+    env = os.environ.copy()
+    env["CLIP_DESK_HOME"] = str(args.jobs_root.expanduser().resolve())
+    command = [
+        str(python_exe), str(script), args.url,
+        "--minutes", str(args.minutes),
+        "--before", str(args.before), "--after", str(args.after),
+        "--window", str(args.window), "--ratio", str(args.ratio),
+        "--min-msgs", str(args.min_msgs), "--lag", str(args.lag),
+        "--cooldown", str(args.cooldown),
+    ]
+    print("RECORDING: explicit operator confirmation received; unique session isolation verified.")
+    return subprocess.run(command, cwd=gtavi_dir, env=env, check=False).returncode
+
 def run_moments(args: argparse.Namespace) -> int:
     gtavi_dir = args.gtavi_dir.expanduser().resolve()
     script = gtavi_dir / "scripts/moments.py"
@@ -182,8 +226,10 @@ def run_cut(args: argparse.Namespace) -> int:
     if not script.is_file() or not (job_dir / "candidates.json").is_file() or not (job_dir / "transcript.json").is_file():
         print("INCOMPLETE: cut.py, candidates.json or transcript.json is missing.")
         return 2
-    if not shutil.which("ffmpeg"):
-        print("INCOMPLETE: ffmpeg must be available on PATH for clip rendering.")
+    required_tools = ["ffmpeg"] + (["ffprobe"] if args.layout in {"facecam", "react"} else [])
+    missing_tools = [name for name in required_tools if not shutil.which(name)]
+    if missing_tools:
+        print("INCOMPLETE: clip rendering requires on-PATH tools: " + ", ".join(missing_tools))
         return 2
     try:
         python_exe = resolve_gtavi_python(gtavi_dir, args.gtavi_python)
@@ -314,6 +360,20 @@ def main(argv: list[str] | None = None) -> int:
     session.add_argument("--root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     campaign = sub.add_parser("campaign-check", help="validate campaign evidence fields (not legal clearance)")
     campaign.add_argument("--campaign", type=Path, required=True)
+    live = sub.add_parser("record-live", help="record a live source after explicit confirmation")
+    live.add_argument("--gtavi-dir", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
+    live.add_argument("--gtavi-python", type=Path, default=env_path("GTAVI_CLAUDECODE_PYTHON"))
+    live.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
+    live.add_argument("--url", required=True)
+    live.add_argument("--minutes", type=int, choices=range(1, 721), default=60)
+    live.add_argument("--before", type=int, default=15)
+    live.add_argument("--after", type=int, default=20)
+    live.add_argument("--window", type=int, default=10)
+    live.add_argument("--ratio", type=float, default=3)
+    live.add_argument("--min-msgs", type=int, default=8)
+    live.add_argument("--lag", type=float, default=8)
+    live.add_argument("--cooldown", type=float, default=45)
+    live.add_argument("--confirm-recording", action="store_true", help="confirm you have permission to record this stream")
     analyze = sub.add_parser("analyze-video", help="find candidate moments in a local VOD/video")
     analyze.add_argument("--gtavi-dir", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
     analyze.add_argument("--gtavi-python", type=Path, default=env_path("GTAVI_CLAUDECODE_PYTHON"))
@@ -361,6 +421,11 @@ def main(argv: list[str] | None = None) -> int:
         print("RESULT: CAMPAIGN_FIELDS_COMPLETE")
         print("HUMAN REVIEW REQUIRED: verify rights, credits, platform rules and final media.")
         return 0
+    if args.command == "record-live":
+        if args.gtavi_dir is None:
+            print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR or pass --gtavi-dir")
+            return 2
+        return run_live(args)
     if args.command == "analyze-video":
         if args.gtavi_dir is None:
             print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR or pass --gtavi-dir")
