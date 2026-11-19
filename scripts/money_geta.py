@@ -98,6 +98,57 @@ def verify_patches(upstream: Path, apply: bool = False) -> int:
             print(f"PASS {label}: exact upstream blob; patch applies cleanly")
     return 0
 
+
+def run_mpt(args: argparse.Namespace) -> int:
+    mpt_dir = args.mpt_dir.expanduser().resolve()
+    cli_file = mpt_dir / "cli.py"
+    config_file = mpt_dir / "config.toml"
+    if not cli_file.is_file() or not config_file.is_file():
+        print(f"INCOMPLETE: MoneyPrinterTurbo requires cli.py and config.toml in {mpt_dir}")
+        return 2
+    if not args.campaign.is_file():
+        print(f"INCOMPLETE: campaign file not found: {args.campaign}")
+        return 2
+    passed, problems = check_file(args.campaign)
+    if not passed:
+        print("RESULT: INCOMPLETE")
+        for problem in problems:
+            print(f"- {problem}")
+        return 2
+
+    materials = [item.expanduser().resolve() for item in args.materials]
+    missing = [str(item) for item in materials if not item.is_file()]
+    if missing:
+        print("FAIL: local media files not found:")
+        for item in missing:
+            print(f"- {item}")
+        return 2
+    if any("," in str(item) for item in materials):
+        print("FAIL: material paths cannot contain commas (MoneyPrinterTurbo CLI delimiter).")
+        return 2
+
+    command = [
+        sys.executable, str(cli_file),
+        "--video-subject", args.subject,
+        "--video-source", "local",
+        "--video-materials", ",".join(str(item) for item in materials),
+        "--video-aspect", args.aspect,
+        "--video-count", str(args.count),
+        "--stop-at", "video",
+    ]
+    if args.language:
+        command += ["--video-language", args.language]
+    if args.voice:
+        command += ["--voice-name", args.voice]
+
+    print("CAMPAIGN FIELDS: PASS")
+    print("HUMAN REVIEW REQUIRED: confirm actual footage rights, creator credits and final export.")
+    print("Starting MoneyPrinterTurbo local-media pipeline...")
+    completed = subprocess.run(command, cwd=mpt_dir, check=False)
+    print(f"MoneyPrinterTurbo exit code: {completed.returncode}")
+    return completed.returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="money-geta", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -107,6 +158,15 @@ def main(argv: list[str] | None = None) -> int:
     session.add_argument("--root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     campaign = sub.add_parser("campaign-check", help="validate campaign evidence fields (not legal clearance)")
     campaign.add_argument("--campaign", type=Path, required=True)
+    render = sub.add_parser("render", help="run MoneyPrinterTurbo with a gated campaign and local media")
+    render.add_argument("--mpt-dir", type=Path, default=env_path("MONEYPRINTERTURBO_DIR"))
+    render.add_argument("--campaign", type=Path, required=True)
+    render.add_argument("--subject", required=True)
+    render.add_argument("--materials", type=Path, nargs="+", required=True)
+    render.add_argument("--language", default="en-US")
+    render.add_argument("--voice", default=None, help="MPT voice identifier; defaults to installed config")
+    render.add_argument("--aspect", choices=["9:16", "16:9", "1:1"], default="9:16")
+    render.add_argument("--count", type=int, choices=range(1, 21), default=1)
     upstream = sub.add_parser("upstream-check", help="verify pinned upstream blobs and patch applicability")
     upstream.add_argument("--path", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
     upstream.add_argument("--apply", action="store_true", help="apply patches after all per-file checks; use on a clean clone")
@@ -128,6 +188,11 @@ def main(argv: list[str] | None = None) -> int:
         print("RESULT: CAMPAIGN_FIELDS_COMPLETE")
         print("HUMAN REVIEW REQUIRED: verify rights, credits, platform rules and final media.")
         return 0
+    if args.command == "render":
+        if args.mpt_dir is None:
+            print("INCOMPLETE: set MONEYPRINTERTURBO_DIR or pass --mpt-dir")
+            return 2
+        return run_mpt(args)
     if args.command == "upstream-check":
         if args.path is None:
             print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR or pass --path")
