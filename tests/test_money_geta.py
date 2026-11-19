@@ -38,8 +38,12 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
 
     class Result:
         returncode = 0
+        stdout = "--video-subject --video-source --video-materials --video-aspect --video-count --stop-at"
+        stderr = ""
 
-    def fake_run(command, cwd, check):
+    calls = []
+    def fake_run(command, cwd, check, **kwargs):
+        calls.append(command)
         captured["command"] = command
         captured["cwd"] = cwd
         return Result()
@@ -52,6 +56,8 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     )
     assert money_geta.run_mpt(args) == 0
     assert captured["cwd"] == mpt
+    assert len(calls) == 2
+    assert calls[0][-1] == "--help"
     assert str(mpt / "cli.py") in captured["command"]
     assert "--video-source" in captured["command"]
     assert captured["command"][captured["command"].index("--video-source") + 1] == "local"
