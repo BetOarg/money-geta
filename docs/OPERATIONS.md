@@ -27,6 +27,7 @@ Keep MoneyPrinterTurbo's existing `config.toml`, OAuth data, API keys, jobs and 
 ```powershell
 money-geta doctor
 money-geta new-session gta6-weekly
+money-geta record-live --url "https://www.youtube.com/watch?v=..." --minutes 60 --confirm-recording
 money-geta analyze-video --source .\\media\\gameplay.mp4
 money-geta cut-video --job-dir "<job path printed by analyze-video>" --pick 1 --layout blur --hook "GTA VI: ..." 
 money-geta campaign-check --campaign .\campaign.json
@@ -37,6 +38,7 @@ money-geta render --campaign .\campaign.json --subject "GTA VI: ..." --materials
 
 - `doctor`: checks Python, Git, FFmpeg and configured upstream directories. It does not test provider credentials or perform a render.
 - `new-session`: creates a unique UTC work directory and never clears old recordings.
+- `record-live`: starts a YouTube/Twitch recording only after explicit `--confirm-recording` and after verifying the session-isolation patch is applied.
 - `analyze-video`: runs the upstream moment-finder on a local video only, in a fresh isolated job directory; requires the GTA VI Python dependencies, FFmpeg and FFprobe.
 - `cut-video`: turns one reviewed candidate into a vertical MP4 using the upstream clip cutter. Review the output before rendering or publishing.
 - `campaign-check`: checks that required campaign attestations and source references exist. It is not legal clearance.
