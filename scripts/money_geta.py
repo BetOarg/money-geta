@@ -108,6 +108,110 @@ def verify_patches(upstream: Path, apply: bool = False) -> int:
 
 
 
+
+def resolve_gtavi_python(gtavi_dir: Path, override: Path | None = None) -> Path:
+    if override is not None:
+        candidate = override.expanduser().resolve()
+        if not candidate.is_file():
+            raise FileNotFoundError(f"GTA VI ClaudeCode Python runtime not found: {candidate}")
+        return candidate
+    candidates = [
+        gtavi_dir / ".venv/Scripts/python.exe",
+        gtavi_dir / "venv/Scripts/python.exe",
+        gtavi_dir / "lib/python/python.exe",
+        gtavi_dir / ".venv/bin/python",
+        gtavi_dir / "venv/bin/python",
+        gtavi_dir / "lib/python/bin/python",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return Path(sys.executable).resolve()
+
+
+def run_moments(args: argparse.Namespace) -> int:
+    gtavi_dir = args.gtavi_dir.expanduser().resolve()
+    script = gtavi_dir / "scripts/moments.py"
+    if not script.is_file():
+        print(f"INCOMPLETE: GTA VI ClaudeCode moments.py not found: {script}")
+        return 2
+    source = args.source.expanduser().resolve()
+    if not source.is_file():
+        print(f"FAIL: local source video not found: {source}")
+        return 2
+    missing_tools = [name for name in ("ffmpeg", "ffprobe") if not shutil.which(name)]
+    if missing_tools:
+        print("INCOMPLETE: GTA VI clip analysis requires on-PATH tools: " + ", ".join(missing_tools))
+        return 2
+    try:
+        python_exe = resolve_gtavi_python(gtavi_dir, args.gtavi_python)
+    except FileNotFoundError as exc:
+        print(f"INCOMPLETE: {exc}")
+        return 2
+
+    root = args.jobs_root.expanduser().resolve()
+    session = create_session_dir(root, f"analysis-{source.stem}")
+    env = os.environ.copy()
+    env["CLIP_DESK_HOME"] = str(session)
+    command = [
+        str(python_exe), str(script), str(source),
+        "--top", str(args.top), "--min", str(args.min_seconds),
+        "--max", str(args.max_seconds),
+    ]
+    completed = subprocess.run(command, cwd=gtavi_dir, env=env, capture_output=True, text=True, check=False)
+    if completed.stdout:
+        print(completed.stdout.strip())
+    if completed.stderr:
+        print(completed.stderr.strip())
+    if completed.returncode:
+        print(f"FAIL: moments analysis exited {completed.returncode}")
+        return completed.returncode
+    for line in completed.stdout.splitlines():
+        if line.startswith("job: "):
+            print(f"SESSION: {session}")
+            print(f"NEXT: money-geta cut-video --job-dir \"{line[5:]}\\\" --pick 1")
+            return 0
+    print("FAIL: moments.py completed without returning a job directory.")
+    return 1
+
+
+def run_cut(args: argparse.Namespace) -> int:
+    gtavi_dir = args.gtavi_dir.expanduser().resolve()
+    script = gtavi_dir / "scripts/cut.py"
+    job_dir = args.job_dir.expanduser().resolve()
+    if not script.is_file() or not (job_dir / "candidates.json").is_file() or not (job_dir / "transcript.json").is_file():
+        print("INCOMPLETE: cut.py, candidates.json or transcript.json is missing.")
+        return 2
+    if not shutil.which("ffmpeg"):
+        print("INCOMPLETE: ffmpeg must be available on PATH for clip rendering.")
+        return 2
+    try:
+        python_exe = resolve_gtavi_python(gtavi_dir, args.gtavi_python)
+    except FileNotFoundError as exc:
+        print(f"INCOMPLETE: {exc}")
+        return 2
+    command = [
+        str(python_exe), str(script), str(job_dir),
+        "--pick", str(args.pick), "--layout", args.layout,
+        "--captions", args.captions,
+    ]
+    if args.hook:
+        command += ["--hook", args.hook]
+    completed = subprocess.run(command, cwd=gtavi_dir, capture_output=True, text=True, check=False)
+    if completed.stdout:
+        print(completed.stdout.strip())
+    if completed.stderr:
+        print(completed.stderr.strip())
+    if completed.returncode:
+        print(f"FAIL: clip cutting exited {completed.returncode}")
+        return completed.returncode
+    output = next((Path(line.strip()) for line in reversed(completed.stdout.splitlines()) if line.strip().lower().endswith(".mp4")), None)
+    if output is None or not output.is_file():
+        print("FAIL: cut.py did not produce a verifiable MP4 path.")
+        return 1
+    print(f"CLIP: {output.resolve()}")
+    return 0
+
 def resolve_mpt_python(mpt_dir: Path, override: Path | None = None) -> Path:
     if override is not None:
         candidate = override.expanduser().resolve()
@@ -210,6 +314,22 @@ def main(argv: list[str] | None = None) -> int:
     session.add_argument("--root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     campaign = sub.add_parser("campaign-check", help="validate campaign evidence fields (not legal clearance)")
     campaign.add_argument("--campaign", type=Path, required=True)
+    analyze = sub.add_parser("analyze-video", help="find candidate moments in a local VOD/video")
+    analyze.add_argument("--gtavi-dir", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
+    analyze.add_argument("--gtavi-python", type=Path, default=env_path("GTAVI_CLAUDECODE_PYTHON"))
+    analyze.add_argument("--source", type=Path, required=True)
+    analyze.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
+    analyze.add_argument("--top", type=int, choices=range(1, 31), default=8)
+    analyze.add_argument("--min-seconds", type=float, default=15)
+    analyze.add_argument("--max-seconds", type=float, default=40)
+    cut = sub.add_parser("cut-video", help="render one analyzed candidate as a vertical clip")
+    cut.add_argument("--gtavi-dir", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
+    cut.add_argument("--gtavi-python", type=Path, default=env_path("GTAVI_CLAUDECODE_PYTHON"))
+    cut.add_argument("--job-dir", type=Path, required=True)
+    cut.add_argument("--pick", type=int, default=1)
+    cut.add_argument("--layout", choices=["fill", "blur", "facecam", "react"], default="blur")
+    cut.add_argument("--captions", choices=["word", "bubble", "none"], default="word")
+    cut.add_argument("--hook", default="")
     render = sub.add_parser("render", help="run MoneyPrinterTurbo with a gated campaign and local media")
     render.add_argument("--mpt-dir", type=Path, default=env_path("MONEYPRINTERTURBO_DIR"))
     render.add_argument("--mpt-python", type=Path, default=env_path("MONEYPRINTERTURBO_PYTHON"))
@@ -241,6 +361,19 @@ def main(argv: list[str] | None = None) -> int:
         print("RESULT: CAMPAIGN_FIELDS_COMPLETE")
         print("HUMAN REVIEW REQUIRED: verify rights, credits, platform rules and final media.")
         return 0
+    if args.command == "analyze-video":
+        if args.gtavi_dir is None:
+            print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR or pass --gtavi-dir")
+            return 2
+        if args.max_seconds <= args.min_seconds or args.min_seconds <= 0:
+            print("FAIL: max-seconds must be greater than a positive min-seconds value.")
+            return 2
+        return run_moments(args)
+    if args.command == "cut-video":
+        if args.gtavi_dir is None:
+            print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR or pass --gtavi-dir")
+            return 2
+        return run_cut(args)
     if args.command == "render":
         if args.mpt_dir is None:
             print("INCOMPLETE: set MONEYPRINTERTURBO_DIR or pass --mpt-dir")
