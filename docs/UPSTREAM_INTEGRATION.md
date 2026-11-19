@@ -15,7 +15,7 @@ Audited source revisions on 2026-11-19:
 | `skills/live-mode/SKILL.md` | `6843df58b9818b252cc3d59f62929a3717c7c982` | Permission is treated as a later request, after recording. | `skills/live-recording-safety/SKILL.md` |
 | `skills/rule-check/SKILL.md` | `8fc4895114888f5ced6b51e4b4b1f84375788c68` | Script scope does not prove rights, credits or audiovisual compliance. | `skills/campaign-publication-gate/SKILL.md` |
 
-The patches are pinned to audited blobs. Before applying to a newer upstream revision, inspect the diff and rebase; do not force-apply stale patches.
+The live-recording and secrets-map overlays are pinned to audited blobs. Campaign validation is implemented and tested in Money-Geta itself; the experimental upstream `check.py` patch was removed after repeated context failures. Before applying any overlay to a newer upstream revision, inspect the diff and rebase; do not force-apply stale patches.
 
 ### Manual application
 
