@@ -34,6 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           cd upstream-gtavi
+          test "$(git rev-parse HEAD)" = "dd95d393c6f74fe2ac14b0239f8826691e5dcb0e"
           for spec in "scripts/live.py c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a"; do
             read -r file expected <<< "$spec"
             actual="$(git hash-object "$file")"
