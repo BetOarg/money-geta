@@ -57,4 +57,4 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C upstream-mpt rev-parse HEAD)" = "bdd8d328cc366fe70d9fa67ffd0443ba34b4a3e1"
-          test "$(git -C upstream-mpt hash-object upstream-mpt/cli.py)" = "e7dbda8e41de4a632e15392ae317e18aa0f30cca"
+          test "$(git -C upstream-mpt hash-object cli.py)" = "e7dbda8e41de4a632e15392ae317e18aa0f30cca"
