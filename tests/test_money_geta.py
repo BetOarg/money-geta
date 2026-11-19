@@ -147,3 +147,38 @@ def test_render_blocks_mpt_automatic_cross_post(tmp_path, monkeypatch):
         subject="GTA VI test", aspect="9:16", count=1, language="en-US", voice=None,
     )
     assert money_geta.run_mpt(args) == 2
+
+
+def test_live_recording_requires_explicit_confirmation(tmp_path):
+    from argparse import Namespace
+    from scripts import money_geta
+
+    gtavi = tmp_path / "gtavi"
+    (gtavi / "scripts").mkdir(parents=True)
+    (gtavi / "scripts" / "live.py").write_text("# fake live script", encoding="utf-8")
+    args = Namespace(
+        gtavi_dir=gtavi, confirm_recording=False, url="https://www.youtube.com/watch?v=test",
+        minutes=60, before=15, after=20, window=10, ratio=3, min_msgs=8,
+        lag=8, cooldown=45, gtavi_python=None, jobs_root=tmp_path / "jobs",
+    )
+    assert money_geta.run_live(args) == 2
+
+
+def test_cut_video_rejects_unknown_candidate_before_running_upstream(tmp_path, monkeypatch):
+    import json
+    from argparse import Namespace
+    from scripts import money_geta
+
+    gtavi = tmp_path / "gtavi"
+    (gtavi / "scripts").mkdir(parents=True)
+    (gtavi / "scripts" / "cut.py").write_text("# fake cut script", encoding="utf-8")
+    job = tmp_path / "job"
+    job.mkdir()
+    (job / "candidates.json").write_text(json.dumps({"candidates": [{"n": 1}]}), encoding="utf-8")
+    (job / "transcript.json").write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(money_geta.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not run")))
+    args = Namespace(
+        gtavi_dir=gtavi, gtavi_python=None, job_dir=job, pick=99,
+        layout="blur", captions="word", hook="",
+    )
+    assert money_geta.run_cut(args) == 2
