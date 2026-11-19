@@ -64,3 +64,40 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     assert "--video-source" in captured["command"]
     assert captured["command"][captured["command"].index("--video-source") + 1] == "local"
     assert "--video-materials" in captured["command"]
+
+
+def test_analyze_video_uses_isolated_session_and_local_source(tmp_path, monkeypatch):
+    from argparse import Namespace
+    from scripts import money_geta
+
+    gtavi = tmp_path / "gtavi"
+    (gtavi / "scripts").mkdir(parents=True)
+    (gtavi / "scripts" / "moments.py").write_text("# mocked upstream script", encoding="utf-8")
+    source = tmp_path / "vod.mp4"
+    source.write_bytes(b"local source")
+    python_exe = tmp_path / "gtavi-python.exe"
+    python_exe.write_text("fake interpreter", encoding="utf-8")
+    captured = {}
+
+    class Result:
+        returncode = 0
+        stdout = "job: /tmp/fake-job\n8 candidates -> /tmp/fake-job/candidates.md"
+        stderr = ""
+
+    def fake_run(command, cwd, env, capture_output, text, check):
+        captured["command"] = command
+        captured["cwd"] = cwd
+        captured["env"] = env
+        return Result()
+
+    monkeypatch.setattr(money_geta.subprocess, "run", fake_run)
+    monkeypatch.setattr(money_geta.shutil, "which", lambda name: f"/usr/bin/{name}")
+    args = Namespace(
+        gtavi_dir=gtavi, gtavi_python=python_exe, source=source,
+        jobs_root=tmp_path / "jobs", top=8, min_seconds=15, max_seconds=40,
+    )
+    assert money_geta.run_moments(args) == 0
+    assert captured["cwd"] == gtavi
+    assert captured["env"]["CLIP_DESK_HOME"].startswith(str(tmp_path / "jobs"))
+    assert str(source) in captured["command"]
+    assert "--top" in captured["command"]
