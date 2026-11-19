@@ -26,7 +26,7 @@ $env:MONEY_GETA_JOBS_DIR = "C:\Money-Geta-Data\jobs"
 money-geta doctor
 ```
 
-Keep MoneyPrinterTurbo's existing `config.toml`, OAuth data, API keys, jobs and exports outside this repository. The tool never copies credentials into Money-Geta. Money-Geta invokes MoneyPrinterTurbo with its own Python environment (auto-detects `.venv`, `venv` or `lib/python`); set `MONEYPRINTERTURBO_PYTHON` if your installation uses another location.
+Before rendering, ensure MoneyPrinterTurbo's existing `config.toml` has `upload_post_auto_upload = false`; Money-Geta blocks rendering if automatic cross-platform publishing is enabled. Keep `config.toml`, OAuth data, API keys, jobs and exports outside this repository. The tool never copies credentials into Money-Geta. Money-Geta invokes MoneyPrinterTurbo with its own Python environment (auto-detects `.venv`, `venv` or `lib/python`); set `MONEYPRINTERTURBO_PYTHON` if your installation uses another location.
 
 ## Commands
 
@@ -49,7 +49,7 @@ money-geta render --campaign .\campaign.json --subject "GTA VI: ..." --materials
 - `cut-video`: turns one reviewed candidate into a vertical MP4 using the upstream clip cutter. Review the output before rendering or publishing.
 - `campaign-check`: checks that required campaign attestations and source references exist. It is not legal clearance.
 - `upstream-check`: verifies the exact pinned source blobs and runs `git apply --check`. `--apply` modifies only the configured local GTA VI ClaudeCode checkout, after all patches pass compatibility checks.
-- `render`: requires a complete campaign evidence file and existing local media, then invokes the installed MoneyPrinterTurbo CLI. It defaults to local media, so it does not call Pexels or paid video-generation providers.
+- `render`: requires a complete campaign evidence file and existing local media, then invokes the installed MoneyPrinterTurbo CLI, blocks automatic cross-posting and verifies the final MP4 files exist. It defaults to local media, so it does not call Pexels or paid video-generation providers.
 
 ## Campaign file
 
