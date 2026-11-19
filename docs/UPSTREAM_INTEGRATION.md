@@ -34,6 +34,8 @@ Run upstream tests and the regression tests after patching. This repository has 
 
 Repository: https://github.com/harry0703/MoneyPrinterTurbo
 
+Audited upstream commit on 2026-11-19: `bdd8d328cc366fe70d9fa67ffd0443ba34b4a3e1` (MoneyPrinterTurbo 1.3.10). The `cli.py` blob at that commit is `e7dbda8e41de4a632e15392ae317e18aa0f30cca`; Money-Geta calls the supported `cli.py` interface rather than importing MPT internals.
+
 The current upstream example config includes OpenAI Codex device-code authentication and a separate Codex image source, in addition to API-key based providers. It also defaults its listener to `0.0.0.0`; for a single-user local Windows installation, prefer `127.0.0.1` unless LAN access is intentionally required.
 
 Keep local `config.toml`, auth storage, keys and generated media outside this repository. Do not commit credentials.
