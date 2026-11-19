@@ -12,3 +12,47 @@ def test_patch_manifest_is_complete():
 
 def test_upstream_check_rejects_non_git_directory(tmp_path):
     assert verify_patches(tmp_path) == 2
+
+
+def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, monkeypatch):
+    import json
+    from argparse import Namespace
+    from scripts import money_geta
+
+    mpt = tmp_path / "mpt"
+    mpt.mkdir()
+    (mpt / "cli.py").write_text("# fake CLI", encoding="utf-8")
+    (mpt / "config.toml").write_text("# local-only test config", encoding="utf-8")
+    campaign = tmp_path / "campaign.json"
+    campaign.write_text(json.dumps({
+        "campaign_name": "test",
+        "platform": "YouTube Shorts",
+        "permissions_confirmed": True,
+        "credits_confirmed": True,
+        "sources": ["https://example.test/source"],
+        "required_disclosures": [],
+    }), encoding="utf-8")
+    media = tmp_path / "clip.mp4"
+    media.write_bytes(b"not rendered; command is mocked")
+    captured = {}
+
+    class Result:
+        returncode = 0
+
+    def fake_run(command, cwd, check):
+        captured["command"] = command
+        captured["cwd"] = cwd
+        return Result()
+
+    monkeypatch.setattr(money_geta.subprocess, "run", fake_run)
+    args = Namespace(
+        mpt_dir=mpt, campaign=campaign, materials=[media],
+        subject="GTA VI test", aspect="9:16", count=1,
+        language="en-US", voice=None,
+    )
+    assert money_geta.run_mpt(args) == 0
+    assert captured["cwd"] == mpt
+    assert str(mpt / "cli.py") in captured["command"]
+    assert "--video-source" in captured["command"]
+    assert captured["command"][captured["command"].index("--video-source") + 1] == "local"
+    assert "--video-materials" in captured["command"]
