@@ -308,6 +308,14 @@ def run_mpt(args: argparse.Namespace) -> int:
     if not cli_file.is_file() or not config_file.is_file():
         print(f"INCOMPLETE: MoneyPrinterTurbo requires cli.py and config.toml in {mpt_dir}")
         return 2
+    try:
+        config_text = config_file.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"FAIL: cannot read MoneyPrinterTurbo config.toml: {exc}")
+        return 2
+    if re.search(r"(?im)^\\s*upload_post_auto_upload\\s*=\\s*true\\s*(?:#.*)?$", config_text):
+        print("BLOCKED: MoneyPrinterTurbo automatic cross-platform publishing is enabled. Set upload_post_auto_upload = false before using Money-Geta render.")
+        return 2
     if not args.campaign.is_file():
         print(f"INCOMPLETE: campaign file not found: {args.campaign}")
         return 2
@@ -364,9 +372,33 @@ def run_mpt(args: argparse.Namespace) -> int:
     print("CAMPAIGN FIELDS: PASS")
     print("HUMAN REVIEW REQUIRED: confirm actual footage rights, creator credits and final export.")
     print("Starting MoneyPrinterTurbo local-media pipeline...")
-    completed = subprocess.run(command, cwd=mpt_dir, check=False)
-    print(f"MoneyPrinterTurbo exit code: {completed.returncode}")
-    return completed.returncode
+    completed = subprocess.run(command, cwd=mpt_dir, capture_output=True, text=True, check=False)
+    if completed.stdout:
+        print(completed.stdout.strip())
+    if completed.stderr:
+        print(completed.stderr.strip())
+    if completed.returncode:
+        print(f"MoneyPrinterTurbo exit code: {completed.returncode}")
+        return completed.returncode
+    try:
+        payload = json.loads(completed.stdout)
+        videos = payload.get("result", {}).get("videos", [])
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        print("FAIL: MoneyPrinterTurbo returned no verifiable JSON task result.")
+        return 1
+    if not videos:
+        print("FAIL: MoneyPrinterTurbo reported success without final video paths.")
+        return 1
+    for item in videos:
+        video = Path(item)
+        if not video.is_absolute():
+            video = mpt_dir / video
+        if not video.is_file():
+            print(f"FAIL: MoneyPrinterTurbo reported a missing video artifact: {video}")
+            return 1
+        print(f"VIDEO: {video.resolve()}")
+    print(f"VERIFIED: {len(videos)} final video file(s) exist.")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
