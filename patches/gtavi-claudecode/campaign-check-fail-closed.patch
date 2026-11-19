@@ -20,7 +20,7 @@ index c71ad730e009e4a5b5aea113a34e20dabd37620b..0000000 100644
 +    if not m: return rules, False
 +    rules["max"] = float(m.group(1))
 +    if rules["min"] <= 0 or rules["max"] < rules["min"]: return rules, False
-@@ -58,1 +61,6 @@
+@@ -58,2 +61,7 @@
      rules, have_campaign = parse_campaign(a.campaign)
 +    if not have_campaign:
 +        print("RESULT: INCOMPLETE")
@@ -28,7 +28,7 @@ index c71ad730e009e4a5b5aea113a34e20dabd37620b..0000000 100644
 +        print("Provide valid min_seconds and max_seconds in the campaign file.")
 +        sys.exit(2)
      p = ffprobe(clip)
-@@ -81,3 +88,0 @@
+@@ -81,3 +89,0 @@
 -    if not have_campaign:
 -        add("campaign rules file", True, "none given, defaults used (NOT a rules check)")
 -
