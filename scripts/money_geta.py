@@ -53,6 +53,36 @@ def doctor() -> int:
         print(f"{'PASS' if ok else 'PENDING'} {label}: {path or 'environment variable not set'}")
         checks.append((label, ok, str(path or "not configured")))
 
+    if mpt_dir and (mpt_dir / "cli.py").is_file():
+        try:
+            mpt_python = resolve_mpt_python(mpt_dir, env_path("MONEYPRINTERTURBO_PYTHON"))
+            help_result = subprocess.run(
+                [str(mpt_python), str(mpt_dir / "cli.py"), "--help"],
+                cwd=mpt_dir, capture_output=True, text=True, check=False,
+            )
+            required = ("--video-subject", "--video-source", "--video-materials", "--video-count", "--stop-at")
+            ok = help_result.returncode == 0 and all(flag in help_result.stdout for flag in required)
+            detail = str(mpt_python) if ok else (help_result.stderr.strip() or "CLI contract check failed")
+        except (OSError, FileNotFoundError) as exc:
+            ok, detail = False, str(exc)
+        print(f"{'PASS' if ok else 'PENDING'} MoneyPrinterTurbo CLI: {detail}")
+        checks.append(("MoneyPrinterTurbo CLI", ok, detail))
+
+    gtavi_dir = env_path("GTAVI_CLAUDECODE_DIR")
+    if gtavi_dir and (gtavi_dir / "scripts/moments.py").is_file():
+        try:
+            gtavi_python = resolve_gtavi_python(gtavi_dir, env_path("GTAVI_CLAUDECODE_PYTHON"))
+            dependency = subprocess.run(
+                [str(gtavi_python), "-c", "import numpy, faster_whisper"],
+                cwd=gtavi_dir, capture_output=True, text=True, check=False,
+            )
+            ok = dependency.returncode == 0
+            detail = str(gtavi_python) if ok else (dependency.stderr.strip() or "numpy/faster-whisper unavailable")
+        except (OSError, FileNotFoundError) as exc:
+            ok, detail = False, str(exc)
+        print(f"{'PASS' if ok else 'PENDING'} GTA VI analysis runtime: {detail}")
+        checks.append(("GTA VI analysis runtime", ok, detail))
+
     print("NOTE API credentials, Codex/Gemini login, image generation, TTS and a full render are not tested by doctor.")
     return 0 if all(item[1] for item in checks) else 2
 
