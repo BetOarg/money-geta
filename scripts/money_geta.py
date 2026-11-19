@@ -1,0 +1,131 @@
+"""Money-Geta operational control plane for the local GTA VI video workflow."""
+from __future__ import annotations
+
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from scripts.campaign_check import check_file
+from scripts.session_paths import create_session_dir
+
+ROOT = Path(__file__).resolve().parents[1]
+PATCHES = {
+    "live.py": ("scripts/live.py", "c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a",
+                ROOT / "patches/gtavi-claudecode/live-session-isolation.patch"),
+    "check.py": ("scripts/check.py", "c71ad730e009e4a5b5aea113a34e20dabd37620b",
+                 ROOT / "patches/gtavi-claudecode/campaign-check-fail-closed.patch"),
+    "secrets_map.py": ("scripts/secrets_map.py", "1d2b50963c3a2f4986911449679809d7390a4c09",
+                       ROOT / "patches/gtavi-claudecode/secrets-map-evidence.patch"),
+}
+
+
+def env_path(name: str) -> Path | None:
+    value = os.environ.get(name)
+    return Path(value).expanduser().resolve() if value else None
+
+
+def doctor() -> int:
+    checks = [
+        ("Python", Path(sys.executable).exists(), sys.version.split()[0]),
+        ("Git", shutil.which("git") is not None, shutil.which("git") or "not found"),
+        ("FFmpeg", shutil.which("ffmpeg") is not None, shutil.which("ffmpeg") or "not found"),
+    ]
+    for label, ok, detail in checks:
+        print(f"{'PASS' if ok else 'PENDING'} {label}: {detail}")
+    for label, env, marker in [
+        ("GTA VI ClaudeCode", "GTAVI_CLAUDECODE_DIR", Path("scripts/live.py")),
+        ("MoneyPrinterTurbo", "MONEYPRINTERTURBO_DIR", Path("config.toml")),
+    ]:
+        path = env_path(env)
+        ok = bool(path and (path / marker).is_file())
+        print(f"{'PASS' if ok else 'PENDING'} {label}: {path or f'set {env}'}")
+    print("NOTE API credentials, Codex login, TTS, image provider and render are not tested by doctor.")
+    return 0 if all(x[1] for x in checks) else 2
+
+
+def verify_patches(upstream: Path, apply: bool = False) -> int:
+    git = shutil.which("git")
+    if not git:
+        print("FAIL Git executable not found")
+        return 2
+    if not (upstream / ".git").exists():
+        print(f"FAIL not a Git checkout: {upstream}")
+        return 2
+
+    failures = 0
+    for label, (relative, expected, patch) in PATCHES.items():
+        source = upstream / relative
+        if not source.is_file() or not patch.is_file():
+            print(f"FAIL {label}: source or patch missing")
+            failures += 1
+            continue
+        actual = subprocess.run(
+            [git, "hash-object", str(source)], capture_output=True, text=True, check=False
+        )
+        if actual.returncode or actual.stdout.strip() != expected:
+            print(f"BLOCKED {label}: upstream blob differs; expected {expected}, got {actual.stdout.strip() or 'unavailable'}")
+            failures += 1
+            continue
+        command = [git, "apply", "--check", str(patch)]
+        checked = subprocess.run(command, cwd=upstream, capture_output=True, text=True, check=False)
+        if checked.returncode:
+            print(f"FAIL {label}: git apply --check: {(checked.stderr or checked.stdout).strip()}")
+            failures += 1
+            continue
+        if apply:
+            done = subprocess.run([git, "apply", str(patch)], cwd=upstream, capture_output=True, text=True, check=False)
+            if done.returncode:
+                print(f"FAIL {label}: apply failed: {(done.stderr or done.stdout).strip()}")
+                failures += 1
+                continue
+            print(f"APPLIED {label}")
+        else:
+            print(f"PASS {label}: exact upstream blob; patch applies cleanly")
+    return 1 if failures else 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="money-geta", description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("doctor", help="check local tools and configured upstream installations")
+    session = sub.add_parser("new-session", help="allocate a unique, non-destructive recording workspace")
+    session.add_argument("job_id")
+    session.add_argument("--root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
+    campaign = sub.add_parser("campaign-check", help="validate campaign evidence fields (not legal clearance)")
+    campaign.add_argument("--campaign", type=Path, required=True)
+    upstream = sub.add_parser("upstream-check", help="verify pinned upstream blobs and patch applicability")
+    upstream.add_argument("--path", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
+    upstream.add_argument("--apply", action="store_true", help="apply patches after all per-file checks; use on a clean clone")
+    args = parser.parse_args(argv)
+
+    if args.command == "doctor":
+        return doctor()
+    if args.command == "new-session":
+        path = create_session_dir(args.root, args.job_id)
+        print(path)
+        return 0
+    if args.command == "campaign-check":
+        passed, problems = check_file(args.campaign)
+        if not passed:
+            print("RESULT: INCOMPLETE")
+            for item in problems:
+                print(f"- {item}")
+            return 2
+        print("RESULT: CAMPAIGN_FIELDS_COMPLETE")
+        print("HUMAN REVIEW REQUIRED: verify rights, credits, platform rules and final media.")
+        return 0
+    if args.command == "upstream-check":
+        if args.path is None:
+            print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR or pass --path")
+            return 2
+        if args.apply:
+            print("WARNING: applying patches changes the selected local upstream checkout.")
+        return verify_patches(args.path.expanduser().resolve(), args.apply)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
