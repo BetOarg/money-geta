@@ -84,10 +84,13 @@ def test_analyze_video_uses_isolated_session_and_local_source(tmp_path, monkeypa
         stdout = "job: /tmp/fake-job\n8 candidates -> /tmp/fake-job/candidates.md"
         stderr = ""
 
-    def fake_run(command, cwd, env, capture_output, text, check):
+    calls = []
+    def fake_run(command, cwd, **kwargs):
+        calls.append(command)
         captured["command"] = command
         captured["cwd"] = cwd
-        captured["env"] = env
+        if "env" in kwargs:
+            captured["env"] = kwargs["env"]
         return Result()
 
     monkeypatch.setattr(money_geta.subprocess, "run", fake_run)
@@ -98,6 +101,8 @@ def test_analyze_video_uses_isolated_session_and_local_source(tmp_path, monkeypa
     )
     assert money_geta.run_moments(args) == 0
     assert captured["cwd"] == gtavi
+    assert len(calls) == 2
+    assert calls[0][1:3] == ["-c", "import numpy, faster_whisper"]
     assert captured["env"]["CLIP_DESK_HOME"].startswith(str(tmp_path / "jobs"))
     assert str(source) in captured["command"]
     assert "--top" in captured["command"]
