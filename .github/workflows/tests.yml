@@ -1,4 +1,4 @@
-name: Safety tests
+name: Safety and integration tests
 
 on:
   push:
@@ -22,3 +22,19 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip pytest
       - run: python -m pytest
+
+  upstream-patch-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone pinned upstream source
+        run: git clone --depth 1 https://github.com/Bodila51/gtavi-claudecode.git upstream
+      - name: Verify pinned blobs and patch applicability
+        run: |
+          set -euo pipefail
+          test "$(git -C upstream hash-object upstream/scripts/live.py)" = "c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a"
+          test "$(git -C upstream hash-object upstream/scripts/check.py)" = "c71ad730e009e4a5b5aea113a34e20dabd37620b"
+          test "$(git -C upstream hash-object upstream/scripts/secrets_map.py)" = "1d2b50963c3a2f4986911449679809d7390a4c09"
+          git -C upstream apply --check "$GITHUB_WORKSPACE/patches/gtavi-claudecode/live-session-isolation.patch"
+          git -C upstream apply --check "$GITHUB_WORKSPACE/patches/gtavi-claudecode/campaign-check-fail-closed.patch"
+          git -C upstream apply --check "$GITHUB_WORKSPACE/patches/gtavi-claudecode/secrets-map-evidence.patch"
