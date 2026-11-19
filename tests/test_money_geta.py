@@ -63,7 +63,7 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     args = Namespace(
         mpt_dir=mpt, mpt_python=python_exe, campaign=campaign, materials=[media],
         subject="GTA VI test", aspect="9:16", count=1,
-        language="en-US", voice=None,
+        language="en-US", voice=None, jobs_root=tmp_path / "jobs",
     )
     assert money_geta.run_mpt(args) == 0
     assert captured["cwd"] == mpt
@@ -182,3 +182,17 @@ def test_cut_video_rejects_unknown_candidate_before_running_upstream(tmp_path, m
         layout="blur", captions="word", hook="",
     )
     assert money_geta.run_cut(args) == 2
+
+
+def test_run_manifest_updates_and_status_lists_it(tmp_path, capsys):
+    from scripts.money_geta import show_status, write_manifest
+
+    session = tmp_path / "jobs" / "session-1"
+    manifest = write_manifest(session, stage="analyzed", source_path="local.mp4")
+    write_manifest(session, stage="clip_ready", clip_path="clip.mp4")
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    assert data["stage"] == "clip_ready"
+    assert data["source_path"] == "local.mp4"
+    assert data["clip_path"] == "clip.mp4"
+    assert show_status(tmp_path / "jobs", 10) == 0
+    assert "clip_ready" in capsys.readouterr().out
