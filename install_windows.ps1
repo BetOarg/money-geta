@@ -1,6 +1,5 @@
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$GtaviDir,
+    [string]$GtaviDir = "",
 
     [string]$MptDir = "C:\MoneyPrinterTurbo",
 
@@ -12,8 +11,12 @@ $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 $Cli = Join-Path $RepoRoot ".venv\Scripts\money-geta.exe"
 
-if (-not (Test-Path (Join-Path $GtaviDir "scripts\moments.py")) -or -not (Test-Path (Join-Path $GtaviDir "scripts\cut.py"))) {
-    throw "GTA VI ClaudeCode directory must contain scripts\moments.py and scripts\cut.py."
+$VendoredGtaviDir = Join-Path $RepoRoot "vendor\gtavi-claudecode"
+if (-not (Test-Path (Join-Path $VendoredGtaviDir "scripts\moments.py")) -or -not (Test-Path (Join-Path $VendoredGtaviDir "scripts\cut.py"))) {
+    throw "Money-Geta vendored GTA VI scripts are missing. Restore vendor\gtavi-claudecode before installing."
+}
+if ($GtaviDir -and (-not (Test-Path (Join-Path $GtaviDir "scripts\live.py")))) {
+    throw "Optional external GTA VI checkout must contain scripts\live.py."
 }
 if (-not (Test-Path (Join-Path $MptDir "cli.py")) -or -not (Test-Path (Join-Path $MptDir "config.toml"))) {
     throw "MoneyPrinterTurbo directory must contain cli.py and config.toml: $MptDir"
@@ -37,7 +40,7 @@ if (-not (Test-Path $VenvPython)) {
 
 & $VenvPython -m pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
-& $VenvPython -m pip install --editable "$RepoRoot[capture,media,test]"
+& $VenvPython -m pip install --editable "$RepoRoot[capture,media,gtavi,test]"
 if ($LASTEXITCODE -ne 0) { throw "Money-Geta installation failed." }
 
 Write-Host "Running Money-Geta regression tests..."
@@ -56,14 +59,14 @@ function Find-ProjectPython([string]$ProjectDir) {
     return ""
 }
 
-$GtaviPython = Find-ProjectPython $GtaviDir
+$GtaviPython = if ($GtaviDir) { Find-ProjectPython $GtaviDir } else { "" }
 $MptPython = Find-ProjectPython $MptDir
 
 $Settings = @{
-    GTAVI_CLAUDECODE_DIR = (Resolve-Path $GtaviDir).Path
     MONEYPRINTERTURBO_DIR = (Resolve-Path $MptDir).Path
     MONEY_GETA_JOBS_DIR = $JobsDir
 }
+if ($GtaviDir) { $Settings["GTAVI_CLAUDECODE_DIR"] = (Resolve-Path $GtaviDir).Path }
 if ($GtaviPython) { $Settings["GTAVI_CLAUDECODE_PYTHON"] = $GtaviPython }
 if ($MptPython) { $Settings["MONEYPRINTERTURBO_PYTHON"] = $MptPython }
 
@@ -73,7 +76,7 @@ foreach ($Name in $Settings.Keys) {
 }
 
 New-Item -ItemType Directory -Force -Path $JobsDir | Out-Null
-Write-Host "Money-Geta installed. Existing upstream folders, credentials and generated media were not modified."
+Write-Host "Money-Geta installed with its vendored GTA VI source. Optional external live-recording checkout, credentials and generated media were not modified."
 Write-Host "Running environment diagnostics..."
 Write-Host "FFmpeg and FFprobe must both be available on PATH. The MPT-bundled FFmpeg can support downloads, but it does not replace FFprobe."
 & $Cli doctor
