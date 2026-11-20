@@ -18,7 +18,7 @@ def create_campaign(project_id: str, name: str, platform: str, *, root: Path | N
     now = datetime.now(timezone.utc).isoformat()
     payload = {
         "schema_version": 1, "campaign_id": campaign_id, "project_id": project_id,
-        "profile_id": project["profile_id"], "campaign_name": clean_name,
+        "profile_id": project["profile_id"], "factual_claims_required": project["profile_id"] in {"news", "education"}, "campaign_name": clean_name,
         "platform": clean_platform, "status": "draft", "created_at": now, "updated_at": now,
         "sources": [], "source_evidence": [], "required_disclosures": [],
         "permissions_confirmed": False, "credits_confirmed": False,
