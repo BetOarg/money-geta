@@ -95,6 +95,8 @@ class _VisibleHTML(HTMLParser):
 def _clean_url(value: str):
     if not isinstance(value, str) or len(value) > 4096:
         raise SourceReadError("URL must be a string no longer than 4096 characters.")
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise SourceReadError("URL contains control characters.")
     try:
         parsed = urlsplit(value.strip())
         port = parsed.port
@@ -119,7 +121,8 @@ def _clean_url(value: str):
     port = port or (443 if scheme == "https" else 80)
     if port != (443 if scheme == "https" else 80):
         raise SourceReadError("Only default HTTP/HTTPS ports are supported.")
-    clean = urlunsplit((scheme, host, parsed.path or "/", parsed.query, ""))
+    netloc = f"[{host}]" if ":" in host else host
+    clean = urlunsplit((scheme, netloc, parsed.path or "/", parsed.query, ""))
     return clean, urlsplit(clean), port, host
 
 
