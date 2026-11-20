@@ -7,7 +7,7 @@ This directory preserves the text source files of the GTA VI ClaudeCode plugin s
 - Original project: https://github.com/Bodila51/gtavi-claudecode
 - Recovery source: https://github.com/Acefake/gtavi (public fork of the original project)
 - Pinned source commit: `67acdb4391fa491821b908bb7c455cf8148ad515`
-- Snapshot tree: `67acdb4391fa491821b908bb7c455cf8148ad515`
+- Snapshot tree: `36daaf981b4f3a9b96f4a2a8e5f6d7ad46e6957b`
 - Original author attribution in source history: Bodila51
 - License: MIT; see [LICENSE](LICENSE).
 
