@@ -21,6 +21,7 @@ def _now() -> str:
 
 def _campaign_context(campaign_path: str | Path) -> tuple[Path, dict[str, Any], Path]:
     supplied = Path(campaign_path).expanduser()
+    _reject_symlink_components(supplied)
     if supplied.is_symlink():
         raise ArtifactReviewError("Campaign manifest symlinks are blocked.")
     path = supplied.resolve(strict=True)
@@ -74,6 +75,7 @@ def _read_events(ledger: Path) -> list[dict[str, Any]]:
     if any(not isinstance(row, dict) or row.get("schema_version") != 1 for row in rows):
         raise ArtifactReviewError("Artifact ledger contains an unsupported event.")
     seen: set[str] = set()
+    registered_hashes: dict[str, str] = {}
     for row in rows:
         event = row.get("event_type")
         artifact_id = row.get("artifact_id")
@@ -83,8 +85,12 @@ def _read_events(ledger: Path) -> list[dict[str, Any]]:
             if artifact_id in seen or not re.fullmatch(r"[0-9a-f]{32}", artifact_id):
                 raise ArtifactReviewError("Artifact registration history is inconsistent.")
             seen.add(artifact_id)
+            if not re.fullmatch(r"[0-9a-f]{64}", str(row.get("sha256", ""))):
+                raise ArtifactReviewError("Artifact registration has an invalid SHA-256.")
+            registered_hashes[artifact_id] = row["sha256"]
         elif event in {"artifact_approved", "artifact_rejected"}:
-            if artifact_id not in seen or not re.fullmatch(r"[0-9a-f]{64}", str(row.get("sha256", ""))):
+            if (artifact_id not in seen or row.get("sha256") != registered_hashes.get(artifact_id)
+                    or not re.fullmatch(r"[0-9a-f]{64}", str(row.get("sha256", "")))):
                 raise ArtifactReviewError("Artifact decision is malformed or precedes registration.")
             if not isinstance(row.get("reviewer"), str) or not row["reviewer"].strip():
                 raise ArtifactReviewError("Artifact decision is missing its reviewer.")
@@ -220,6 +226,9 @@ def main(argv: list[str] | None = None) -> int:
     check = sub.add_parser("check", help="check whether an exact artifact is approved and unchanged")
     check.add_argument("--artifact-id", required=True)
     check.add_argument("--sha256", required=True)
+    publication = sub.add_parser("publication-check", help="combine campaign readiness and exact artifact approval")
+    publication.add_argument("--artifact-id", required=True)
+    publication.add_argument("--sha256", required=True)
     args = parser.parse_args(argv)
     try:
         if args.action == "list":
@@ -233,13 +242,19 @@ def main(argv: list[str] | None = None) -> int:
             print(f'{result["event_type"]}: {result["artifact_id"]} sha256={result["sha256"]}')
             return 0
         passed, problems = check_artifact(args.campaign, args.artifact_id, args.sha256)
+        if args.action == "publication-check":
+            from scripts.campaign_check import check_file
+            campaign_passed, campaign_problems = check_file(args.campaign)
+            if not campaign_passed:
+                problems = [f"campaign: {item}" for item in campaign_problems] + problems
+                passed = False
         if not passed:
             print("PUBLICATION CHECK: BLOCKED")
             for problem in problems:
                 print(f"- {problem}")
             return 2
-        print("PUBLICATION CHECK: ARTIFACT_APPROVED")
-        print("This verifies the reviewed file hash only; campaign rights and explicit publication approval remain separate gates.")
+        print("PUBLICATION CHECK: READY_FOR_HUMAN_PUBLISH_ACTION" if args.action == "publication-check" else "ARTIFACT CHECK: APPROVED")
+        print("No content is published by this command. Human publication authorization and platform-specific checks remain separate.")
         return 0
     except (ArtifactReviewError, OSError, ValueError) as exc:
         print(f"FAIL: {exc}")
