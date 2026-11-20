@@ -54,3 +54,10 @@ def test_download_source_rejects_output_outside_session(tmp_path, monkeypatch):
     monkeypatch.setattr(source_acquisition.subprocess, "run", lambda *a, **k: Result())
     with pytest.raises(RuntimeError, match="outside"):
         source_acquisition.download_source("https://example.test/video", output_dir)
+
+
+def test_download_command_requires_explicit_rights_confirmation(capsys):
+    from scripts.money_geta import main
+
+    assert main(["download-source", "--url", "https://example.test/video"]) == 2
+    assert "confirm-rights" in capsys.readouterr().out
