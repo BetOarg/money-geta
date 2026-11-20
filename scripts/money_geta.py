@@ -557,11 +557,16 @@ def main(argv: list[str] | None = None) -> int:
     render.add_argument("--aspect", choices=["9:16", "16:9", "1:1"], default="9:16")
     render.add_argument("--count", type=int, choices=range(1, 21), default=1)
     render.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
+    media = sub.add_parser("media", help="inspect, detect scenes, transcribe and subtitle local media")
+    media.add_argument("media_args", nargs=argparse.REMAINDER)
     upstream = sub.add_parser("upstream-check", help="verify pinned upstream blobs and patch applicability")
     upstream.add_argument("--path", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
     upstream.add_argument("--apply", action="store_true", help="apply patches after all per-file checks; use on a clean clone")
     args = parser.parse_args(argv)
 
+    if args.command == "media":
+        from scripts.media_pipeline import main as media_main
+        return media_main(args.media_args)
     if args.command == "doctor":
         return doctor()
     if args.command == "status":
