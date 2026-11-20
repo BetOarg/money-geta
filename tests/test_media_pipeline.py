@@ -70,3 +70,26 @@ def test_transcription_writes_srt_and_vtt(tmp_path, monkeypatch):
 def test_burn_subtitles_requires_inputs(tmp_path):
     with pytest.raises(FileNotFoundError):
         media_pipeline.burn_subtitles(tmp_path / "missing.mp4", tmp_path / "missing.srt", tmp_path / "out.mp4")
+
+
+
+def test_scene_detection_uses_supported_pyscenedetect_cli_order(tmp_path, monkeypatch):
+    source = tmp_path / "input.mp4"
+    source.write_bytes(b"fake")
+    output = tmp_path / "out"
+    monkeypatch.setattr(media_pipeline.shutil, "which", lambda name: "/usr/bin/scenedetect")
+    captured = {}
+    class Result:
+        returncode = 0
+        stderr = ""
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        output.mkdir(parents=True, exist_ok=True)
+        (output / "input-scenes.csv").write_text("Scene Number,Start Timecode\\n", encoding="utf-8")
+        return Result()
+    monkeypatch.setattr(media_pipeline, "_run", fake_run)
+    result = media_pipeline.detect_scenes(source, output, 25)
+    command = captured["command"]
+    assert command.index("--input") < command.index("detect-content") < command.index("list-scenes")
+    assert command[command.index("--threshold") + 1] == "25"
+    assert result.name == "input-scenes.csv"
