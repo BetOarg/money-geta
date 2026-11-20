@@ -43,6 +43,10 @@ if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
 & $VenvPython -m pip install --editable "$RepoRoot[capture,media,gtavi,test]"
 if ($LASTEXITCODE -ne 0) { throw "Money-Geta installation failed." }
 
+Write-Host "Checking Tkinter desktop GUI support..."
+& $VenvPython -c "import tkinter; import scripts.money_geta_gui"
+if ($LASTEXITCODE -ne 0) { throw "Tkinter is unavailable in this Python installation. Install Python from python.org with Tcl/Tk support." }
+
 Write-Host "Running Money-Geta regression tests..."
 & $VenvPython -m pytest
 if ($LASTEXITCODE -ne 0) { throw "Money-Geta regression tests failed." }
@@ -77,15 +81,6 @@ foreach ($Name in $Settings.Keys) {
 
 New-Item -ItemType Directory -Force -Path $JobsDir | Out-Null
 Write-Host "Money-Geta installed with its vendored GTA VI source. Optional external live-recording checkout, credentials and generated media were not modified."
-Write-Host "Running environment diagnostics..."
-Write-Host "FFmpeg and FFprobe must both be available on PATH. The MPT-bundled FFmpeg can support downloads, but it does not replace FFprobe."
-& $Cli doctor
-if ($LASTEXITCODE -ne 0) {
-    Write-Warning "Installation completed, but diagnostics are incomplete. Resolve PENDING items before recording or rendering."
-    exit 2
-}
-Write-Host "VERDE: Money-Geta CLI and configured project paths are ready."
-
 # Create a desktop shortcut that launches the GUI without a console window.
 $Pythonw = Join-Path $RepoRoot ".venv\Scripts\pythonw.exe"
 if (-not (Test-Path $Pythonw)) { $Pythonw = $VenvPython }
@@ -99,4 +94,13 @@ $Shortcut.WorkingDirectory = $RepoRoot
 $Shortcut.Description = "Money-Geta - procesamiento local de videos"
 $Shortcut.Save()
 Write-Host "Desktop shortcut created: $ShortcutPath"
+
+Write-Host "Running environment diagnostics..."
+Write-Host "FFmpeg and FFprobe must both be available on PATH. The MPT-bundled FFmpeg can support downloads, but it does not replace FFprobe."
+& $Cli doctor
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning "Installation completed, but diagnostics are incomplete. Resolve PENDING items before recording or rendering."
+    exit 2
+}
+Write-Host "VERDE: Money-Geta CLI and configured project paths are ready."
 
