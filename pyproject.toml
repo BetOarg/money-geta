@@ -9,6 +9,7 @@ money-geta = "scripts.money_geta:main"
 money-geta-gui = "scripts.money_geta_gui:main"
 money-geta-read-source = "scripts.read_source:main"
 money-geta-claims = "scripts.claims_cli:main"
+money-geta-artifact-review = "scripts.artifact_registry:main"
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]
