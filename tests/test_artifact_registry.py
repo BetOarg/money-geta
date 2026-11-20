@@ -107,3 +107,15 @@ def test_missing_artifact_invalidates_approval(tmp_path: Path) -> None:
     passed, problems = check_artifact(campaign, item["artifact_id"], item["sha256"])
     assert not passed
     assert "changed" in problems[0]
+
+
+
+def test_nested_artifact_inside_mpt_output_tree_is_allowed(tmp_path: Path) -> None:
+    campaign, output = setup_campaign(tmp_path)
+    nested = output / "videos" / "vertical"
+    nested.mkdir(parents=True)
+    video = nested / "final.mp4"
+    video.write_bytes(b"nested video")
+    item = register_artifact(campaign, video, allowed_root=output)
+    assert item["path"] == str(video)
+    assert check_artifact(campaign, item["artifact_id"], item["sha256"])[0] is False
