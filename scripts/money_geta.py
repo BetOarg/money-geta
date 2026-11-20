@@ -131,7 +131,7 @@ def doctor() -> int:
     gtavi_dir = default_gtavi_dir()
     if (gtavi_dir / "scripts/moments.py").is_file():
         try:
-            gtavi_python = resolve_gtavi_python(gtavi_dir, env_path("GTAVI_CLAUDECODE_PYTHON"))
+            gtavi_python = resolve_gtavi_python(gtavi_dir)
             dependency = subprocess.run(
                 [str(gtavi_python), "-c", "import numpy, faster_whisper"],
                 cwd=gtavi_dir, capture_output=True, text=True, check=False,
@@ -330,7 +330,7 @@ def run_moments(args: argparse.Namespace, session_dir: Path | None = None) -> in
                 candidate_count = None
             write_manifest(session, stage="analyzed", job_dir=str(job_path), candidate_count=candidate_count)
             print(f"SESSION: {session}")
-            print(f'NEXT: money-geta cut-video --job-dir "{line[5:]}" --pick 1')
+            print(f'NEXT: money-geta cut-video --job-dir "{line[5:]}" --pick 1 --credit "@CREADOR"')
             return 0
     print("FAIL: moments.py completed without returning a job directory.")
     return 1
@@ -594,7 +594,7 @@ def main(argv: list[str] | None = None) -> int:
     process.add_argument("--confirm-rights", action="store_true", help="confirm you have permission to download and edit this source")
     process.add_argument("--ffmpeg-location", type=Path, default=None)
     process.add_argument("--gtavi-dir", type=Path, default=default_gtavi_dir())
-    process.add_argument("--gtavi-python", type=Path, default=env_path("GTAVI_CLAUDECODE_PYTHON"))
+    process.add_argument("--gtavi-python", type=Path, default=None)
     process.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     process.add_argument("--top", type=int, choices=range(1, 31), default=8)
     process.add_argument("--min-seconds", type=float, default=15)
@@ -615,7 +615,7 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--confirm-recording", action="store_true", help="confirm you have permission to record this stream")
     analyze = sub.add_parser("analyze-video", help="find candidate moments in a local VOD/video")
     analyze.add_argument("--gtavi-dir", type=Path, default=default_gtavi_dir())
-    analyze.add_argument("--gtavi-python", type=Path, default=env_path("GTAVI_CLAUDECODE_PYTHON"))
+    analyze.add_argument("--gtavi-python", type=Path, default=None)
     analyze.add_argument("--source", type=Path, required=True)
     analyze.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     analyze.add_argument("--top", type=int, choices=range(1, 31), default=8)
@@ -623,7 +623,7 @@ def main(argv: list[str] | None = None) -> int:
     analyze.add_argument("--max-seconds", type=float, default=40)
     cut = sub.add_parser("cut-video", help="render one analyzed candidate as a vertical clip")
     cut.add_argument("--gtavi-dir", type=Path, default=default_gtavi_dir())
-    cut.add_argument("--gtavi-python", type=Path, default=env_path("GTAVI_CLAUDECODE_PYTHON"))
+    cut.add_argument("--gtavi-python", type=Path, default=None)
     cut.add_argument("--job-dir", type=Path, required=True)
     cut.add_argument("--pick", type=int, default=1)
     cut.add_argument("--layout", choices=["fill", "blur", "facecam", "react"], default="blur")
