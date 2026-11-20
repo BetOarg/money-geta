@@ -52,6 +52,9 @@ def _evidence_index(folder: Path) -> dict[str, dict[str, Any]]:
         evidence_id, url = row.get("evidence_id"), row.get("final_url")
         if not isinstance(evidence_id, str) or not isinstance(url, str):
             raise ClaimRegistryError("Source ledger entry is missing evidence_id or final_url.")
+        parsed = urlsplit(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            raise ClaimRegistryError("Source ledger contains an invalid or credential-bearing URL.")
         if evidence_id in index:
             raise ClaimRegistryError("Source ledger contains duplicate evidence IDs.")
         index[evidence_id] = row
@@ -60,8 +63,17 @@ def _evidence_index(folder: Path) -> dict[str, dict[str, Any]]:
 
 def _claim_events(folder: Path) -> list[dict[str, Any]]:
     rows = _read_jsonl(folder / "claim_ledger.jsonl")
-    if any(row.get("event_type") not in {"claim_created", "claim_assessed"} for row in rows):
-        raise ClaimRegistryError("Claim ledger contains an unknown event type.")
+    for row in rows:
+        event_type = row.get("event_type")
+        if event_type not in {"claim_created", "claim_assessed"}:
+            raise ClaimRegistryError("Claim ledger contains an unknown event type.")
+        if not isinstance(row.get("claim_id"), str) or not row["claim_id"]:
+            raise ClaimRegistryError("Claim ledger event is missing claim_id.")
+        if event_type == "claim_created":
+            if not isinstance(row.get("claim"), str) or not isinstance(row.get("evidence_ids"), list):
+                raise ClaimRegistryError("Claim creation event is malformed.")
+        elif row.get("status") not in STATUSES or not isinstance(row.get("rationale"), str):
+            raise ClaimRegistryError("Claim assessment event is malformed.")
     return rows
 
 
@@ -117,10 +129,6 @@ def assess_claim(project_id: str, campaign_id: str, claim_id: str, status: str, 
     created = next((row for row in events if row.get("event_type") == "claim_created" and row.get("claim_id") == claim_id), None)
     if created is None:
         raise ClaimRegistryError("Claim ID was not found.")
-    latest = next((row for row in reversed(events) if row.get("claim_id") == claim_id), created)
-    if latest.get("status") in {"supported", "contradicted", "unsupported"}:
-        # Re-assessment is allowed but remains append-only and must carry a fresh rationale.
-        pass
     evidence = _evidence_index(folder)
     refs = created.get("evidence_ids", [])
     if any(ref not in evidence for ref in refs):
