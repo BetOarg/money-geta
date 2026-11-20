@@ -6,7 +6,7 @@ Cada conector declara `id`, `version`, `capabilities`, `required_config`, `cost_
 Nunca incluir credenciales en argumentos de línea de comandos, manifests, logs, excepciones o resultados. Cargar secretos desde almacén local/variables de entorno y redactarlos.
 
 ## Buffer distribution adapter
-Responsabilidad: listar destinos/canales conectados, validar que un medio/copy/formato sea compatible, crear borrador o elemento programado solo tras aprobación, recuperar URL/estado y métricas que el plan/API permita.
+Responsabilidad: usar la API GraphQL oficial para listar organizaciones/canales conectados, validar un medio/copy/formato, guardar un borrador por defecto, programar solo tras aprobación, recuperar estado y métricas que la API/permisos permitan. La API key actúa sobre la cuenta Buffer y puede acceder a todas sus organizaciones; almacenarla solo en entorno local seguro.
 
 Operaciones previstas:
 - `health_check()`
@@ -30,7 +30,7 @@ Operaciones previstas:
 Guardrails: límite configurable por campaña y por día; presupuesto máximo; caché por consulta; deduplicación; paginación acotada; retención mínima necesaria; registro de endpoint, fecha, resultados y coste estimado/real. Si no se conoce el precio/uso aplicable, la operación queda deshabilitada. No hacer scraping para evadir límites, autenticación o políticas.
 
 ## X Publishing adapter
-Primera etapa: Buffer cuando el canal y el formato estén disponibles para la cuenta. Fase posterior: X API directa, solo tras validar documentación oficial y autorización de coste/permisos.
+Primera etapa: Buffer cuando el canal y el formato estén disponibles para la cuenta. La documentación de Buffer indica soporte para X, YouTube, Instagram y TikTok, pero los límites de video y los campos admitidos varían por canal. Para X vía terceros, el límite operativo de video es 140 segundos; el video más largo de X Premium solo aplica a publicación nativa directa. Fase posterior: X API directa, solo tras validar documentación oficial y autorización de coste/permisos. La tarifa oficial consultada muestra USD 0,005 por post leído, USD 0,015 por creación de post y USD 0,20 por creación con URL; confirmar en Developer Console antes de habilitar porque precios y límites pueden cambiar.
 
 Operaciones previstas: validar copy/medios, crear borrador, publicar, consultar estado y métricas. Toda operación de escritura requiere un token de aprobación humano ligado a campaña, plataforma, contenido y hash de medios. No hay autopublicación.
 

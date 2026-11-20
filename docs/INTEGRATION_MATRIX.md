@@ -30,14 +30,14 @@ Estados: **INTEGRADO** = existe implementación verificable en la rama actual; *
 ## Plataformas y conectores
 | Plataforma/conector | Investigación | Publicación | Decisión |
 |---|---|---|---|
-| Buffer | No tratarlo como buscador universal | Sí, solo canales y formatos expuestos por la cuenta | Primera integración de distribución |
+| Buffer | No es fuente de tendencias universal | Sí: API GraphQL para canales conectados, borradores, cola/programación y métricas disponibles | Primera integración; usar API oficial y consultar capacidades del canal |
 | X Research API | Sí, si el endpoint/producto contratado lo permite | No | Conector independiente, fase posterior y coste limitado |
 | X Publishing API | No | Sí, sujeto a permisos/product tier y contrato vigente | No activar hasta autorización explícita |
 | YouTube | Fuentes públicas mediante adaptadores separados | Buffer primero; API directa solo si hace falta | Destino prioritario |
 | Instagram | No asumir búsqueda amplia | Buffer según soporte vigente | Destino |
 | TikTok | No asumir búsqueda amplia | Buffer según soporte vigente | Destino |
 
-Las capacidades y límites comerciales cambian. Antes de implementar o activar un conector, verificar documentación oficial, permisos de cuenta, formatos, límites, precios y políticas vigentes. La matriz no afirma que Buffer soporte cada formato/canal en la cuenta del operador.
+La API actual de Buffer es GraphQL y permite gestionar canales conectados, posts y programación; los datos de métricas dependen de red/permisos. El soporte de video depende de cada canal y de límites de Buffer. Ver docs/PLATFORM_PUBLISHING_RULES.md. La API key de Buffer tiene alcance de cuenta y puede acceder a todas las organizaciones de esa cuenta; protegerla como secreto de alto impacto. Las capacidades y límites comerciales cambian: comprobar documentación oficial y capacidades reales antes de cada operación.
 
 ## Gates obligatorios
 1. Fuente identificada y fecha de consulta.
