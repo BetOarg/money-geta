@@ -26,7 +26,8 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [x] Implementar adaptador LLM intercambiable compatible con Chat Completions (Gemini/OpenAI API/gateways compatibles), con credenciales locales y opt-in explícito de red.
 - [x] Separar ChatGPT web de OpenAI API; nunca asumir API incluida en plan ChatGPT.
 - [x] Añadir adaptadores de búsqueda Brave/Tavily con resultados normalizados, URL, extracto, fecha disponible, puntuación e instante de recuperación (separados del LLM).
-- [ ] Añadir apertura/extracción de fuentes originales, persistencia versionada del ledger y verificación/corroboración de afirmaciones.
+- [x] Añadir lectura limitada de fuentes originales HTML/XHTML/texto y ledger JSONL versionado por campaña, con opt-in de red y defensas SSRF.
+- [ ] Añadir verificación/corroboración de afirmaciones, independencia de fuentes y registro de contradicciones.
 - [ ] Añadir proveedor de imágenes configurable; Pexels no será requisito.
 - [ ] Añadir TTS configurable, sin acoplarlo a un proveedor.
 - [ ] Benchmarks antes de incorporar ClipsAI, FunClip, WhisperX, Silero VAD, MediaPipe, Auto-Editor o MoviePy.
