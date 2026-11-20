@@ -16,6 +16,19 @@ ffprobe -version
 
 The FFmpeg executable bundled inside MoneyPrinterTurbo may be used by the downloader, but it does not guarantee that FFprobe is installed. Install a Windows FFmpeg distribution that includes both executables and add its `bin` folder to PATH if either command is missing.
 
+## Desktop application
+
+The Windows installer also creates a **Money-Geta** shortcut on the current user's Desktop. Open it to launch the graphical interface (no terminal window when the virtual environment's `pythonw.exe` is available).
+
+On first launch, the app runs `money-geta doctor` automatically. Use the **Configuración** tab to set:
+- MoneyPrinterTurbo directory (must contain `cli.py` and `config.toml`).
+- GTA VI ClaudeCode directory (defaults to the reviewed copy at `vendor/gtavi-claudecode`).
+- Jobs directory (defaults to `%LOCALAPPDATA%\Money-Geta\jobs`).
+
+Settings are stored locally in `%LOCALAPPDATA%\Money-Geta\settings.json`; they do not contain API keys. The **Procesar** tab accepts either a local video or a URL. URL acquisition remains blocked until the operator explicitly confirms rights. The **Clips y sesiones** tab lists workflow sessions, candidate moments and completed MP4 clips. Select a candidate, enter the creator credit, choose a layout/caption style and create the clip. Use **Abrir clip seleccionado** to review an existing MP4 in the Windows default player.
+
+The GUI does not enable live recording, auto-publishing or campaign rendering. MoneyPrinterTurbo remains configured for the existing CLI render workflow; campaign evidence and human review gates remain mandatory.
+
 ## Install Money-Geta
 
 From the repository root:
