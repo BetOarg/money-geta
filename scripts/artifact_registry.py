@@ -127,8 +127,12 @@ def register_artifact(campaign_path: str | Path, artifact_path: str | Path, *,
     _reject_symlink_components(root_supplied)
     path = supplied.resolve(strict=True)
     root = root_supplied.resolve(strict=True)
-    if not root.is_dir() or path.parent != root or not path.is_file() or path.suffix.lower() != ".mp4":
-        raise ArtifactReviewError("Artifact must be a regular MP4 directly inside the allowed output directory.")
+    try:
+        path.relative_to(root)
+    except ValueError:
+        raise ArtifactReviewError("Artifact must remain inside the allowed output directory.") from None
+    if not root.is_dir() or path == root or not path.is_file() or path.suffix.lower() != ".mp4":
+        raise ArtifactReviewError("Artifact must be a regular MP4 inside the allowed output directory.")
     if path.is_symlink() or root.is_symlink():
         raise ArtifactReviewError("Symlink paths are blocked for reviewed artifacts.")
     rows = _read_events(ledger)
@@ -184,7 +188,11 @@ def approve_artifact(campaign_path: str | Path, artifact_id: str, sha256: str, *
     root = Path(registration["allowed_root"])
     _reject_symlink_components(path)
     _reject_symlink_components(root)
-    if path.parent != root or not path.is_file() or path.is_symlink() or _sha256(path) != sha256:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        raise ArtifactReviewError("Artifact moved outside its allowed output directory.") from None
+    if not path.is_file() or path.is_symlink() or _sha256(path) != sha256:
         raise ArtifactReviewError("Artifact is missing, moved or changed since registration.")
     event = {
         "schema_version": 1, "event_type": "artifact_approved" if decision == "approved" else "artifact_rejected",
@@ -207,7 +215,11 @@ def check_artifact(campaign_path: str | Path, artifact_id: str, sha256: str) -> 
     try:
         _reject_symlink_components(path)
         _reject_symlink_components(root)
-        if path.parent != root or not path.is_file() or path.is_symlink() or _sha256(path) != sha256:
+        try:
+            path.relative_to(root)
+        except ValueError:
+            return False, ["artifact moved outside its allowed output directory"]
+        if not path.is_file() or path.is_symlink() or _sha256(path) != sha256:
             return False, ["artifact is missing or its contents changed after registration"]
     except (OSError, ArtifactReviewError):
         return False, ["artifact path is no longer safe or accessible"]
