@@ -65,3 +65,5 @@ def test_claim_ledger_is_append_only_and_fails_closed_on_corruption(tmp_path, mo
     ledger.write_text("{broken\n", encoding="utf-8")
     with pytest.raises(claims.ClaimRegistryError, match="malformed"):
         claims.list_claims("p", "c", root=root)
+    with pytest.raises(claims.ClaimRegistryError, match="malformed"):
+        claims.create_claim("p", "c", "Another statement", ["e1"], root=root)
