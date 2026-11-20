@@ -1,0 +1,197 @@
+{
+  "snapshot_type": "vendored-source-preservation",
+  "original_repository": "https://github.com/Bodila51/gtavi-claudecode",
+  "recovery_fork": "https://github.com/Acefake/gtavi",
+  "recovery_fork_parent": "Bodila51/gtavi-claudecode",
+  "source_commit": "67acdb4391fa491821b908bb7c455cf8148ad515",
+  "source_tree_sha": "67acdb4391fa491821b908bb7c455cf8148ad515",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2026 Bodila51",
+  "imported_text_file_count": 36,
+  "intentionally_omitted": [
+    "README.md (root README intentionally withheld until integration completion)",
+    "docs/logo.png (nonessential binary asset)"
+  ],
+  "files": [
+    {
+      "path": ".claude-plugin/marketplace.json",
+      "blob_sha": "57373f9b0829e6c02171653327dd0e4955daba08",
+      "size_bytes": 600
+    },
+    {
+      "path": ".claude-plugin/plugin.json",
+      "blob_sha": "a052a140c885387af65defdb917339900503f4f9",
+      "size_bytes": 439
+    },
+    {
+      "path": ".gitignore",
+      "blob_sha": "b8b56dc36dcef6a3e507f5388460de2ef93c27eb",
+      "size_bytes": 61
+    },
+    {
+      "path": "LICENSE",
+      "blob_sha": "3cf144a811b2a87a7487d462127884992d55dd1e",
+      "size_bytes": 1065
+    },
+    {
+      "path": "requirements.txt",
+      "blob_sha": "4fc5a73279fabf9ab4ffea234d9968223cd88a5d",
+      "size_bytes": 139
+    },
+    {
+      "path": "scripts/check.py",
+      "blob_sha": "a9a1ead3d9264420cdcdcd52ab6b9b7dd8d68d1b",
+      "size_bytes": 3892
+    },
+    {
+      "path": "scripts/common.py",
+      "blob_sha": "30e03d50064dfe470445e01741e57465811a1b78",
+      "size_bytes": 2115
+    },
+    {
+      "path": "scripts/cut.py",
+      "blob_sha": "8f385846a006af151986acea0e17233ef9718363",
+      "size_bytes": 10131
+    },
+    {
+      "path": "scripts/facecam.py",
+      "blob_sha": "2316b826a3511a21c095cdacb6ba723e4c3dcdfe",
+      "size_bytes": 13764
+    },
+    {
+      "path": "scripts/live.py",
+      "blob_sha": "c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a",
+      "size_bytes": 13319
+    },
+    {
+      "path": "scripts/moments.py",
+      "blob_sha": "e2baabd9fbf50ca8d64efae9c9c058caf2364b91",
+      "size_bytes": 8325
+    },
+    {
+      "path": "scripts/payouts.py",
+      "blob_sha": "d40f79aa81fcc9ebbe68ac5da8f943cb26d14d97",
+      "size_bytes": 2600
+    },
+    {
+      "path": "scripts/questions.py",
+      "blob_sha": "0d6f1b9c31bcb32ce4d35b6f3be43cd91a73ff10",
+      "size_bytes": 10148
+    },
+    {
+      "path": "scripts/secrets_map.py",
+      "blob_sha": "1d2b50963c3a2f4986911449679809d7390a4c09",
+      "size_bytes": 12218
+    },
+    {
+      "path": "scripts/streams.py",
+      "blob_sha": "df1c242ea8b4eb2e2de464ae5c409d89b9fcc6a1",
+      "size_bytes": 6252
+    },
+    {
+      "path": "scripts/translate.py",
+      "blob_sha": "ab19ac98e5598c21f10fa4f65b54db7af2bfc80f",
+      "size_bytes": 7056
+    },
+    {
+      "path": "scripts/trends.py",
+      "blob_sha": "2298b83abcb632d44919c6f4efb32ba5bb62bee6",
+      "size_bytes": 2326
+    },
+    {
+      "path": "scripts/twitch.py",
+      "blob_sha": "c873419b61012ef8cb7bcaf1ea3437b5e97b97fb",
+      "size_bytes": 5904
+    },
+    {
+      "path": "skills/campaign-finder/SKILL.md",
+      "blob_sha": "414ebc4011ee204520880b0aeee77b22bdac2cd8",
+      "size_bytes": 2106
+    },
+    {
+      "path": "skills/cheat-codes/SKILL.md",
+      "blob_sha": "1958a37cc647d420d51f26f731ae746eaae93cb8",
+      "size_bytes": 1682
+    },
+    {
+      "path": "skills/cheat-codes/references/cheats.md",
+      "blob_sha": "d3d3b9788b36eb602232aee17e9b4c2d92845a43",
+      "size_bytes": 3801
+    },
+    {
+      "path": "skills/clip-cutter/SKILL.md",
+      "blob_sha": "0f77e5f61c7d665e0e68d283868284ac60776c14",
+      "size_bytes": 1244
+    },
+    {
+      "path": "skills/hook-writer/SKILL.md",
+      "blob_sha": "f2c3d4da17113271c7c31f0800285ee184dbd7f8",
+      "size_bytes": 1902
+    },
+    {
+      "path": "skills/learning-loop/SKILL.md",
+      "blob_sha": "3ce1031bfebc94f3b4098b780e483811bc3189aa",
+      "size_bytes": 1634
+    },
+    {
+      "path": "skills/live-mode/SKILL.md",
+      "blob_sha": "6843df58b9818b252cc3d59f62929a3717c7c982",
+      "size_bytes": 1178
+    },
+    {
+      "path": "skills/moment-finder/SKILL.md",
+      "blob_sha": "70c1a3838476e5cd7d3e5705836b66f6598a3d3e",
+      "size_bytes": 992
+    },
+    {
+      "path": "skills/multilang/SKILL.md",
+      "blob_sha": "f078ac6116c0a67ee7fbbb37cad1bcb5a53ef15a",
+      "size_bytes": 2198
+    },
+    {
+      "path": "skills/playbook/SKILL.md",
+      "blob_sha": "c068666a6f3e0832fbb88a96020af614514200dd",
+      "size_bytes": 1508
+    },
+    {
+      "path": "skills/playbook/references/playbook.md",
+      "blob_sha": "3189a2183017ba973439552c662925ccf9d31fcc",
+      "size_bytes": 21302
+    },
+    {
+      "path": "skills/questions-to-posts/SKILL.md",
+      "blob_sha": "2ea2f1adc5c371c31a5310a6cf7e7459b8eec649",
+      "size_bytes": 2423
+    },
+    {
+      "path": "skills/rule-check/SKILL.md",
+      "blob_sha": "b27b89865b85696ef9be867ef31da6bbf3b76ee3",
+      "size_bytes": 1051
+    },
+    {
+      "path": "skills/secrets-map/SKILL.md",
+      "blob_sha": "87dfaf7e1b3b5e789c72b2145432e1f82ed1d3cf",
+      "size_bytes": 2373
+    },
+    {
+      "path": "skills/setup/SKILL.md",
+      "blob_sha": "03f4e588f70e2ce77f99aa15293f10b2097beab7",
+      "size_bytes": 2740
+    },
+    {
+      "path": "skills/stream-finder/SKILL.md",
+      "blob_sha": "3f64e9fc72991c62628aa35dc770f6f3731ea296",
+      "size_bytes": 779
+    },
+    {
+      "path": "skills/trend-radar/SKILL.md",
+      "blob_sha": "4442ddd313de6faee181b1c994cab1109c5f4e70",
+      "size_bytes": 879
+    },
+    {
+      "path": "skills/twitch-reaction/SKILL.md",
+      "blob_sha": "ce4987f64e429c7340a91006f31568ee3d7435c7",
+      "size_bytes": 2246
+    }
+  ]
+}
