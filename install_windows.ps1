@@ -12,8 +12,8 @@ $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 $Cli = Join-Path $RepoRoot ".venv\Scripts\money-geta.exe"
 
-if (-not (Test-Path (Join-Path $GtaviDir "scripts\moments.py"))) {
-    throw "GTA VI ClaudeCode directory is invalid: scripts\moments.py was not found."
+if (-not (Test-Path (Join-Path $GtaviDir "scripts\moments.py")) -or -not (Test-Path (Join-Path $GtaviDir "scripts\cut.py"))) {
+    throw "GTA VI ClaudeCode directory must contain scripts\moments.py and scripts\cut.py."
 }
 if (-not (Test-Path (Join-Path $MptDir "cli.py")) -or -not (Test-Path (Join-Path $MptDir "config.toml"))) {
     throw "MoneyPrinterTurbo directory must contain cli.py and config.toml: $MptDir"
