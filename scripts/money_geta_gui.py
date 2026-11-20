@@ -275,6 +275,7 @@ class MoneyGetaApp:
         toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         ttk.Button(toolbar, text="Actualizar", command=self.refresh_jobs).pack(side="left")
         ttk.Button(toolbar, text="Abrir video seleccionado", command=self.open_selected_output).pack(side="left", padx=8)
+        ttk.Button(toolbar, text="Enviar a render MPT", command=self.send_selected_output_to_render).pack(side="left", padx=8)
         ttk.Button(toolbar, text="Abrir carpeta del trabajo", command=self.open_selected_folder).pack(side="left")
         columns = ("stage", "name", "path")
         self.jobs_tree = ttk.Treeview(self.history, columns=columns, show="headings", height=9)
@@ -489,6 +490,21 @@ class MoneyGetaApp:
                 self.candidates.insert("", END, values=(row["n"], f"{start:.1f}s – {end:.1f}s", row["title"], row["score"]))
         for output in session_video_outputs(session):
             self.outputs.insert("", END, iid=str(output), values=(output.name, str(output.parent)))
+
+    def send_selected_output_to_render(self):
+        selected = self.outputs.selection()
+        if not selected:
+            messagebox.showinfo("Render MPT", "Selecciona primero un clip o video generado.")
+            return
+        path = Path(selected[0])
+        if not path.is_file():
+            messagebox.showerror("Archivo no encontrado", str(path))
+            return
+        if path not in self.render_materials:
+            self.render_materials.append(path)
+            self.materials_list.insert(END, str(path))
+        self.tabs.select(self.render)
+        self._set_status(f"Material agregado al render MPT: {path.name}")
 
     def open_selected_output(self):
         selected = self.outputs.selection()
