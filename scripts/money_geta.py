@@ -603,6 +603,16 @@ def main(argv: list[str] | None = None) -> int:
     campaign_show = campaign_actions.add_parser("show", help="inspect a campaign manifest")
     campaign_show.add_argument("--project", required=True)
     campaign_show.add_argument("campaign_id")
+    campaign_update = campaign_actions.add_parser("update", help="add sources, rights evidence, disclosures and explicit attestations")
+    campaign_update.add_argument("--project", required=True)
+    campaign_update.add_argument("campaign_id")
+    campaign_update.add_argument("--source", action="append", default=[])
+    campaign_update.add_argument("--rights-evidence", action="append", default=[])
+    campaign_update.add_argument("--disclosure", action="append", default=[])
+    campaign_update.add_argument("--credit", action="append", default=[])
+    campaign_update.add_argument("--confirm-permissions", action="store_true")
+    campaign_update.add_argument("--confirm-credits", action="store_true")
+    campaign_update.add_argument("--no-credits-required", action="store_true")
     status = sub.add_parser("status", help="list recent Money-Geta workflow sessions")
     status.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     status.add_argument("--limit", type=int, choices=range(1, 101), default=20)
@@ -723,6 +733,15 @@ def main(argv: list[str] | None = None) -> int:
                 if not items: print("No campaigns found.")
                 for item in items:
                     print(f"{item['campaign_id']} | {item['campaign_name']} | {item['platform']} | {item['status']}")
+                return 0
+            if args.campaign_action == "update":
+                from scripts.campaign_registry import update_campaign
+                path = update_campaign(args.project, args.campaign_id, sources=args.source,
+                    rights_evidence=args.rights_evidence, disclosures=args.disclosure,
+                    credits=args.credit, confirm_permissions=args.confirm_permissions,
+                    confirm_credits=args.confirm_credits, no_credits_required=args.no_credits_required)
+                print(f"UPDATED: {path}")
+                print("STATUS: draft — this records operator attestations; it is not legal clearance or publication approval.")
                 return 0
             print(json.dumps(get_campaign(args.project, args.campaign_id), ensure_ascii=False, indent=2))
             return 0

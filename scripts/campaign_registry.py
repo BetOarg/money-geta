@@ -61,3 +61,74 @@ def list_campaigns(project_id: str, root: Path | None = None) -> list[dict[str, 
     folder = projects_root / project_id / "campaigns"
     if not folder.is_dir(): return []
     return [_read_campaign(path) for path in sorted(folder.glob("*/campaign.json"))]
+
+def update_campaign(project_id: str, campaign_id: str, *, sources: list[str] | None = None,
+                    rights_evidence: list[str] | None = None,
+                    disclosures: list[str] | None = None, credits: list[str] | None = None,
+                    confirm_permissions: bool = False, confirm_credits: bool = False,
+                    no_credits_required: bool = False, root: Path | None = None) -> Path:
+    """Append operator-supplied evidence and explicit attestations; never approve or publish."""
+    from datetime import datetime, timezone
+    import os
+
+    payload = get_campaign(project_id, campaign_id, root)
+    sources = sources or []
+    rights_evidence = rights_evidence or []
+    disclosures = disclosures or []
+    credits = credits or []
+    if len(sources) != len(rights_evidence):
+        raise ValueError("Each new source must have exactly one rights-evidence reference")
+    if no_credits_required and credits:
+        raise ValueError("Cannot declare no credits required while adding credit records")
+    now = datetime.now(timezone.utc).isoformat()
+    existing_sources = payload.setdefault("sources", [])
+    ledger = payload.setdefault("rights_ledger", [])
+    evidence_items = payload.setdefault("source_evidence", [])
+    for source, evidence in zip(sources, rights_evidence):
+        source, evidence = source.strip(), evidence.strip()
+        if not source or not evidence:
+            raise ValueError("Source and rights-evidence references cannot be empty")
+        if source in existing_sources:
+            raise ValueError(f"Source already exists: {source}")
+        existing_sources.append(source)
+        evidence_items.append({"source": source, "reference": source, "recorded_at": now})
+        ledger.append({"source": source, "evidence": evidence, "status": "operator_attested", "attested_at": now})
+    disclosure_list = payload.setdefault("required_disclosures", [])
+    for disclosure in disclosures:
+        value = disclosure.strip()
+        if value and value not in disclosure_list:
+            disclosure_list.append(value)
+    credit_list = payload.setdefault("credit_records", [])
+    for credit in credits:
+        value = credit.strip()
+        if value and value not in credit_list:
+            credit_list.append(value)
+    if confirm_permissions:
+        if not existing_sources or len(ledger) != len(existing_sources) or any(
+            not isinstance(item, dict) or not item.get("evidence") or item.get("status") != "operator_attested"
+            for item in ledger
+        ):
+            raise ValueError("Cannot confirm permissions: every source needs an operator-supplied rights-evidence reference")
+        payload["permissions_confirmed"] = True
+        payload["permission_attestation"] = {
+            "confirmed": True, "actor": "operator", "confirmed_at": now,
+            "source_count": len(existing_sources),
+        }
+    if confirm_credits:
+        if not credit_list and not no_credits_required:
+            raise ValueError("Provide --credit or explicitly declare --no-credits-required")
+        payload["credits_confirmed"] = True
+        payload["credit_attestation"] = {
+            "confirmed": True, "actor": "operator", "confirmed_at": now,
+            "no_credits_required": no_credits_required, "credit_count": len(credit_list),
+        }
+    if not (sources or disclosures or credits or confirm_permissions or confirm_credits):
+        raise ValueError("No campaign updates supplied")
+    payload["updated_at"] = now
+    target = (root or default_projects_root()).expanduser().resolve() / project_id / "campaigns" / campaign_id / "campaign.json"
+    temp = target.with_suffix(".json.tmp")
+    with temp.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    os.replace(temp, target)
+    return target

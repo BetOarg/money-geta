@@ -34,3 +34,16 @@ El root de proyectos puede cambiarse mediante `MONEY_GETA_PROJECTS_DIR`. Los com
 
 ## Migración y compatibilidad
 Schema v1 es aditivo y no altera las sesiones `money-geta.json` ni campañas antiguas. Los gates existentes siguen validando sus campos actuales. No se ejecutan migraciones destructivas. Cambios incompatibles requieren nueva versión de schema y migración explícita con copia de seguridad.
+
+## Actualización y evidencia de campaña
+
+Use `campaigns update` para agregar cada fuente junto con una referencia de evidencia de derechos. Las cantidades de `--source` y `--rights-evidence` deben coincidir. Las confirmaciones son explícitas: `--confirm-permissions` exige evidencia para todas las fuentes; `--confirm-credits` exige al menos un crédito o `--no-credits-required`. El gate schema v1 comprueba estos registros y atestaciones.
+
+Ejemplo:
+
+```powershell
+money-geta campaigns update --project noticias-de-tecnologia primer-video --source "https://example.org/article" --rights-evidence "Permiso del editor archivado localmente" --credit "Fuente: Editor" --confirm-permissions --confirm-credits
+money-geta campaign-check --campaign "RUTA\A\campaign.json"
+```
+
+Estas atestaciones registran lo declarado por el operador; no son dictamen legal ni sustituyen revisión humana del material final. La campaña sigue en draft y no puede publicarse desde estos comandos.

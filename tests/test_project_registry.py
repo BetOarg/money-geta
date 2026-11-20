@@ -62,3 +62,69 @@ def test_projects_and_campaigns_cli(tmp_path: Path, monkeypatch, capsys):
     assert "educacion | Educación | education | draft" in capsys.readouterr().out
     assert main(["campaigns", "list", "--project", "educacion"]) == 0
     assert "leccion-1 | Lección 1 | YouTube | draft" in capsys.readouterr().out
+
+def test_campaign_update_records_rights_and_explicit_attestations(tmp_path: Path):
+    from scripts.campaign_registry import update_campaign
+    from scripts.campaign_check import validate_campaign
+    create_project("News", "news", root=tmp_path)
+    create_campaign("news", "Launch", "X", root=tmp_path)
+    update_campaign("news", "launch",
+        sources=["https://example.test/article"],
+        rights_evidence=["Publisher permission email stored locally"],
+        disclosures=["AI-generated narration"],
+        credits=["Source: Example Publisher"],
+        confirm_permissions=True, confirm_credits=True, root=tmp_path)
+    campaign = get_campaign("news", "launch", tmp_path)
+    assert campaign["permissions_confirmed"] is True
+    assert campaign["credits_confirmed"] is True
+    assert campaign["rights_ledger"][0]["status"] == "operator_attested"
+    assert validate_campaign(campaign) == []
+
+
+def test_campaign_update_rejects_unpaired_rights_evidence(tmp_path: Path):
+    from scripts.campaign_registry import update_campaign
+    create_project("News", "news", root=tmp_path)
+    create_campaign("news", "Launch", "X", root=tmp_path)
+    with pytest.raises(ValueError, match="exactly one"):
+        update_campaign("news", "launch", sources=["source"], rights_evidence=[], root=tmp_path)
+
+
+def test_campaign_update_cannot_confirm_permissions_without_evidence(tmp_path: Path):
+    from scripts.campaign_registry import update_campaign
+    create_project("News", "news", root=tmp_path)
+    create_campaign("news", "Launch", "X", root=tmp_path)
+    with pytest.raises(ValueError, match="every source"):
+        update_campaign("news", "launch", confirm_permissions=True, root=tmp_path)
+
+
+def test_campaign_update_requires_explicit_no_credits_or_credit_record(tmp_path: Path):
+    from scripts.campaign_registry import update_campaign
+    create_project("News", "news", root=tmp_path)
+    create_campaign("news", "Launch", "X", root=tmp_path)
+    with pytest.raises(ValueError, match="no-credits-required"):
+        update_campaign("news", "launch", confirm_credits=True, root=tmp_path)
+
+def test_campaign_gate_rejects_missing_or_mismatched_rights_records(tmp_path: Path):
+    from scripts.campaign_registry import update_campaign
+    create_project("News", "news", root=tmp_path)
+    create_campaign("news", "Launch", "X", root=tmp_path)
+    update_campaign("news", "launch", sources=["source-a"], rights_evidence=["permission-ref"],
+                    confirm_permissions=True, confirm_credits=True, no_credits_required=True, root=tmp_path)
+    campaign = get_campaign("news", "launch", tmp_path)
+    campaign["rights_ledger"][0]["source"] = "different-source"
+    assert any("matching source" in issue for issue in validate_campaign(campaign))
+
+
+def test_campaign_update_cli_records_attestations(tmp_path: Path, monkeypatch, capsys):
+    from scripts.money_geta import main
+    monkeypatch.setenv("MONEY_GETA_PROJECTS_DIR", str(tmp_path))
+    assert main(["projects", "create", "--name", "Noticias", "--profile", "news"]) == 0
+    capsys.readouterr()
+    assert main(["campaigns", "create", "--project", "noticias", "--name", "Lanzamiento", "--platform", "X"]) == 0
+    capsys.readouterr()
+    assert main(["campaigns", "update", "--project", "noticias", "lanzamiento",
+        "--source", "https://example.test/story", "--rights-evidence", "Permiso archivado",
+        "--confirm-permissions", "--confirm-credits", "--no-credits-required"]) == 0
+    assert "not legal clearance" in capsys.readouterr().out
+    campaign = get_campaign("noticias", "lanzamiento", tmp_path)
+    assert validate_campaign(campaign) == []

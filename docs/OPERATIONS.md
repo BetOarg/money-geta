@@ -41,6 +41,7 @@ money-geta projects show noticias-de-tecnologia
 money-geta campaigns create --project noticias-de-tecnologia --name "Primer video" --platform "YouTube Shorts"
 money-geta campaigns list --project noticias-de-tecnologia
 money-geta campaigns show --project noticias-de-tecnologia primer-video
+money-geta campaigns update --project noticias-de-tecnologia primer-video --source "https://example.org/article" --rights-evidence "Permiso del editor archivado localmente" --confirm-permissions --confirm-credits --no-credits-required
 ```
 
 Set MONEY_GETA_PROJECTS_DIR to choose the local data directory. New campaigns are draft-only and never publish or schedule content.

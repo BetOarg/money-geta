@@ -36,6 +36,27 @@ def validate_campaign(data: Any) -> list[str]:
     ):
         problems.append("required_disclosures must be a list (use [] when none apply)")
 
+    if data.get("schema_version") == 1:
+        evidence = data.get("source_evidence")
+        ledger = data.get("rights_ledger")
+        expected_sources = sources if isinstance(sources, list) else []
+        if not isinstance(evidence, list) or len(evidence) != len(expected_sources):
+            problems.append("source_evidence must contain one record for every source")
+        elif any(not isinstance(item, dict) or item.get("source") != source or not item.get("reference") for item, source in zip(evidence, expected_sources)):
+            problems.append("source_evidence must identify each source and its evidence reference")
+        if not isinstance(ledger, list) or len(ledger) != len(expected_sources):
+            problems.append("rights_ledger must contain one record for every source")
+        elif any(not isinstance(item, dict) or item.get("source") != source or not item.get("evidence") or item.get("status") != "operator_attested" for item, source in zip(ledger, expected_sources)):
+            problems.append("every rights_ledger entry needs matching source, evidence and operator_attested status")
+        permission = data.get("permission_attestation")
+        if not isinstance(permission, dict) or permission.get("confirmed") is not True or not permission.get("confirmed_at"):
+            problems.append("permission_attestation must record an explicit, timestamped operator confirmation")
+        credit = data.get("credit_attestation")
+        if not isinstance(credit, dict) or credit.get("confirmed") is not True or not credit.get("confirmed_at"):
+            problems.append("credit_attestation must record an explicit, timestamped operator confirmation")
+        elif not data.get("credit_records") and credit.get("no_credits_required") is not True:
+            problems.append("credit_attestation must include credit records or explicitly state none are required")
+
     return problems
 
 
