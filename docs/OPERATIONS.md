@@ -94,3 +94,8 @@ Start from `config/campaign.example.json`. The permissions and credits booleans 
 ## Boundaries
 
 Money-Geta does not auto-publish, accept paid provider terms, spend credits, or certify copyright. The integrated production chain is authorized source acquisition → moment analysis → human candidate selection → credited vertical cut → campaign gate → MoneyPrinterTurbo rendering. The other imported skills/scripts are preserved but still require controlled Money-Geta adapters before being exposed as operational commands. Auto-publication remains blocked.
+
+
+## Final artifact approval
+
+See [FINAL_ARTIFACT_REVIEW.md](FINAL_ARTIFACT_REVIEW.md) for automatic MP4 registration, SHA-256-bound human review, and the non-publishing `publication-check` command. Rendered files remain pending until an operator approves the exact registered hash.
