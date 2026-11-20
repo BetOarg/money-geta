@@ -109,9 +109,7 @@ def create_claim(project_id: str, campaign_id: str, claim: str, evidence_ids: li
     refs = list(dict.fromkeys(item.strip() for item in evidence_ids if isinstance(item, str) and item.strip()))
     if not refs:
         raise ClaimRegistryError("At least one captured evidence ID is required.")
-    events = _claim_events(folder)
-    if any(row.get("claim_id") == "reserved" for row in events):
-        raise ClaimRegistryError("Reserved claim ID collision.")
+    _claim_events(folder)  # Fail closed before appending to an existing event history.
     evidence = _evidence_index(folder)
     missing = [item for item in refs if item not in evidence]
     if missing:
