@@ -15,7 +15,7 @@ Audited upstream commit on 2026-11-19: `dd95d393c6f74fe2ac14b0239f8826691e5dcb0e
 | `skills/live-mode/SKILL.md` | `6843df58b9818b252cc3d59f62929a3717c7c982` | Permission is treated as a later request, after recording. | `skills/live-recording-safety/SKILL.md` |
 | `skills/rule-check/SKILL.md` | `8fc4895114888f5ced6b51e4b4b1f84375788c68` | Script scope does not prove rights, credits or audiovisual compliance. | `skills/campaign-publication-gate/SKILL.md` |
 
-Only the live-recording safety overlay is retained and verified by CI. Campaign validation is implemented and tested in Money-Geta itself. The experimental upstream `check.py` and `secrets_map.py` patches were removed rather than shipping overlays that did not pass exact-blob application checks. Before applying any overlay to a newer upstream revision, inspect the diff and rebase; do not force-apply stale patches.
+Only the live-recording safety overlay is retained. The CI workflow validates its pinned manifest and patch presence; it does not clone the GTA VI ClaudeCode repository because the upstream checkout was unavailable to the GitHub Actions runner. Exact blob and patch applicability are checked locally by `money-geta upstream-check` before applying. Campaign validation is implemented and tested in Money-Geta itself. The experimental upstream `check.py` and `secrets_map.py` patches were removed rather than shipping overlays that did not pass exact-blob application checks. Before applying any overlay to a newer upstream revision, inspect the diff and rebase; do not force-apply stale patches.
 
 ### Manual application
 
@@ -32,7 +32,7 @@ Run upstream tests and the regression tests after patching. This repository has 
 
 Repository: https://github.com/harry0703/MoneyPrinterTurbo
 
-Audited upstream commit on 2026-11-19: `bdd8d328cc366fe70d9fa67ffd0443ba34b4a3e1` (MoneyPrinterTurbo 1.3.10). The `cli.py` blob at that commit is `e7dbda8e41de4a632e15392ae317e18aa0f30cca`; Money-Geta calls the supported `cli.py` interface rather than importing MPT internals.
+Audited upstream commit on 2026-11-19: `bdd8d328cc366fe70d9fa67ffd0443ba34b4a3e1` (MoneyPrinterTurbo 1.3.10). The `cli.py` blob at that commit is `e7dbda8e41de4a632e15392ae317e18aa0f30cca`; CI fetches this exact commit and checks the CLI help contract. Money-Geta calls the supported `cli.py` interface rather than importing MPT internals. The upstream `main` branch has since moved; the integration remains pinned to this audited revision until a new compatibility audit is completed.
 
 The current upstream example config includes OpenAI Codex device-code authentication and a separate Codex image source, in addition to API-key based providers. It also defaults its listener to `0.0.0.0`; for a single-user local Windows installation, prefer `127.0.0.1` unless LAN access is intentionally required.
 
