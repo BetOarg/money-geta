@@ -26,3 +26,27 @@ def test_duplicate_profile_ids_are_rejected(tmp_path: Path):
     registry.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(ValueError, match="Duplicate profile id"):
         load_profiles(registry)
+
+def test_profiles_cli_lists_profiles(capsys):
+    from scripts.money_geta import main
+    assert main(["profiles", "list"]) == 0
+    output = capsys.readouterr().out
+    assert "gaming | Gaming | partial" in output
+    assert "viral | Viral | planned" in output
+
+
+def test_profiles_cli_shows_one_profile(capsys):
+    from scripts.money_geta import main
+    assert main(["profiles", "show", "news"]) == 0
+    output = capsys.readouterr().out
+    assert '"id": "news"' in output
+
+
+def test_system_example_defaults_to_draft_and_disables_paid_x():
+    import json
+    from pathlib import Path
+    config = json.loads((Path(__file__).resolve().parents[1] / "config/system.example.json").read_text(encoding="utf-8"))
+    assert config["distribution"]["draft_only"] is True
+    assert config["distribution"]["human_approval_required"] is True
+    assert config["x_research"]["enabled"] is False
+    assert config["x_research"]["campaign_budget_usd"] == 0
