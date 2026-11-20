@@ -582,6 +582,27 @@ def main(argv: list[str] | None = None) -> int:
     profile_actions.add_parser("list", help="list available content profiles")
     profile_show = profile_actions.add_parser("show", help="show one profile's capabilities and rules")
     profile_show.add_argument("profile_id")
+    projects = sub.add_parser("projects", help="create, list or inspect editorial projects")
+    project_actions = projects.add_subparsers(dest="project_action", required=True)
+    project_create = project_actions.add_parser("create", help="create a project bound to a content profile")
+    project_create.add_argument("--name", required=True)
+    project_create.add_argument("--profile", required=True)
+    project_create.add_argument("--topic", default="")
+    project_create.add_argument("--brief", default="")
+    project_actions.add_parser("list", help="list local projects")
+    project_show = project_actions.add_parser("show", help="inspect a project manifest")
+    project_show.add_argument("project_id")
+    campaigns = sub.add_parser("campaigns", help="create, list or inspect project campaigns")
+    campaign_actions = campaigns.add_subparsers(dest="campaign_action", required=True)
+    campaign_create = campaign_actions.add_parser("create", help="create an incomplete campaign draft")
+    campaign_create.add_argument("--project", required=True)
+    campaign_create.add_argument("--name", required=True)
+    campaign_create.add_argument("--platform", required=True)
+    campaign_list = campaign_actions.add_parser("list", help="list campaigns in a project")
+    campaign_list.add_argument("--project", required=True)
+    campaign_show = campaign_actions.add_parser("show", help="inspect a campaign manifest")
+    campaign_show.add_argument("--project", required=True)
+    campaign_show.add_argument("campaign_id")
     status = sub.add_parser("status", help="list recent Money-Geta workflow sessions")
     status.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     status.add_argument("--limit", type=int, choices=range(1, 101), default=20)
@@ -668,6 +689,44 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(profile, ensure_ascii=False, indent=2))
             return 0
         except (KeyError, ValueError) as exc:
+            print(f"FAIL: {exc}")
+            return 2
+    if args.command == "projects":
+        from scripts.project_registry import create_project, get_project, list_projects
+        try:
+            if args.project_action == "create":
+                path = create_project(args.name, args.profile, topic=args.topic, brief=args.brief)
+                print(f"PROJECT: {path}")
+                print("STATUS: draft")
+                return 0
+            if args.project_action == "list":
+                items = list_projects()
+                if not items: print("No projects found.")
+                for item in items:
+                    print(f"{item['project_id']} | {item['name']} | {item['profile_id']} | {item['status']}")
+                return 0
+            print(json.dumps(get_project(args.project_id), ensure_ascii=False, indent=2))
+            return 0
+        except (KeyError, ValueError, OSError) as exc:
+            print(f"FAIL: {exc}")
+            return 2
+    if args.command == "campaigns":
+        from scripts.campaign_registry import create_campaign, get_campaign, list_campaigns
+        try:
+            if args.campaign_action == "create":
+                path = create_campaign(args.project, args.name, args.platform)
+                print(f"CAMPAIGN: {path}")
+                print("STATUS: draft — permissions, credits and sources remain unconfirmed.")
+                return 0
+            if args.campaign_action == "list":
+                items = list_campaigns(args.project)
+                if not items: print("No campaigns found.")
+                for item in items:
+                    print(f"{item['campaign_id']} | {item['campaign_name']} | {item['platform']} | {item['status']}")
+                return 0
+            print(json.dumps(get_campaign(args.project, args.campaign_id), ensure_ascii=False, indent=2))
+            return 0
+        except (KeyError, ValueError, OSError) as exc:
             print(f"FAIL: {exc}")
             return 2
     if args.command == "doctor":

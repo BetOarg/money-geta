@@ -28,6 +28,21 @@ money-geta doctor
 
 Before rendering, ensure MoneyPrinterTurbo's existing `config.toml` has `upload_post_auto_upload = false`; Money-Geta blocks rendering if automatic cross-platform publishing is enabled. Keep `config.toml`, OAuth data, API keys, jobs and exports outside this repository. The tool never copies credentials into Money-Geta. Money-Geta invokes MoneyPrinterTurbo with its own Python environment (auto-detects `.venv`, `venv` or `lib/python`); set `MONEYPRINTERTURBO_PYTHON` if your installation uses another location.
 
+## Projects and campaigns
+
+Projects bind an editorial brief to a reusable content profile. Campaigns inherit that profile and start as incomplete drafts; the existing campaign gate must block them until sources, permissions and credits are supplied and verified.
+
+```powershell
+money-geta projects create --name "Noticias de tecnología" --profile news --topic "IA" --brief "Explicar avances verificables"
+money-geta projects list
+money-geta projects show noticias-de-tecnologia
+money-geta campaigns create --project noticias-de-tecnologia --name "Primer video" --platform "YouTube Shorts"
+money-geta campaigns list --project noticias-de-tecnologia
+money-geta campaigns show --project noticias-de-tecnologia primer-video
+```
+
+Set MONEY_GETA_PROJECTS_DIR to choose the local data directory. New campaigns are draft-only and never publish or schedule content.
+
 ## Profiles
 
 The profile registry is declarative and validated at runtime. GTA VI is a specialized subprofile inside Gaming, not a global mode.

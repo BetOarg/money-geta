@@ -15,7 +15,7 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [ ] Verificar CI del último HEAD y revisar todos los cambios antes de marcar la fase cerrada.
 
 ## Fase 1 — Modelo operativo y proyectos
-- [ ] Añadir modelo de proyecto/campaña común independiente del perfil.
+- [x] Añadir modelo versionado de proyecto/campaña común independiente del perfil.
 - [ ] Definir esquema versionado para brief, guion, fuentes, medios, derechos, render, QC, aprobación y publicación.
 - [ ] Añadir migraciones/versionado de manifests sin romper sesiones anteriores.
 - [ ] Añadir estados de pipeline y recuperación tras fallo.
