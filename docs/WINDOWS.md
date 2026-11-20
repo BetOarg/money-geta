@@ -4,7 +4,8 @@
 
 - Windows 11 and Python 3.11 (Python Launcher `py.exe`).
 - Git for Windows.
-- A local checkout of GTA VI ClaudeCode containing `scripts/moments.py` and `scripts/cut.py`.
+- GTA VI analysis and cutting tools are included in `vendor/gtavi-claudecode/`; no separate checkout is required for those functions.
+- An external Git checkout of GTA VI ClaudeCode is optional and is currently required only for live recording / upstream patch verification.
 - MoneyPrinterTurbo installed locally (default path: `C:\MoneyPrinterTurbo`).
 - FFmpeg **and FFprobe** available on PATH. Verify in a new PowerShell window:
 
@@ -21,10 +22,10 @@ From the repository root:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
-.\install_windows.ps1 -GtaviDir "C:\RUTA\A\gtavi-claudecode" -MptDir "C:\MoneyPrinterTurbo"
+ .\install_windows.ps1 -MptDir "C:\MoneyPrinterTurbo"
 ```
 
-The installer creates an isolated `.venv`, installs Money-Geta with capture, media and test extras, runs the regression suite, and stores the two upstream paths in your user environment. It does not modify either upstream checkout or their credentials.
+The installer creates an isolated `.venv`, installs Money-Geta with capture, media, GTA VI and test dependencies, and runs the regression suite. It configures MoneyPrinterTurbo. The vendored GTA VI scripts are used by default; no separate upstream checkout or environment variable is needed for analysis and cutting.
 
 Open a **new** PowerShell window after installation, then run:
 
@@ -48,10 +49,10 @@ The command prints a `WORKFLOW_SESSION` path, candidate job path and a suggested
 Cut one candidate (replace the job path with the exact path printed by the previous command):
 
 ```powershell
-money-geta cut-video --job-dir "RUTA_EXACTA_DEL_JOB" --pick 1 --layout blur --captions word
+money-geta cut-video --job-dir "RUTA_EXACTA_DEL_JOB" --pick 1 --layout blur --captions word --credit "@CREADOR"
 ```
 
-Available layouts: `fill`, `blur`, `facecam`, `react`. Captions: `word`, `bubble`, `none`. Facecam/react layouts require FFprobe.
+Available layouts: `fill`, `blur`, `facecam`, `react`. Captions: `word`, `bubble`, `none`. `--credit` is required to attribute the original creator. Facecam/react layouts require FFprobe and may download the YuNet face-detection model on first use. Live recording remains an optional external-checkout feature and is not enabled by the vendored default.
 
 ## Local media utilities
 
