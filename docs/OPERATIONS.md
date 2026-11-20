@@ -7,7 +7,7 @@ Money-Geta is the local orchestration layer. MoneyPrinterTurbo remains the rende
 From the Money-Geta checkout, run the bootstrap. The pinned GTA VI analysis/cutting source is already included:
 
 ```powershell
-.\install_windows.ps1 -GtaviDir "C:\path\to\gtavi-claudecode"
+.\install_windows.ps1
 ```
 
 The installer creates a local venv only if one does not exist and installs Money-Geta plus the vendored GTA VI dependencies. No external GTA VI checkout is needed for analysis or cutting. An external Git checkout is optional for live recording and patch verification only. To install manually instead:
@@ -15,7 +15,7 @@ The installer creates a local venv only if one does not exist and installs Money
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[test]"
+python -m pip install -e ".[capture,media,gtavi,test]"
 $env:GTAVI_CLAUDECODE_DIR = "C:\path\to\external-gtavi-checkout"  # optional: live recording only
 # Optional only if the GTA VI project uses a separate Python environment:
 $env:GTAVI_CLAUDECODE_PYTHON = "C:\path\to\external-gtavi-checkout\.venv\Scripts\python.exe"  # optional
@@ -35,6 +35,7 @@ money-geta doctor
 money-geta status
 money-geta new-session gta6-weekly
 money-geta record-live --url "https://www.youtube.com/watch?v=..." --minutes 60 --confirm-recording
+money-geta process-source --url "URL_DE_UN_VIDEO_AUTORIZADO" --confirm-rights
 money-geta analyze-video --source .\media\gameplay.mp4
 money-geta cut-video --job-dir "<job path printed by analyze-video>" --pick 1 --layout blur --hook "GTA VI: ..." --credit "@creator"
 money-geta campaign-check --campaign .\campaign.json
