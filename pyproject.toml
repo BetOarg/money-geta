@@ -1,7 +1,7 @@
 [project]
 name = "money-geta"
-version = "0.2.0"
-description = "Operational control plane for a local-first GTA VI video workflow"
+version = "0.3.0"
+description = "Local-first multipurpose video production and distribution control plane"
 requires-python = ">=3.10"
 
 [project.scripts]
