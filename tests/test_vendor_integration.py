@@ -9,6 +9,7 @@ def test_vendored_gtavi_snapshot_is_present_and_is_default():
     assert vendor == money_geta.ROOT / "vendor/gtavi-claudecode"
     manifest = json.loads((vendor / "SOURCE_MANIFEST.json").read_text(encoding="utf-8"))
     assert manifest["source_commit"] == "67acdb4391fa491821b908bb7c455cf8148ad515"
+    assert manifest["source_tree_sha"] == "36daaf981b4f3a9b96f4a2a8e5f6d7ad46e6957b"
     assert manifest["imported_text_file_count"] == 36
     for relative in (
         "LICENSE",
