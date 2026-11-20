@@ -576,7 +576,9 @@ def run_mpt(args: argparse.Namespace) -> int:
             registered = register_artifact(
                 args.campaign, video, allowed_root=video.parent,
                 metadata={"engine": "MoneyPrinterTurbo", "format": args.aspect,
-                          "task_id": payload.get("task_id")},
+                          "subject": args.subject, "language": args.language,
+                          "count": args.count, "voice": args.voice,
+                          "session_id": session.name, "task_id": payload.get("task_id")},
             )
             registered_artifacts.append(registered)
             print(f"ARTIFACT_ID: {registered['artifact_id']}")
