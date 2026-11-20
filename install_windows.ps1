@@ -85,3 +85,18 @@ if ($LASTEXITCODE -ne 0) {
     exit 2
 }
 Write-Host "VERDE: Money-Geta CLI and configured project paths are ready."
+
+# Create a desktop shortcut that launches the GUI without a console window.
+$Pythonw = Join-Path $RepoRoot ".venv\Scripts\pythonw.exe"
+if (-not (Test-Path $Pythonw)) { $Pythonw = $VenvPython }
+$Desktop = [Environment]::GetFolderPath("Desktop")
+$ShortcutPath = Join-Path $Desktop "Money-Geta.lnk"
+$WshShell = New-Object -ComObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut($ShortcutPath)
+$Shortcut.TargetPath = $Pythonw
+$Shortcut.Arguments = "-m scripts.money_geta_gui"
+$Shortcut.WorkingDirectory = $RepoRoot
+$Shortcut.Description = "Money-Geta - procesamiento local de videos"
+$Shortcut.Save()
+Write-Host "Desktop shortcut created: $ShortcutPath"
+
