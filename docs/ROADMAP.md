@@ -23,8 +23,9 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 
 ## Fase 2 — Servicios de capacidad comunes
 - [ ] Extraer interfaces de research, scriptwriting, claim-check, transcription, moment detection, subtitles, reframing, translation y render.
-- [ ] Implementar adaptador LLM intercambiable (Gemini/OpenAI API/otros) con credenciales locales.
-- [ ] Separar ChatGPT web de OpenAI API; nunca asumir API incluida en plan ChatGPT.
+- [x] Implementar adaptador LLM intercambiable compatible con Chat Completions (Gemini/OpenAI API/gateways compatibles), con credenciales locales y opt-in explícito de red.
+- [x] Separar ChatGPT web de OpenAI API; nunca asumir API incluida en plan ChatGPT.
+- [ ] Añadir proveedor de investigación/búsqueda con fuentes, timestamps y citas verificables (separado del LLM).
 - [ ] Añadir proveedor de imágenes configurable; Pexels no será requisito.
 - [ ] Añadir TTS configurable, sin acoplarlo a un proveedor.
 - [ ] Benchmarks antes de incorporar ClipsAI, FunClip, WhisperX, Silero VAD, MediaPipe, Auto-Editor o MoviePy.
