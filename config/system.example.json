@@ -9,6 +9,7 @@
   },
   "providers": {
     "llm": {"provider": "none", "enabled": false},
+    "search": {"provider": "none", "enabled": false},
     "image": {"provider": "none", "enabled": false},
     "tts": {"provider": "none", "enabled": false},
     "transcription": {"provider": "faster-whisper", "enabled": false}
