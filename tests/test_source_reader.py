@@ -7,10 +7,16 @@ from scripts.providers import source_reader as reader
 def test_url_validation_blocks_local_hosts_credentials_and_secrets():
     urls = ["file:///etc/passwd", "http://localhost/a", "http://127.0.0.1/",
             "https://user:pass@example.com/", "https://example.com/?access_token=x",
-            "https://printer.local/"]
+            "https://printer.local/", "https://example.com/\r\nHost: 127.0.0.1"]
     for url in urls:
         with pytest.raises(reader.SourceReadError):
             reader._clean_url(url)
+
+
+def test_clean_url_brackets_public_ipv6_literal():
+    clean, _, _, host = reader._clean_url("https://[2606:4700:4700::1111]/news")
+    assert clean == "https://[2606:4700:4700::1111]/news"
+    assert host == "2606:4700:4700::1111"
 
 
 def test_dns_blocks_mixed_public_and_private_addresses(monkeypatch):
