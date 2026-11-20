@@ -63,17 +63,25 @@ def _evidence_index(folder: Path) -> dict[str, dict[str, Any]]:
 
 def _claim_events(folder: Path) -> list[dict[str, Any]]:
     rows = _read_jsonl(folder / "claim_ledger.jsonl")
+    created_ids: set[str] = set()
     for row in rows:
         event_type = row.get("event_type")
+        claim_id = row.get("claim_id")
         if event_type not in {"claim_created", "claim_assessed"}:
             raise ClaimRegistryError("Claim ledger contains an unknown event type.")
-        if not isinstance(row.get("claim_id"), str) or not row["claim_id"]:
+        if not isinstance(claim_id, str) or not claim_id:
             raise ClaimRegistryError("Claim ledger event is missing claim_id.")
         if event_type == "claim_created":
-            if not isinstance(row.get("claim"), str) or not isinstance(row.get("evidence_ids"), list):
+            refs = row.get("evidence_ids")
+            if (claim_id in created_ids or not isinstance(row.get("claim"), str)
+                    or not row["claim"].strip() or not isinstance(refs, list)
+                    or not refs or any(not isinstance(ref, str) or not ref for ref in refs)
+                    or row.get("status") != "unverified"):
                 raise ClaimRegistryError("Claim creation event is malformed.")
-        elif row.get("status") not in STATUSES or not isinstance(row.get("rationale"), str):
-            raise ClaimRegistryError("Claim assessment event is malformed.")
+            created_ids.add(claim_id)
+        elif (claim_id not in created_ids or row.get("status") not in STATUSES
+              or not isinstance(row.get("rationale"), str) or not row["rationale"].strip()):
+            raise ClaimRegistryError("Claim assessment event is malformed or precedes its claim.")
     return rows
 
 
@@ -101,6 +109,9 @@ def create_claim(project_id: str, campaign_id: str, claim: str, evidence_ids: li
     refs = list(dict.fromkeys(item.strip() for item in evidence_ids if isinstance(item, str) and item.strip()))
     if not refs:
         raise ClaimRegistryError("At least one captured evidence ID is required.")
+    events = _claim_events(folder)
+    if any(row.get("claim_id") == "reserved" for row in events):
+        raise ClaimRegistryError("Reserved claim ID collision.")
     evidence = _evidence_index(folder)
     missing = [item for item in refs if item not in evidence]
     if missing:
