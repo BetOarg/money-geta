@@ -31,3 +31,21 @@ internet access on first use; inference is local after model availability.
 This first integration does not automatically download from YouTube/Twitch, record a stream,
 infer ownership rights, select a viral moment, crop around a moving subject, or publish.
 Those need separate source-specific permission checks, evaluation and human review.
+
+## Source acquisition with yt-dlp
+
+Install the optional capture extra:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[capture]"
+```
+
+Only download material you own or have explicit permission to use. Money-Geta requires an explicit acknowledgement for every download:
+
+```powershell
+money-geta download-source --url "https://example.com/authorized-video" --confirm-rights
+```
+
+The command disables global yt-dlp configuration, disables playlist expansion and overwriting, uses a unique Money-Geta session, stores only the source host in the run manifest (not URL query tokens), and verifies the final file is inside that session. FFmpeg must be available on PATH or through the MoneyPrinterTurbo bundled runtime.
+
+This adapter does not bypass paywalls, DRM, access controls or platform restrictions. Check the source platform's terms and the rights attached to the specific video.
