@@ -66,7 +66,8 @@ def test_brave_normalizes_source_and_provenance(monkeypatch):
     assert item.provider == "brave"
     assert item.title == "Official source"
     assert item.snippet == "Evidence snippet"
-    assert item.published_at == "2 days ago"
+    assert item.published_at is None
+    assert item.provider_age == "2 days ago"
     assert item.retrieved_at
     assert len(item.evidence_id) == 64
     assert captured["request"].get_header("X-subscription-token") == "secret-key"
