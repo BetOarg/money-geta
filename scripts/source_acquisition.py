@@ -26,7 +26,16 @@ def resolve_ffmpeg(override: Path | None = None) -> Path | None:
             raise FileNotFoundError(f"FFmpeg path not found: {candidate}")
         return candidate
     found = shutil.which("ffmpeg")
-    return Path(found).resolve() if found else None
+    if found:
+        return Path(found).resolve()
+    import os
+    mpt_dir = os.environ.get("MONEYPRINTERTURBO_DIR")
+    if mpt_dir:
+        bundled = Path(mpt_dir).expanduser() / "lib/python/Lib/site-packages/imageio_ffmpeg/binaries"
+        candidates = list(bundled.glob("ffmpeg*.exe")) if bundled.is_dir() else []
+        if candidates:
+            return candidates[0].resolve()
+    return None
 
 
 def download_source(url: str, output_dir: Path, ffmpeg_location: Path | None = None) -> Path:
