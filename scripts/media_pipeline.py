@@ -62,7 +62,8 @@ def detect_scenes(source: Path, output_dir: Path, threshold: float = 27.0) -> Pa
     ])
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "PySceneDetect failed")
-    csv_files = sorted(output_dir.glob("*-Scenes.csv")) + sorted(output_dir.glob("*-scenes.csv"))
+    csv_candidates = list(output_dir.glob("*-Scenes.csv")) + list(output_dir.glob("*-scenes.csv"))
+    csv_files = sorted({str(path).casefold(): path for path in csv_candidates}.values())
     if not csv_files:
         # PySceneDetect versions differ in filename casing; return the generated CSV
         # only when exactly one CSV exists, otherwise avoid guessing.
