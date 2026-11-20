@@ -28,6 +28,20 @@ money-geta doctor
 
 Before rendering, ensure MoneyPrinterTurbo's existing `config.toml` has `upload_post_auto_upload = false`; Money-Geta blocks rendering if automatic cross-platform publishing is enabled. Keep `config.toml`, OAuth data, API keys, jobs and exports outside this repository. The tool never copies credentials into Money-Geta. Money-Geta invokes MoneyPrinterTurbo with its own Python environment (auto-detects `.venv`, `venv` or `lib/python`); set `MONEYPRINTERTURBO_PYTHON` if your installation uses another location.
 
+## Profiles
+
+The profile registry is declarative and validated at runtime. GTA VI is a specialized subprofile inside Gaming, not a global mode.
+
+```powershell
+money-geta profiles list
+money-geta profiles show gaming
+money-geta profiles show viral
+money-geta profiles show news
+money-geta profiles show education
+```
+
+The registry currently identifies four profiles. Gaming is marked partial because the existing implementation is still GTA VI-centric; Viral, News and Education are planned profiles. Listing a profile does not imply that every listed capability is already implemented.
+
 ## Commands
 
 ```powershell
