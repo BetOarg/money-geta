@@ -37,8 +37,12 @@ if (-not (Test-Path $VenvPython)) {
 
 & $VenvPython -m pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
-& $VenvPython -m pip install --editable $RepoRoot
+& $VenvPython -m pip install --editable "$RepoRoot[capture,media,test]"
 if ($LASTEXITCODE -ne 0) { throw "Money-Geta installation failed." }
+
+Write-Host "Running Money-Geta regression tests..."
+& $VenvPython -m pytest
+if ($LASTEXITCODE -ne 0) { throw "Money-Geta regression tests failed." }
 
 function Find-ProjectPython([string]$ProjectDir) {
     $Candidates = @(
@@ -71,6 +75,7 @@ foreach ($Name in $Settings.Keys) {
 New-Item -ItemType Directory -Force -Path $JobsDir | Out-Null
 Write-Host "Money-Geta installed. Existing upstream folders, credentials and generated media were not modified."
 Write-Host "Running environment diagnostics..."
+Write-Host "FFmpeg and FFprobe must both be available on PATH. The MPT-bundled FFmpeg can support downloads, but it does not replace FFprobe."
 & $Cli doctor
 if ($LASTEXITCODE -ne 0) {
     Write-Warning "Installation completed, but diagnostics are incomplete. Resolve PENDING items before recording or rendering."
