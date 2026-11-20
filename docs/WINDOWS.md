@@ -22,7 +22,7 @@ From the repository root:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
- .\install_windows.ps1 -MptDir "C:\MoneyPrinterTurbo"
+.\install_windows.ps1 -MptDir "C:\MoneyPrinterTurbo"
 ```
 
 The installer creates an isolated `.venv`, installs Money-Geta with capture, media, GTA VI and test dependencies, and runs the regression suite. It configures MoneyPrinterTurbo. The vendored GTA VI scripts are used by default; no separate upstream checkout or environment variable is needed for analysis and cutting.
