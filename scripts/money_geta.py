@@ -592,6 +592,23 @@ def main(argv: list[str] | None = None) -> int:
         print("RESULT: CAMPAIGN_FIELDS_COMPLETE")
         print("HUMAN REVIEW REQUIRED: verify rights, credits, platform rules and final media.")
         return 0
+    if args.command == "download-source":
+        if not args.confirm_rights:
+            print("BLOCKED: downloading requires explicit --confirm-rights.")
+            return 2
+        try:
+            url = validate_source_url(args.url)
+            session = create_session_dir(args.jobs_root, "source-download")
+            from urllib.parse import urlsplit
+            write_manifest(session, stage="downloading", source_host=urlsplit(url).netloc, rights_confirmed=True)
+            output = download_source(url, session, args.ffmpeg_location)
+            write_manifest(session, stage="source_ready", source_path=str(output), file_size=output.stat().st_size)
+            print(f"SOURCE: {output}")
+            print(f"SESSION: {session}")
+            return 0
+        except (OSError, RuntimeError, ValueError) as exc:
+            print(f"FAIL: {exc}")
+            return 2
     if args.command == "record-live":
         if args.gtavi_dir is None:
             print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR or pass --gtavi-dir")
