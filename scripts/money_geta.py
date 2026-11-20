@@ -250,7 +250,7 @@ def run_live(args: argparse.Namespace) -> int:
     print(f"SESSION: {session}")
     return result.returncode
 
-def run_moments(args: argparse.Namespace) -> int:
+def run_moments(args: argparse.Namespace, session_dir: Path | None = None) -> int:
     gtavi_dir = args.gtavi_dir.expanduser().resolve()
     script = gtavi_dir / "scripts/moments.py"
     if not script.is_file():
@@ -281,7 +281,8 @@ def run_moments(args: argparse.Namespace) -> int:
         return 2
 
     root = args.jobs_root.expanduser().resolve()
-    session = create_session_dir(root, f"analysis-{source.stem}")
+    session = session_dir.expanduser().resolve() if session_dir else create_session_dir(root, f"analysis-{source.stem}")
+    session.mkdir(parents=True, exist_ok=True)
     write_manifest(session, stage="analyzing", source_path=str(source), requested_top=args.top,
                    min_seconds=args.min_seconds, max_seconds=args.max_seconds)
     env = os.environ.copy()
@@ -314,6 +315,41 @@ def run_moments(args: argparse.Namespace) -> int:
     print("FAIL: moments.py completed without returning a job directory.")
     return 1
 
+
+
+
+def run_process_source(args: argparse.Namespace) -> int:
+    """Download a permitted source and analyze it in the same isolated session."""
+    if not args.confirm_rights:
+        print("BLOCKED: downloading requires explicit --confirm-rights.")
+        return 2
+    if args.gtavi_dir is None:
+        print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR or pass --gtavi-dir")
+        return 2
+    if args.max_seconds <= args.min_seconds or args.min_seconds <= 0:
+        print("FAIL: max-seconds must be greater than a positive min-seconds value.")
+        return 2
+    try:
+        url = validate_source_url(args.url)
+        session = create_session_dir(args.jobs_root, "source-analysis")
+        from urllib.parse import urlsplit
+        write_manifest(session, stage="downloading", source_host=urlsplit(url).netloc,
+                       rights_confirmed=True, workflow="download-and-analyze")
+        source = download_source(url, session, args.ffmpeg_location)
+        write_manifest(session, stage="source_ready", source_path=str(source),
+                       file_size=source.stat().st_size)
+    except (OSError, RuntimeError, ValueError) as exc:
+        print(f"FAIL: source acquisition: {exc}")
+        return 2
+
+    analysis_args = argparse.Namespace(
+        gtavi_dir=args.gtavi_dir, gtavi_python=args.gtavi_python, source=source,
+        jobs_root=args.jobs_root, top=args.top, min_seconds=args.min_seconds,
+        max_seconds=args.max_seconds,
+    )
+    result = run_moments(analysis_args, session_dir=session)
+    print(f"WORKFLOW_SESSION: {session}")
+    return result
 
 def run_cut(args: argparse.Namespace) -> int:
     gtavi_dir = args.gtavi_dir.expanduser().resolve()
@@ -522,6 +558,16 @@ def main(argv: list[str] | None = None) -> int:
     acquire.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     acquire.add_argument("--ffmpeg-location", type=Path, default=None)
     acquire.add_argument("--confirm-rights", action="store_true", help="confirm you have permission to download and edit this source")
+    process = sub.add_parser("process-source", help="download a permitted source and analyze candidate moments in one session")
+    process.add_argument("--url", required=True)
+    process.add_argument("--confirm-rights", action="store_true", help="confirm you have permission to download and edit this source")
+    process.add_argument("--ffmpeg-location", type=Path, default=None)
+    process.add_argument("--gtavi-dir", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
+    process.add_argument("--gtavi-python", type=Path, default=env_path("GTAVI_CLAUDECODE_PYTHON"))
+    process.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
+    process.add_argument("--top", type=int, choices=range(1, 31), default=8)
+    process.add_argument("--min-seconds", type=float, default=15)
+    process.add_argument("--max-seconds", type=float, default=40)
     live = sub.add_parser("record-live", help="record a live source after explicit confirmation")
     live.add_argument("--gtavi-dir", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
     live.add_argument("--gtavi-python", type=Path, default=env_path("GTAVI_CLAUDECODE_PYTHON"))
@@ -609,6 +655,8 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, RuntimeError, ValueError) as exc:
             print(f"FAIL: {exc}")
             return 2
+    if args.command == "process-source":
+        return run_process_source(args)
     if args.command == "record-live":
         if args.gtavi_dir is None:
             print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR or pass --gtavi-dir")
