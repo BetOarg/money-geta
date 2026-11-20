@@ -70,17 +70,20 @@ def doctor() -> int:
     ffmpeg_path = shutil.which("ffmpeg")
     ffprobe_path = shutil.which("ffprobe")
     mpt_dir = env_path("MONEYPRINTERTURBO_DIR")
-    if not ffmpeg_path and mpt_dir:
+    bundled_ffmpeg = None
+    if mpt_dir:
         bundled = mpt_dir / "lib/python/Lib/site-packages/imageio_ffmpeg/binaries"
         candidates = list(bundled.glob("ffmpeg*.exe")) if bundled.is_dir() else []
-        ffmpeg_path = str(candidates[0]) if candidates else None
+        bundled_ffmpeg = str(candidates[0]) if candidates else None
 
     checks = [
         ("Python", Path(sys.executable).exists(), sys.version.split()[0]),
         ("Git", git_path is not None, git_path or "not found"),
-        ("FFmpeg", ffmpeg_path is not None, ffmpeg_path or "not found on PATH or MPT bundled runtime"),
-        ("FFprobe", ffprobe_path is not None, ffprobe_path or "not found on PATH"),
+        ("FFmpeg on PATH", ffmpeg_path is not None, ffmpeg_path or "not found"),
+        ("FFprobe on PATH", ffprobe_path is not None, ffprobe_path or "not found"),
     ]
+    if bundled_ffmpeg:
+        checks.append(("MoneyPrinterTurbo bundled FFmpeg", True, bundled_ffmpeg))
     optional_tools = [
         ("yt-dlp", shutil.which("yt-dlp")),
         ("PySceneDetect", shutil.which("scenedetect")),
@@ -342,6 +345,17 @@ def run_process_source(args: argparse.Namespace) -> int:
     if args.max_seconds <= args.min_seconds or args.min_seconds <= 0:
         print("FAIL: max-seconds must be greater than a positive min-seconds value.")
         return 2
+    gtavi_dir = args.gtavi_dir.expanduser().resolve()
+    missing_upstream = [name for name in ("moments.py", "cut.py")
+                        if not (gtavi_dir / "scripts" / name).is_file()]
+    if missing_upstream:
+        print("INCOMPLETE: GTA VI ClaudeCode is missing scripts: " + ", ".join(missing_upstream))
+        return 2
+    missing_tools = [name for name in ("ffmpeg", "ffprobe") if not shutil.which(name)]
+    if missing_tools:
+        print("INCOMPLETE: source analysis requires these tools on PATH: " + ", ".join(missing_tools))
+        return 2
+    session = None
     try:
         url = validate_source_url(args.url)
         session = create_session_dir(args.jobs_root, "source-analysis")
@@ -352,6 +366,9 @@ def run_process_source(args: argparse.Namespace) -> int:
         write_manifest(session, stage="source_ready", source_path=str(source),
                        file_size=source.stat().st_size)
     except (OSError, RuntimeError, ValueError) as exc:
+        if session is not None:
+            write_manifest(session, stage="download_failed", failure=str(exc))
+            print(f"WORKFLOW_SESSION: {session}")
         print(f"FAIL: source acquisition: {exc}")
         return 2
 
