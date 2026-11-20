@@ -7,6 +7,7 @@ import queue
 import subprocess
 import sys
 import threading
+import uuid
 from pathlib import Path
 from tkinter import BOTH, END, LEFT, X, filedialog, messagebox, ttk
 import tkinter as tk
@@ -54,6 +55,34 @@ def candidate_rows(job_dir: Path) -> list[dict]:
     return rows
 
 
+
+def build_campaign_payload(name, platform, sources, disclosures, permissions, credits):
+    payload = {"campaign_name": name.strip(), "platform": platform.strip(),
+        "permissions_confirmed": permissions is True, "credits_confirmed": credits is True,
+        "sources": [x.strip() for x in sources if x.strip()],
+        "required_disclosures": [x.strip() for x in disclosures if x.strip()]}
+    if not payload["campaign_name"] or not payload["platform"] or not payload["sources"] or not permissions or not credits:
+        raise ValueError("Completa nombre, plataforma y fuentes; confirma permisos y créditos.")
+    return payload
+
+
+def session_video_outputs(session_dir):
+    found = {p.resolve() for p in session_dir.rglob("*.mp4") if p.is_file()}
+    for manifest in session_dir.rglob("money-geta.json"):
+        try:
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        for raw in data.get("output_videos", []):
+            p = Path(raw).expanduser()
+            if p.is_file():
+                found.add(p.resolve())
+        raw = data.get("clip_path")
+        if raw and Path(raw).expanduser().is_file():
+            found.add(Path(raw).expanduser().resolve())
+    return sorted(found, key=lambda p: p.name.casefold())
+
+
 class MoneyGetaApp:
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -82,12 +111,15 @@ class MoneyGetaApp:
         self.tabs = ttk.Notebook(root)
         self.tabs.pack(fill=BOTH, expand=True, padx=14, pady=(0, 12))
         self.home = ttk.Frame(self.tabs, padding=14)
+        self.render = ttk.Frame(self.tabs, padding=14)
         self.config = ttk.Frame(self.tabs, padding=14)
         self.history = ttk.Frame(self.tabs, padding=14)
-        self.tabs.add(self.home, text="Procesar")
+        self.tabs.add(self.home, text="Analizar y cortar")
+        self.tabs.add(self.render, text="Render final · MPT")
         self.tabs.add(self.config, text="Configuración")
         self.tabs.add(self.history, text="Clips y sesiones")
         self._build_home()
+        self._build_render()
         self._build_config()
         self._build_history()
         self._set_status("Iniciando diagnóstico automático…")
@@ -125,6 +157,98 @@ class MoneyGetaApp:
         self.status_var = tk.StringVar(value="Preparando…")
         ttk.Label(self.home, textvariable=self.status_var).grid(row=5, column=0, sticky="w")
 
+
+    def _build_render(self):
+        self.render.columnconfigure(1, weight=1)
+        ttk.Label(self.render, text="Render final con MoneyPrinterTurbo", style="Section.TLabel").grid(row=0, column=0, columnspan=3, sticky="w")
+        ttk.Label(self.render, text="Tema del video").grid(row=1, column=0, sticky="w", pady=5)
+        self.subject_var = tk.StringVar()
+        ttk.Entry(self.render, textvariable=self.subject_var).grid(row=1, column=1, columnspan=2, sticky="ew")
+        ttk.Label(self.render, text="Campaña").grid(row=2, column=0, sticky="w", pady=5)
+        self.campaign_name_var = tk.StringVar()
+        ttk.Entry(self.render, textvariable=self.campaign_name_var).grid(row=2, column=1, sticky="ew")
+        self.platform_var = tk.StringVar(value="YouTube Shorts")
+        ttk.Combobox(self.render, textvariable=self.platform_var, values=("YouTube Shorts","TikTok","Instagram Reels","Facebook Reels","Otra"), width=20).grid(row=2, column=2, sticky="w")
+        ttk.Label(self.render, text="Videos locales").grid(row=3, column=0, sticky="nw", pady=5)
+        self.render_materials = []
+        self.materials_list = tk.Listbox(self.render, height=5, selectmode="extended")
+        self.materials_list.grid(row=3, column=1, sticky="ew", pady=5)
+        buttons = ttk.Frame(self.render)
+        buttons.grid(row=3, column=2, sticky="n")
+        ttk.Button(buttons, text="Agregar…", command=self._add_render_materials).pack(fill=X, pady=2)
+        ttk.Button(buttons, text="Quitar", command=self._remove_render_materials).pack(fill=X, pady=2)
+        ttk.Label(self.render, text="Fuentes (una por línea)").grid(row=4, column=0, sticky="nw", pady=5)
+        self.sources_text = tk.Text(self.render, height=3)
+        self.sources_text.grid(row=4, column=1, columnspan=2, sticky="ew")
+        ttk.Label(self.render, text="Avisos requeridos (uno por línea)").grid(row=5, column=0, sticky="nw", pady=5)
+        self.disclosures_text = tk.Text(self.render, height=2)
+        self.disclosures_text.grid(row=5, column=1, columnspan=2, sticky="ew")
+        self.permissions_var = tk.BooleanVar(value=False)
+        self.credits_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.render, text="Confirmo permisos de uso de los materiales", variable=self.permissions_var).grid(row=6, column=1, columnspan=2, sticky="w")
+        ttk.Checkbutton(self.render, text="Confirmo que créditos y atribuciones están completos", variable=self.credits_var).grid(row=7, column=1, columnspan=2, sticky="w")
+        opts = ttk.Frame(self.render)
+        opts.grid(row=8, column=0, columnspan=3, sticky="ew", pady=8)
+        self.aspect_var = tk.StringVar(value="9:16")
+        self.count_var = tk.StringVar(value="1")
+        self.language_var = tk.StringVar(value="es")
+        self.voice_var = tk.StringVar()
+        ttk.Label(opts, text="Formato").pack(side=LEFT)
+        ttk.Combobox(opts, textvariable=self.aspect_var, values=("9:16","16:9","1:1"), state="readonly", width=7).pack(side=LEFT, padx=5)
+        ttk.Label(opts, text="Cantidad").pack(side=LEFT)
+        ttk.Spinbox(opts, from_=1, to=20, textvariable=self.count_var, width=4).pack(side=LEFT, padx=5)
+        ttk.Label(opts, text="Idioma").pack(side=LEFT)
+        ttk.Entry(opts, textvariable=self.language_var, width=8).pack(side=LEFT, padx=5)
+        ttk.Label(opts, text="Voz (opcional)").pack(side=LEFT)
+        ttk.Entry(opts, textvariable=self.voice_var, width=16).pack(side=LEFT, padx=5)
+        ttk.Button(self.render, text="Validar campaña y renderizar", command=self.start_render).grid(row=9, column=1, sticky="w")
+        ttk.Label(self.render, text="Salida local; la publicación automática permanece deshabilitada.").grid(row=10, column=1, columnspan=2, sticky="w")
+
+    def _add_render_materials(self):
+        for raw in filedialog.askopenfilenames(filetypes=[("Videos", "*.mp4 *.mkv *.mov *.webm *.avi"), ("Todos", "*.*")]):
+            p = Path(raw).resolve()
+            if p not in self.render_materials:
+                self.render_materials.append(p)
+                self.materials_list.insert(END, str(p))
+
+    def _remove_render_materials(self):
+        for i in reversed(self.materials_list.curselection()):
+            self.materials_list.delete(i)
+            del self.render_materials[i]
+
+    def start_render(self):
+        if not self.save_config():
+            return
+        if not self.subject_var.get().strip() or not self.render_materials:
+            messagebox.showwarning("Datos incompletos", "Indica el tema y agrega videos locales.")
+            return
+        missing = [str(p) for p in self.render_materials if not p.is_file()]
+        if missing:
+            messagebox.showerror("Videos no encontrados", "\n".join(missing))
+            return
+        try:
+            count = int(self.count_var.get())
+            if not 1 <= count <= 20:
+                raise ValueError("Cantidad válida: de 1 a 20.")
+            campaign = build_campaign_payload(self.campaign_name_var.get(), self.platform_var.get(),
+                self.sources_text.get("1.0", "end").splitlines(),
+                self.disclosures_text.get("1.0", "end").splitlines(),
+                self.permissions_var.get(), self.credits_var.get())
+        except ValueError as exc:
+            messagebox.showerror("Campaña incompleta", str(exc))
+            return
+        campaign_dir = APP_DIR / "campaigns"
+        campaign_dir.mkdir(parents=True, exist_ok=True)
+        campaign_path = campaign_dir / ("campaign-" + uuid.uuid4().hex + ".json")
+        campaign_path.write_text(json.dumps(campaign, ensure_ascii=False, indent=2), encoding="utf-8")
+        args = ["render", "--mpt-dir", self.mpt_var.get(), "--campaign", str(campaign_path),
+            "--subject", self.subject_var.get().strip(), "--materials", *[str(p) for p in self.render_materials],
+            "--language", self.language_var.get().strip() or "es", "--aspect", self.aspect_var.get(),
+            "--count", str(count), "--jobs-root", self.jobs_var.get()]
+        if self.voice_var.get().strip():
+            args.extend(["--voice", self.voice_var.get().strip()])
+        self._run_async(self._command(*args), "Renderizando con MoneyPrinterTurbo…")
+
     def _build_config(self):
         self.config.columnconfigure(1, weight=1)
         ttk.Label(self.config, text="Rutas y almacenamiento", style="Section.TLabel").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 12))
@@ -150,7 +274,7 @@ class MoneyGetaApp:
         toolbar = ttk.Frame(self.history)
         toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         ttk.Button(toolbar, text="Actualizar", command=self.refresh_jobs).pack(side="left")
-        ttk.Button(toolbar, text="Abrir clip seleccionado", command=self.open_selected_clip).pack(side="left", padx=8)
+        ttk.Button(toolbar, text="Abrir video seleccionado", command=self.open_selected_output).pack(side="left", padx=8)
         ttk.Button(toolbar, text="Abrir carpeta del trabajo", command=self.open_selected_folder).pack(side="left")
         columns = ("stage", "name", "path")
         self.jobs_tree = ttk.Treeview(self.history, columns=columns, show="headings", height=9)
@@ -164,6 +288,14 @@ class MoneyGetaApp:
         lower = ttk.LabelFrame(self.history, text="Candidatos del análisis seleccionado", padding=8)
         lower.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         lower.columnconfigure(0, weight=1)
+        ttk.Label(self.history, text="Videos generados (clips y renders)").grid(row=3, column=0, sticky="w", pady=(10, 4))
+        self.outputs = ttk.Treeview(self.history, columns=("file", "location"), show="headings", height=5)
+        self.outputs.heading("file", text="Archivo")
+        self.outputs.heading("location", text="Ubicación")
+        self.outputs.column("file", width=260)
+        self.outputs.column("location", width=650)
+        self.outputs.grid(row=4, column=0, sticky="nsew")
+        self.history.rowconfigure(4, weight=1)
         self.candidates = ttk.Treeview(lower, columns=("n", "time", "title", "score"), show="headings", height=5)
         for col, title in (("n", "#"), ("time", "Tiempo"), ("title", "Descripción"), ("score", "Puntuación")):
             self.candidates.heading(col, text=title)
@@ -331,7 +463,7 @@ class MoneyGetaApp:
                 data = json.loads(manifest.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 continue
-            label = data.get("source_path") or data.get("source_url") or data.get("workflow", "sesión")
+            label = data.get("source_path") or data.get("source_url") or data.get("subject") or data.get("workflow", "sesión")
             self.jobs_tree.insert("", END, iid=str(manifest.parent), values=(data.get("stage", "unknown"), label, str(manifest.parent)))
 
     def _job_selected(self, _event=None):
@@ -354,6 +486,19 @@ class MoneyGetaApp:
         for row in rows:
             start, end = float(row["start"]), float(row["end"])
             self.candidates.insert("", END, values=(row["n"], f"{start:.1f}s – {end:.1f}s", row["title"], row["score"]))
+        for output in session_video_outputs(session):
+            self.outputs.insert("", END, iid=str(output), values=(output.name, str(output.parent)))
+
+    def open_selected_output(self):
+        selected = self.outputs.selection()
+        if not selected:
+            messagebox.showinfo("Video", "Selecciona un clip o render.")
+            return
+        path = Path(selected[0])
+        if path.is_file():
+            os.startfile(str(path))
+        else:
+            messagebox.showerror("Archivo no encontrado", str(path))
 
     def open_selected_folder(self):
         selected = self.jobs_tree.selection()
