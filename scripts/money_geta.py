@@ -27,6 +27,10 @@ def env_path(name: str) -> Path | None:
     return Path(value).expanduser().resolve() if value else None
 
 
+def default_gtavi_dir() -> Path:
+    """Use the reviewed, pinned source snapshot shipped inside Money-Geta."""
+    return ROOT / "vendor/gtavi-claudecode"
+
 
 def write_manifest(session_dir: Path, **fields) -> Path:
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -101,7 +105,7 @@ def doctor() -> int:
         print(f"{'PASS' if ok else 'PENDING'} {label}: {detail}")
 
     configured = [
-        ("GTA VI ClaudeCode", env_path("GTAVI_CLAUDECODE_DIR"), Path("scripts/moments.py")),
+        ("Vendored GTA VI ClaudeCode", default_gtavi_dir(), Path("scripts/moments.py")),
         ("MoneyPrinterTurbo", mpt_dir, Path("config.toml")),
     ]
     for label, path, marker in configured:
@@ -124,8 +128,8 @@ def doctor() -> int:
         print(f"{'PASS' if ok else 'PENDING'} MoneyPrinterTurbo CLI: {detail}")
         checks.append(("MoneyPrinterTurbo CLI", ok, detail))
 
-    gtavi_dir = env_path("GTAVI_CLAUDECODE_DIR")
-    if gtavi_dir and (gtavi_dir / "scripts/moments.py").is_file():
+    gtavi_dir = default_gtavi_dir()
+    if (gtavi_dir / "scripts/moments.py").is_file():
         try:
             gtavi_python = resolve_gtavi_python(gtavi_dir, env_path("GTAVI_CLAUDECODE_PYTHON"))
             dependency = subprocess.run(
@@ -339,9 +343,6 @@ def run_process_source(args: argparse.Namespace) -> int:
     if not args.confirm_rights:
         print("BLOCKED: downloading requires explicit --confirm-rights.")
         return 2
-    if args.gtavi_dir is None:
-        print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR or pass --gtavi-dir")
-        return 2
     if args.max_seconds <= args.min_seconds or args.min_seconds <= 0:
         print("FAIL: max-seconds must be greater than a positive min-seconds value.")
         return 2
@@ -409,7 +410,7 @@ def run_cut(args: argparse.Namespace) -> int:
     command = [
         str(python_exe), str(script), str(job_dir),
         "--pick", str(args.pick), "--layout", args.layout,
-        "--captions", args.captions,
+        "--captions", args.captions, "--credit", args.credit,
     ]
     if args.hook:
         command += ["--hook", args.hook]
@@ -592,7 +593,7 @@ def main(argv: list[str] | None = None) -> int:
     process.add_argument("--url", required=True)
     process.add_argument("--confirm-rights", action="store_true", help="confirm you have permission to download and edit this source")
     process.add_argument("--ffmpeg-location", type=Path, default=None)
-    process.add_argument("--gtavi-dir", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
+    process.add_argument("--gtavi-dir", type=Path, default=default_gtavi_dir())
     process.add_argument("--gtavi-python", type=Path, default=env_path("GTAVI_CLAUDECODE_PYTHON"))
     process.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     process.add_argument("--top", type=int, choices=range(1, 31), default=8)
@@ -613,7 +614,7 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--cooldown", type=float, default=45)
     live.add_argument("--confirm-recording", action="store_true", help="confirm you have permission to record this stream")
     analyze = sub.add_parser("analyze-video", help="find candidate moments in a local VOD/video")
-    analyze.add_argument("--gtavi-dir", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
+    analyze.add_argument("--gtavi-dir", type=Path, default=default_gtavi_dir())
     analyze.add_argument("--gtavi-python", type=Path, default=env_path("GTAVI_CLAUDECODE_PYTHON"))
     analyze.add_argument("--source", type=Path, required=True)
     analyze.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
@@ -621,13 +622,14 @@ def main(argv: list[str] | None = None) -> int:
     analyze.add_argument("--min-seconds", type=float, default=15)
     analyze.add_argument("--max-seconds", type=float, default=40)
     cut = sub.add_parser("cut-video", help="render one analyzed candidate as a vertical clip")
-    cut.add_argument("--gtavi-dir", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
+    cut.add_argument("--gtavi-dir", type=Path, default=default_gtavi_dir())
     cut.add_argument("--gtavi-python", type=Path, default=env_path("GTAVI_CLAUDECODE_PYTHON"))
     cut.add_argument("--job-dir", type=Path, required=True)
     cut.add_argument("--pick", type=int, default=1)
     cut.add_argument("--layout", choices=["fill", "blur", "facecam", "react"], default="blur")
     cut.add_argument("--captions", choices=["word", "bubble", "none"], default="word")
     cut.add_argument("--hook", default="")
+    cut.add_argument("--credit", required=True, help="creator handle/name to credit on the clip")
     render = sub.add_parser("render", help="run MoneyPrinterTurbo with a gated campaign and local media")
     render.add_argument("--mpt-dir", type=Path, default=env_path("MONEYPRINTERTURBO_DIR"))
     render.add_argument("--mpt-python", type=Path, default=env_path("MONEYPRINTERTURBO_PYTHON"))
@@ -689,20 +691,20 @@ def main(argv: list[str] | None = None) -> int:
         return run_process_source(args)
     if args.command == "record-live":
         if args.gtavi_dir is None:
-            print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR or pass --gtavi-dir")
+            print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR to an external Git checkout for live recording")
             return 2
         return run_live(args)
     if args.command == "analyze-video":
-        if args.gtavi_dir is None:
-            print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR or pass --gtavi-dir")
+        if not (args.gtavi_dir / "scripts/moments.py").is_file():
+            print("INCOMPLETE: vendored moments.py is missing; restore vendor/gtavi-claudecode or pass --gtavi-dir")
             return 2
         if args.max_seconds <= args.min_seconds or args.min_seconds <= 0:
             print("FAIL: max-seconds must be greater than a positive min-seconds value.")
             return 2
         return run_moments(args)
     if args.command == "cut-video":
-        if args.gtavi_dir is None:
-            print("INCOMPLETE: set GTAVI_CLAUDECODE_DIR or pass --gtavi-dir")
+        if not (args.gtavi_dir / "scripts/cut.py").is_file():
+            print("INCOMPLETE: vendored cut.py is missing; restore vendor/gtavi-claudecode or pass --gtavi-dir")
             return 2
         return run_cut(args)
     if args.command == "render":
