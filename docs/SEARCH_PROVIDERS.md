@@ -2,7 +2,7 @@
 
 ## Alcance y criterio
 
-El adaptador ofrece búsqueda web intercambiable y normaliza resultados como registros de evidencia con proveedor, consulta, título, URL, extracto, fecha publicada cuando el proveedor la informa, puntuación opcional e instante de recuperación UTC.
+El adaptador ofrece búsqueda web intercambiable y normaliza resultados como registros de evidencia con proveedor, consulta, título, URL, extracto, fecha publicada explícita cuando el proveedor la informa, antigüedad relativa por separado, puntuación opcional e instante de recuperación UTC.
 
 **Un resultado de búsqueda no demuestra por sí solo que una afirmación sea verdadera.** El extracto es material de referencia, no una cita textual validada ni una verificación factual. Antes de redactar noticias o afirmaciones sensibles, se debe abrir la fuente original, comprobar su fecha, autoría y contexto, y contrastar fuentes independientes.
 
@@ -40,7 +40,7 @@ for source in sources:
     print(source.to_dict())
 ```
 
-La función devuelve objetos `SearchEvidence`; `to_dict()` produce un registro serializable. La persistencia en el ledger versionado de campaña y la apertura/extracción de páginas originales son pasos posteriores, aún no implementados por este adaptador.
+La función devuelve objetos `SearchEvidence`; `to_dict()` produce un registro serializable. `published_at` solo contiene una fecha explícita de publicación; etiquetas como `2 days ago` se guardan en `provider_age`. La lectura de originales y su ledger local se implementan por separado; consulta `docs/SOURCE_READING.md`.
 
 ## Seguridad y límites
 
@@ -51,7 +51,7 @@ La función devuelve objetos `SearchEvidence`; `to_dict()` produce un registro s
 - Se limita el número de resultados y el tiempo de espera.
 - Los errores no reproducen cuerpos HTTP ni secretos.
 - Las pruebas usan respuestas simuladas y no consumen cuota ni créditos.
-- No hay scraping directo, descarga de páginas ni verificación automática de afirmaciones todavía.
+- El adaptador de búsqueda no descarga páginas ni verifica afirmaciones. La lectura limitada de fuentes originales es una capacidad separada documentada en `docs/SOURCE_READING.md`.
 
 ## Referencias oficiales
 
