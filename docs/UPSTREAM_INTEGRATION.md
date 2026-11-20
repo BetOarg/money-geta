@@ -1,6 +1,6 @@
 # Upstream integration ledger
 
-This workspace keeps upstream projects separate. Patches are overlays and are not applied to upstream repositories by this project.
+Money-Geta preserves third-party source snapshots under `vendor/` and keeps upstream updates explicit. Patches are overlays and are not applied to external repositories by this project.
 
 ## GTA VI ClaudeCode
 
@@ -15,7 +15,7 @@ Audited upstream commit on 2026-11-19: `dd95d393c6f74fe2ac14b0239f8826691e5dcb0e
 | `skills/live-mode/SKILL.md` | `6843df58b9818b252cc3d59f62929a3717c7c982` | Permission is treated as a later request, after recording. | `skills/live-recording-safety/SKILL.md` |
 | `skills/rule-check/SKILL.md` | `8fc4895114888f5ced6b51e4b4b1f84375788c68` | Script scope does not prove rights, credits or audiovisual compliance. | `skills/campaign-publication-gate/SKILL.md` |
 
-Only the live-recording safety overlay is retained. The CI workflow validates its pinned manifest and patch presence; it does not clone the GTA VI ClaudeCode repository because the upstream checkout was unavailable to the GitHub Actions runner. Exact blob and patch applicability are checked locally by `money-geta upstream-check` before applying. Campaign validation is implemented and tested in Money-Geta itself. The experimental upstream `check.py` and `secrets_map.py` patches were removed rather than shipping overlays that did not pass exact-blob application checks. Before applying any overlay to a newer upstream revision, inspect the diff and rebase; do not force-apply stale patches.
+A text snapshot of GTA VI ClaudeCode is now preserved under `vendor/gtavi-claudecode/`, pinned to source commit `67acdb4391fa491821b908bb7c455cf8148ad515`; see `SOURCE_SNAPSHOT.md` and the retained MIT license. The snapshot was recovered from the public fork `Acefake/gtavi` after the original repository's API began returning 404. Money-Geta uses the vendored `moments.py` and `cut.py` by default; analysis and cutting no longer depend on an external checkout. The original README and binary logo were intentionally omitted. Live recording remains disabled unless an external Git checkout is configured and the session-isolation patch is verified. The experimental upstream `check.py` and `secrets_map.py` patches were removed rather than shipping overlays that did not pass exact-blob application checks. Before applying any overlay to a newer upstream revision, inspect the diff and rebase; do not force-apply stale patches.
 
 ### Manual application
 
