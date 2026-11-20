@@ -71,6 +71,7 @@ class SearchEvidence:
     url: str
     snippet: str
     published_at: str | None
+    provider_age: str | None
     provider_score: float | None
     retrieved_at: str
 
@@ -106,9 +107,12 @@ def _normalize_results(
         snippet = item.get("description") or item.get("content") or ""
         if not isinstance(snippet, str):
             snippet = ""
-        published = item.get("page_age") or item.get("published_date")
+        published = item.get("published_date")
         if not isinstance(published, str):
             published = None
+        provider_age = item.get("page_age")
+        if not isinstance(provider_age, str):
+            provider_age = None
         score = item.get("score")
         if not isinstance(score, (int, float)):
             score = None
@@ -121,6 +125,7 @@ def _normalize_results(
             url=url,
             snippet=snippet,
             published_at=published,
+            provider_age=provider_age,
             provider_score=float(score) if score is not None else None,
             retrieved_at=retrieved_at,
         ))
