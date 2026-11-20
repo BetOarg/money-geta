@@ -226,6 +226,9 @@ class MoneyGetaApp:
         if missing:
             messagebox.showerror("Videos no encontrados", "\n".join(missing))
             return
+        if any("," in str(p) for p in self.render_materials):
+            messagebox.showerror("Ruta no compatible", "MoneyPrinterTurbo usa comas como separador de materiales. Renombra o mueve los archivos a rutas sin comas.")
+            return
         try:
             count = int(self.count_var.get())
             if not 1 <= count <= 20:
@@ -240,7 +243,11 @@ class MoneyGetaApp:
         campaign_dir = APP_DIR / "campaigns"
         campaign_dir.mkdir(parents=True, exist_ok=True)
         campaign_path = campaign_dir / ("campaign-" + uuid.uuid4().hex + ".json")
-        campaign_path.write_text(json.dumps(campaign, ensure_ascii=False, indent=2), encoding="utf-8")
+        try:
+            campaign_path.write_text(json.dumps(campaign, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError as exc:
+            messagebox.showerror("No se pudo guardar la campaña", str(exc))
+            return
         args = ["render", "--mpt-dir", self.mpt_var.get(), "--campaign", str(campaign_path),
             "--subject", self.subject_var.get().strip(), "--materials", *[str(p) for p in self.render_materials],
             "--language", self.language_var.get().strip() or "es", "--aspect", self.aspect_var.get(),
