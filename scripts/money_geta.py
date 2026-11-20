@@ -81,11 +81,24 @@ def doctor() -> int:
         ("FFmpeg", ffmpeg_path is not None, ffmpeg_path or "not found on PATH or MPT bundled runtime"),
         ("FFprobe", ffprobe_path is not None, ffprobe_path or "not found on PATH"),
     ]
+    optional_tools = [
+        ("yt-dlp", shutil.which("yt-dlp")),
+        ("PySceneDetect", shutil.which("scenedetect")),
+    ]
+    for label, executable in optional_tools:
+        checks.append((label, executable is not None, executable or "not found on PATH"))
+    whisper_check = subprocess.run(
+        [sys.executable, "-c", "import faster_whisper"],
+        capture_output=True, text=True, check=False,
+    )
+    checks.append(("faster-whisper", whisper_check.returncode == 0,
+                   "installed" if whisper_check.returncode == 0 else "not installed in Money-Geta Python"))
+
     for label, ok, detail in checks:
         print(f"{'PASS' if ok else 'PENDING'} {label}: {detail}")
 
     configured = [
-        ("GTA VI ClaudeCode", env_path("GTAVI_CLAUDECODE_DIR"), Path("scripts/live.py")),
+        ("GTA VI ClaudeCode", env_path("GTAVI_CLAUDECODE_DIR"), Path("scripts/moments.py")),
         ("MoneyPrinterTurbo", mpt_dir, Path("config.toml")),
     ]
     for label, path, marker in configured:
