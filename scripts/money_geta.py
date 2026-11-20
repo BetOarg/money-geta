@@ -566,9 +566,32 @@ def run_mpt(args: argparse.Namespace) -> int:
             print(f"SESSION: {session}")
             return 1
         print(f"VIDEO: {video.resolve()}")
-    write_manifest(session, stage="rendered", mpt_task_id=payload.get("task_id"),
-                   output_videos=[str((Path(item) if Path(item).is_absolute() else mpt_dir / item).resolve()) for item in videos])
-    print(f"VERIFIED: {len(videos)} final video file(s) exist.")
+    registered_artifacts = []
+    try:
+        from scripts.artifact_registry import register_artifact
+        for item in videos:
+            video = Path(item)
+            if not video.is_absolute():
+                video = mpt_dir / video
+            video = video.resolve(strict=True)
+            registered = register_artifact(
+                args.campaign, video, allowed_root=video.parent,
+                metadata={"engine": "MoneyPrinterTurbo", "format": args.aspect,
+                          "task_id": payload.get("task_id")},
+            )
+            registered_artifacts.append(registered)
+            print(f"ARTIFACT_ID: {registered['artifact_id']}")
+            print(f"ARTIFACT_SHA256: {registered['sha256']}")
+    except (OSError, ValueError, RuntimeError) as exc:
+        write_manifest(session, stage="artifact_registration_failed", failure=str(exc),
+                       output_videos=[str((Path(item) if Path(item).is_absolute() else mpt_dir / item).resolve()) for item in videos])
+        print(f"BLOCKED: final artifact could not be safely registered for human review: {exc}")
+        print(f"SESSION: {session}")
+        return 1
+    write_manifest(session, stage="rendered_pending_human_review", mpt_task_id=payload.get("task_id"),
+                   output_videos=[str((Path(item) if Path(item).is_absolute() else mpt_dir / item).resolve()) for item in videos],
+                   registered_artifacts=[{"artifact_id": item["artifact_id"], "sha256": item["sha256"]} for item in registered_artifacts])
+    print(f"VERIFIED: {len(videos)} final video file(s) exist and are registered; human artifact approval is still pending.")
     print(f"SESSION: {session}")
     return 0
 
