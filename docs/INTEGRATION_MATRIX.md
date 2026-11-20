@@ -13,8 +13,9 @@ Estados: **INTEGRADO** = existe implementación verificable en la rama actual; *
 | Subtítulos | SRT/VTT y burn-in FFmpeg | Edición, estilos, traducción y QC | PARCIAL |
 | Reencuadre/seguimiento | cutter GTA VI; OpenCV en vendor | Motor de tracking genérico | PARCIAL |
 | Edición/render | MPT CLI y FFmpeg | Adaptador común de motores | PARCIAL |
-| Guion/LLM | Dependiente de MPT/proveedor local | Proveedor intercambiable + prompts por perfil | PLANIFICADO |
-| Investigación y verificación | skills y scripts preservados | Evidencia multi-fuente y verificación de afirmaciones | PARCIAL |
+| Guion/LLM | scripts/providers/llm.py: Chat Completions compatible; opt-in de red | Proveedor intercambiable + prompts por perfil | PARCIAL: adaptador sin orquestación de guiones |
+| Búsqueda web | scripts/providers/search.py: Brave/Tavily, resultados normalizados y provenance UTC | Apertura de originales, ledger persistente y corroboración | PARCIAL |
+| Investigación y verificación | Skills y scripts preservados; búsqueda externa aún no conectada al pipeline | Evidencia multi-fuente y verificación de afirmaciones | PARCIAL |
 | Control de calidad | campaign-check básico | QC audiovisual, factual, legal y de plataforma | PLANIFICADO |
 | Aprobación humana | gates parciales | Registro explícito antes de distribuir | PLANIFICADO |
 | Analítica | ledger de sesiones | Métricas por plataforma/campaña | PLANIFICADO |
