@@ -25,9 +25,11 @@ Never convert missing rules into default PASS. Never treat a caption keyword sca
 
 ## Workflow
 
-1. Validate campaign rules and required evidence; stop with INCOMPLETE when absent.
-2. Run technical checks on the exact final clip.
-3. Inspect the entire clip and caption manually.
-4. Verify source attribution and permission for the intended reuse.
-5. Present the clip, caption, credits and unresolved issues to the user.
-6. Wait for explicit approval. Do not upload or publish automatically.
+1. Validate campaign rules, source evidence, rights attestations and required disclosures; stop with INCOMPLETE when absent.
+2. For `news` and `education` campaigns, require at least one registered factual claim. Every registered claim must have latest human assessment `supported`; `unverified`, `unsupported`, `contradicted`, missing evidence and malformed ledgers block the render gate.
+3. Treat two distinct hostnames plus operator-attested independence as a minimum workflow check, not proof of editorial independence or truth.
+4. Run technical checks on the exact final clip.
+5. Inspect the entire clip and caption manually; factual claim review does not replace audiovisual inspection.
+6. Verify source attribution and permission for the intended reuse.
+7. Present the clip, caption, credits and unresolved issues to the user.
+8. Wait for explicit approval. Do not upload or publish automatically.
