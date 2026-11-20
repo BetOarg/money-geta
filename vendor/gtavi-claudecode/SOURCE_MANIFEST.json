@@ -4,7 +4,7 @@
   "recovery_fork": "https://github.com/Acefake/gtavi",
   "recovery_fork_parent": "Bodila51/gtavi-claudecode",
   "source_commit": "67acdb4391fa491821b908bb7c455cf8148ad515",
-  "source_tree_sha": "67acdb4391fa491821b908bb7c455cf8148ad515",
+  "source_tree_sha": "36daaf981b4f3a9b96f4a2a8e5f6d7ad46e6957b",
   "license": "MIT",
   "copyright": "Copyright (c) 2026 Bodila51",
   "imported_text_file_count": 36,
