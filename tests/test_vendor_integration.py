@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from scripts import money_geta
@@ -6,6 +7,9 @@ from scripts import money_geta
 def test_vendored_gtavi_snapshot_is_present_and_is_default():
     vendor = money_geta.default_gtavi_dir()
     assert vendor == money_geta.ROOT / "vendor/gtavi-claudecode"
+    manifest = json.loads((vendor / "SOURCE_MANIFEST.json").read_text(encoding="utf-8"))
+    assert manifest["source_commit"] == "67acdb4391fa491821b908bb7c455cf8148ad515"
+    assert manifest["imported_text_file_count"] == 36
     for relative in (
         "LICENSE",
         "requirements.txt",
