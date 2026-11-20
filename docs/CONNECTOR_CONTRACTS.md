@@ -12,12 +12,12 @@ Operaciones previstas:
 - `health_check()`
 - `list_destinations()`
 - `validate_post(destination, media, copy, schedule)`
-- `create_draft(approved_artifact)`
-- `schedule(approved_artifact, approved_schedule)`
+- `create_draft(candidate_artifact)` using Buffer GraphQL `createPost` with `saveToDraft: true`; this must never schedule or publish
+- `schedule(approved_artifact, approved_schedule, approval_record)` using `createPost` with the selected channel and due time; reject unless approval_record matches campaign, destination, content hash and media hash
 - `get_post_status(external_id)`
 - `get_analytics(external_id, date_range)`
 
-Reglas: no asumir que un canal acepta cualquier duración, códec, ratio o tipo de post; consultar capacidades. El adaptador no decide derechos ni aprueba contenido. En primera versión, crear borrador es el comportamiento predeterminado; programar requiere aprobación específica.
+Reglas: no asumir que un canal acepta cualquier duración, códec, ratio o tipo de post; consultar capacidades. El adaptador no decide derechos ni aprueba contenido. En primera versión, solo se permite crear borradores después de QC y confirmación del operador. Programar requiere aprobación específica. La publicación inmediata (`publishPostNow`) queda deshabilitada. Buffer documenta que las métricas dependen de los permisos y del tipo de flujo de cuenta; no asumir acceso de analítica para cualquier token.
 
 ## X Research adapter (X API)
 Responsabilidad: buscar posts/conversaciones y recuperar datos públicos permitidos por el producto contratado. No confundir investigación con distribución.
