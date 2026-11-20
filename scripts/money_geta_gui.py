@@ -477,17 +477,16 @@ class MoneyGetaApp:
             return
         session = Path(selected[0])
         jobs = sorted(session.rglob("candidates.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if not jobs:
-            return
-        self.current_job = jobs[0].parent
-        try:
-            rows = candidate_rows(self.current_job)
-        except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
-            self._append(f"No se pudieron leer candidatos: {exc}")
-            return
-        for row in rows:
-            start, end = float(row["start"]), float(row["end"])
-            self.candidates.insert("", END, values=(row["n"], f"{start:.1f}s – {end:.1f}s", row["title"], row["score"]))
+        if jobs:
+            self.current_job = jobs[0].parent
+            try:
+                rows = candidate_rows(self.current_job)
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                self._append(f"No se pudieron leer candidatos: {exc}")
+                rows = []
+            for row in rows:
+                start, end = float(row["start"]), float(row["end"])
+                self.candidates.insert("", END, values=(row["n"], f"{start:.1f}s – {end:.1f}s", row["title"], row["score"]))
         for output in session_video_outputs(session):
             self.outputs.insert("", END, iid=str(output), values=(output.name, str(output.parent)))
 
