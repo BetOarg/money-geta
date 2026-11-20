@@ -471,6 +471,8 @@ class MoneyGetaApp:
         self.current_job = None
         for item in self.candidates.get_children():
             self.candidates.delete(item)
+        for item in self.outputs.get_children():
+            self.outputs.delete(item)
         if not selected:
             return
         session = Path(selected[0])
