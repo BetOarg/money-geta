@@ -1,0 +1,21 @@
+[project]
+name = "money-geta"
+version = "0.3.0"
+description = "Local-first multipurpose video production and distribution control plane"
+requires-python = ">=3.10"
+
+[project.scripts]
+money-geta = "scripts.money_geta:main"
+money-geta-gui = "scripts.money_geta_gui:main"
+money-geta-read-source = "scripts.read_source:main"
+money-geta-claims = "scripts.claims_cli:main"
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+media = ["faster-whisper>=1.1,<2", "scenedetect[opencv]>=0.6,<1"]
+capture = ["yt-dlp>=2025.1.15"]
+gtavi = ["numpy>=1.26,<3", "requests>=2.31,<3", "yt-dlp[default]>=2026.10.26", "deep-translator>=1.11,<2", "edge-tts>=6.1,<8", "opencv-python-headless>=4.9,<5"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

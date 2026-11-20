@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    {
+      "id": "gaming",
+      "name": "Gaming",
+      "status": "partial",
+      "subprofiles": ["gta-vi", "minecraft", "fortnite", "roblox", "other-games"],
+      "capabilities": ["research", "trend-radar", "source-verification", "scriptwriting", "moment-detection", "clip-editing", "subtitles", "render", "quality-control", "rights-check"],
+      "specialized_modules": ["vendor/gtavi-claudecode"],
+      "rules": ["No leaks, piracy or access-control circumvention", "Require creator/source attribution and reuse permission", "Keep game-specific logic inside subprofiles"]
+    },
+    {
+      "id": "viral",
+      "name": "Viral",
+      "status": "planned",
+      "capabilities": ["research", "trend-radar", "source-verification", "claim-check", "scriptwriting", "moment-detection", "clip-editing", "subtitles", "render", "quality-control", "rights-check"],
+      "rules": ["Trend rank is not proof of truth or reuse rights", "Verify factual claims before scripting", "Do not manufacture engagement metrics"]
+    },
+    {
+      "id": "news",
+      "name": "Noticias",
+      "status": "planned",
+      "capabilities": ["research", "source-verification", "claim-check", "scriptwriting", "subtitles", "translation", "render", "quality-control", "rights-check"],
+      "rules": ["Prioritize primary sources", "Record publication and retrieval timestamps", "Corroborate consequential claims", "Provide correction path and distinguish facts from allegations"]
+    },
+    {
+      "id": "education",
+      "name": "Educación",
+      "status": "planned",
+      "capabilities": ["research", "source-verification", "outline", "scriptwriting", "illustration", "subtitles", "translation", "render", "quality-control", "rights-check"],
+      "rules": ["Cite source material", "Distinguish established facts from interpretation", "Review examples and instructions for correctness"]
+    }
+  ]
+}

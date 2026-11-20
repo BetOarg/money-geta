@@ -1,0 +1,33 @@
+From money-geta
+Subject: [PATCH] live: isolate each recording run in a unique directory
+
+Audited upstream base: Bodila51/gtavi-claudecode scripts/live.py
+Audited blob: c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a
+
+Pinned to the audited source; re-check the blob before applying.
+
+diff --git a/scripts/live.py b/scripts/live.py
+index c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a..0000000 100644
+--- a/scripts/live.py
++++ b/scripts/live.py
+@@ -11,7 +11,7 @@
+ """
+-import argparse, json, re, subprocess, sys, time
++import argparse, json, re, subprocess, sys, time, uuid
+ from collections import Counter
+ from datetime import datetime, timezone
+ from pathlib import Path
+ sys.path.insert(0, str(Path(__file__).parent))
+ from common import job_dir, run, save_json, tool, ytdlp_base
+@@ -216,7 +216,7 @@
+     d = job_dir(a.url)
+-    ld = d / "live"
+-    ld.mkdir(exist_ok=True)
+-    for f in list(ld.glob("seg_*.ts")) + list(ld.glob("chat.live_chat.json*")) + [ld / "segments.csv", ld / "chat.twitch.jsonl"]:
+-        f.unlink(missing_ok=True)
++    # Isolate each run; never delete or reuse previous recordings or metadata.
++    session_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
++    ld = d / "live" / f"session-{session_stamp}-{uuid.uuid4().hex[:8]}"
++    ld.mkdir(parents=True, exist_ok=False)
+     spikes_md = ld / "spikes.md"
+     if not spikes_md.exists():

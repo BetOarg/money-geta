@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "default_profile": "gaming",
+  "workspace": {
+    "data_dir_env": "MONEY_GETA_DATA_DIR",
+    "jobs_dir_env": "MONEY_GETA_JOBS_DIR",
+    "preserve_inputs": true,
+    "never_overwrite": true
+  },
+  "providers": {
+    "llm": {"provider": "none", "enabled": false},
+    "search": {"provider": "none", "enabled": false},
+    "image": {"provider": "none", "enabled": false},
+    "tts": {"provider": "none", "enabled": false},
+    "transcription": {"provider": "faster-whisper", "enabled": false}
+  },
+  "render": {"provider": "moneyprinterturbo", "auto_publish": false},
+  "distribution": {
+    "default_provider": "buffer",
+    "draft_only": true,
+    "human_approval_required": true,
+    "channels": ["youtube", "instagram", "tiktok", "x"]
+  },
+  "x_research": {
+    "provider": "x_api",
+    "enabled": false,
+    "daily_request_limit": 0,
+    "campaign_budget_usd": 0,
+    "cache_ttl_seconds": 3600
+  },
+  "safety": {
+    "require_source_evidence": true,
+    "require_rights_attestation": true,
+    "require_credit_review": true,
+    "require_final_media_review": true,
+    "require_human_publish_approval": true,
+    "block_paid_api_without_budget": true
+  }
+}

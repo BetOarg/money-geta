@@ -1,0 +1,84 @@
+name: Safety and integration tests
+
+on:
+  push:
+    branches: ["main", "feat/**"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install --upgrade pip pytest
+      - run: python -m pytest
+      - name: Compile vendored GTA VI scripts
+        run: python -m compileall -q vendor/gtavi-claudecode/scripts
+
+  windows-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install pytest
+      - run: python -m pytest
+      - name: Parse Windows bootstrap script
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          $script = Join-Path $PWD "install_windows.ps1"
+          [System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List
+            exit 1
+          }
+
+  upstream-patch-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate pinned source metadata and safety overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a" docs/UPSTREAM_INTEGRATION.md
+          test -s patches/gtavi-claudecode/live-session-isolation.patch
+          grep -q "c8208b6a0d9d0e4ddc93cfcd1ee123baeb0bb50a" scripts/money_geta.py
+          echo "Manifest verified. Exact upstream apply-check remains a local operation via money-geta upstream-check."
+
+  moneyprinterturbo-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned MoneyPrinterTurbo source
+        run: |
+          git init upstream-mpt
+          cd upstream-mpt
+          git remote add origin https://github.com/harry0703/MoneyPrinterTurbo.git
+          git fetch --depth 1 origin bdd8d328cc366fe70d9fa67ffd0443ba34b4a3e1
+          git checkout --detach FETCH_HEAD
+      - name: Verify supported CLI revision and argument contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C upstream-mpt rev-parse HEAD)" = "bdd8d328cc366fe70d9fa67ffd0443ba34b4a3e1"
+          test "$(git -C upstream-mpt hash-object cli.py)" = "e7dbda8e41de4a632e15392ae317e18aa0f30cca"
+          cd upstream-mpt
+          python -m pip install loguru
+          python cli.py --help > /tmp/mpt-cli-help.txt
+          for flag in --video-subject --video-source --video-materials --video-aspect --video-count --video-language --voice-name --stop-at; do
+            grep -q -- "$flag" /tmp/mpt-cli-help.txt
+          done

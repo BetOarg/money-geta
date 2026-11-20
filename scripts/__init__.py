@@ -1,0 +1,1 @@
+"""Money Geta integration utilities."""
