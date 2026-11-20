@@ -83,7 +83,7 @@ money-geta render --campaign .\campaign.json --subject "GTA VI: ..." --materials
 - `process-source`: downloads a source only after `--confirm-rights`, then analyzes moments using the vendored GTA VI scripts in the same isolated session.
 - `analyze-video`: runs the vendored moment-finder on a local video in a fresh isolated job directory; requires the GTA VI Python dependencies, FFmpeg and FFprobe.
 - `cut-video`: turns one reviewed candidate into a vertical MP4 using the vendored clip cutter. `--credit` is mandatory; review the output before rendering or publishing.
-- `campaign-check`: checks that required campaign attestations and source references exist. It is not legal clearance.
+- `campaign-check`: checks campaign attestations, source references and the factual-claim ledger. `news` and `education` campaigns require at least one claim, and every recorded claim must have latest status `supported` before render. It is not legal clearance or final-media approval.
 - `upstream-check`: verifies the exact pinned safety-patch blobs and runs `git apply --check` against an optional external Git checkout. It does not modify the vendored snapshot.
 - `render`: requires a complete campaign evidence file and existing local media, then invokes the installed MoneyPrinterTurbo CLI, blocks automatic cross-posting and verifies the final MP4 files exist. It defaults to local media, so it does not call Pexels or paid video-generation providers.
 

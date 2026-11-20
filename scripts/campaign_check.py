@@ -60,6 +60,36 @@ def validate_campaign(data: Any) -> list[str]:
     return problems
 
 
+
+def validate_claim_gate(data: dict[str, Any], campaign_path: Path) -> list[str]:
+    """Require reviewed factual claims for flagged campaigns; recorded unresolved claims block."""
+    if data.get("schema_version") != 1:
+        return []
+    required = data.get("factual_claims_required", False)
+    if not isinstance(required, bool):
+        return ["factual_claims_required must be an explicit boolean"]
+    project_id, campaign_id = data.get("project_id"), data.get("campaign_id")
+    ledger = campaign_path.parent / "claim_ledger.jsonl"
+    if not isinstance(project_id, str) or not project_id or not isinstance(campaign_id, str) or not campaign_id:
+        return ["factual claim review requires project_id and campaign_id"] if required else []
+    if not ledger.exists():
+        return ["factual claims are required but no claim_ledger.jsonl exists"] if required else []
+    try:
+        from scripts.claim_registry import ClaimRegistryError, list_claims
+        claims = list_claims(project_id, campaign_id, root=campaign_path.parents[3])
+    except (OSError, ValueError, IndexError) as exc:
+        return [f"claim review could not be validated: {exc}"]
+    except ClaimRegistryError as exc:
+        return [f"claim review ledger is invalid: {exc}"]
+    if required and not claims:
+        return ["factual claims are required but no claims have been registered"]
+    blocked = [
+        f"claim {item.get('claim_id', 'unknown')} is {item.get('status', 'unverified')}"
+        for item in claims if item.get("status") != "supported"
+    ]
+    return ["factual claim review incomplete: " + "; ".join(blocked)] if blocked else []
+
+
 def check_file(path: Path | None) -> tuple[bool, list[str]]:
     if path is None:
         return False, ["campaign file not supplied"]
@@ -70,6 +100,8 @@ def check_file(path: Path | None) -> tuple[bool, list[str]]:
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         return False, [f"cannot read valid campaign JSON: {exc}"]
     problems = validate_campaign(data)
+    if isinstance(data, dict):
+        problems.extend(validate_claim_gate(data, path.resolve()))
     return not problems, problems
 
 

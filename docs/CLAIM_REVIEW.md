@@ -21,4 +21,6 @@ Cada evaluación registra actor `operator`, fecha, referencias y fundamento. Las
 
 ## Límites
 
-El sistema no determina la verdad ni calcula independencia editorial automáticamente. Hostnames distintos no garantizan independencia; la atestación sigue siendo humana. El modelo de lenguaje no puede cambiar el estado. Este ledger todavía no está conectado al gate de publicación: sirve como registro y control explícito de investigación, no como autorización para publicar.
+El sistema no determina la verdad ni calcula independencia editorial automáticamente. Hostnames distintos no garantizan independencia; la atestación sigue siendo humana. El modelo de lenguaje no puede cambiar el estado. El gate de campaña está conectado al ledger: si la campaña tiene `factual_claims_required: true`, exige al menos una afirmación y bloquea si alguna no está evaluada como `supported`. Cualquier afirmación registrada en el ledger también debe estar `supported`, aunque la campaña no exija afirmaciones. Un ledger malformado o una referencia a evidencia inexistente bloquea. El control se ejecuta en `campaign-check` y antes de iniciar el render MPT.
+
+Las campañas de perfiles `news` y `education` se crean con `factual_claims_required: true`; `gaming` y `viral` no lo exigen por defecto. Para estas últimas, si se registran afirmaciones, todas deben quedar respaldadas antes del render. Esta revisión factual no sustituye la inspección humana del video final, la verificación de derechos ni la aprobación de publicación.
