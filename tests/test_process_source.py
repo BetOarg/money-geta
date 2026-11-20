@@ -6,7 +6,9 @@ from scripts import money_geta
 
 def test_process_source_downloads_and_analyzes_in_one_session(tmp_path, monkeypatch, capsys):
     gtavi = tmp_path / "gtavi"
-    gtavi.mkdir()
+    (gtavi / "scripts").mkdir(parents=True)
+    (gtavi / "scripts" / "moments.py").write_text("# mocked", encoding="utf-8")
+    (gtavi / "scripts" / "cut.py").write_text("# mocked", encoding="utf-8")
     jobs = tmp_path / "jobs"
     source_file = tmp_path / "downloaded.mp4"
     source_file.write_bytes(b"video")
@@ -22,6 +24,7 @@ def test_process_source_downloads_and_analyzes_in_one_session(tmp_path, monkeypa
         money_geta.write_manifest(session_dir, stage="analyzed", candidate_count=3)
         return 0
 
+    monkeypatch.setattr(money_geta.shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(money_geta, "download_source", fake_download)
     monkeypatch.setattr(money_geta, "run_moments", fake_analyze)
     args = Namespace(
