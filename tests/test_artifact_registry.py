@@ -81,3 +81,29 @@ def test_symlink_artifact_is_rejected_when_supported(tmp_path: Path) -> None:
         pytest.skip("symlinks unavailable on this platform")
     with pytest.raises(ArtifactReviewError, match="Symlink"):
         register_artifact(campaign, link, allowed_root=output)
+
+
+
+def test_latest_rejection_revokes_previous_approval(tmp_path: Path) -> None:
+    campaign, output = setup_campaign(tmp_path)
+    video = output / "final.mp4"
+    video.write_bytes(b"video")
+    item = register_artifact(campaign, video, allowed_root=output)
+    approve_artifact(campaign, item["artifact_id"], item["sha256"], reviewer="operator")
+    approve_artifact(campaign, item["artifact_id"], item["sha256"], reviewer="operator",
+                     decision="rejected", notes="Logo incorrecto")
+    passed, problems = check_artifact(campaign, item["artifact_id"], item["sha256"])
+    assert not passed
+    assert "latest human decision" in problems[0]
+
+
+def test_missing_artifact_invalidates_approval(tmp_path: Path) -> None:
+    campaign, output = setup_campaign(tmp_path)
+    video = output / "final.mp4"
+    video.write_bytes(b"video")
+    item = register_artifact(campaign, video, allowed_root=output)
+    approve_artifact(campaign, item["artifact_id"], item["sha256"], reviewer="operator")
+    video.unlink()
+    passed, problems = check_artifact(campaign, item["artifact_id"], item["sha256"])
+    assert not passed
+    assert "changed" in problems[0]
