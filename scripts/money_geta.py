@@ -104,8 +104,9 @@ def doctor() -> int:
     for label, ok, detail in checks:
         print(f"{'PASS' if ok else 'PENDING'} {label}: {detail}")
 
+    configured_gtavi = env_path("GTAVI_CLAUDECODE_DIR") or default_gtavi_dir()
     configured = [
-        ("Vendored GTA VI ClaudeCode", default_gtavi_dir(), Path("scripts/moments.py")),
+        ("GTA VI ClaudeCode", configured_gtavi, Path("scripts/moments.py")),
         ("MoneyPrinterTurbo", mpt_dir, Path("config.toml")),
     ]
     for label, path, marker in configured:
@@ -128,7 +129,7 @@ def doctor() -> int:
         print(f"{'PASS' if ok else 'PENDING'} MoneyPrinterTurbo CLI: {detail}")
         checks.append(("MoneyPrinterTurbo CLI", ok, detail))
 
-    gtavi_dir = default_gtavi_dir()
+    gtavi_dir = configured_gtavi
     if (gtavi_dir / "scripts/moments.py").is_file():
         try:
             gtavi_python = resolve_gtavi_python(gtavi_dir)
