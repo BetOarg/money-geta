@@ -13,6 +13,7 @@ from pathlib import Path
 
 from scripts.campaign_check import check_file
 from scripts.session_paths import create_session_dir
+from scripts.source_acquisition import download_source, validate_source_url
 
 ROOT = Path(__file__).resolve().parents[1]
 PATCHES = {
@@ -516,6 +517,11 @@ def main(argv: list[str] | None = None) -> int:
     session.add_argument("--root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     campaign = sub.add_parser("campaign-check", help="validate campaign evidence fields (not legal clearance)")
     campaign.add_argument("--campaign", type=Path, required=True)
+    acquire = sub.add_parser("download-source", help="download a permitted public source with yt-dlp")
+    acquire.add_argument("--url", required=True)
+    acquire.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
+    acquire.add_argument("--ffmpeg-location", type=Path, default=None)
+    acquire.add_argument("--confirm-rights", action="store_true", help="confirm you have permission to download and edit this source")
     live = sub.add_parser("record-live", help="record a live source after explicit confirmation")
     live.add_argument("--gtavi-dir", type=Path, default=env_path("GTAVI_CLAUDECODE_DIR"))
     live.add_argument("--gtavi-python", type=Path, default=env_path("GTAVI_CLAUDECODE_PYTHON"))
