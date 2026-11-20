@@ -3,10 +3,10 @@
 ## Roles
 
 - **MoneyPrinterTurbo** remains the rendering/content assembly engine.
-- **gtavi-claudecode** remains an independently versioned research/creator skill source.
+- **GTA VI ClaudeCode** is preserved as a pinned third-party snapshot under `vendor/gtavi-claudecode/`; Money-Geta owns the runtime adapter while the original files and MIT notice remain identifiable.
 - **money-geta** owns local adapters, safety checks, regression tests and Windows setup guidance.
 
-Do not copy entire upstream repositories into this repository by default. Prefer pinned references, documented install steps and small adapters. This avoids accidental license mixing and makes upstream updates reviewable.
+The GTA VI source is intentionally vendored because availability of the original repository is a continuity risk. Never auto-update it: review a new revision, compare it against `SOURCE_MANIFEST.json`, preserve its license, then update the snapshot deliberately. Other upstream projects remain separate dependencies unless a similarly explicit preservation decision is made.
 
 ## Safety fixes represented in this foundation
 
