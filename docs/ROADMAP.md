@@ -27,7 +27,8 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [x] Separar ChatGPT web de OpenAI API; nunca asumir API incluida en plan ChatGPT.
 - [x] Añadir adaptadores de búsqueda Brave/Tavily con resultados normalizados, URL, extracto, fecha disponible, puntuación e instante de recuperación (separados del LLM).
 - [x] Añadir lectura limitada de fuentes originales HTML/XHTML/texto y ledger JSONL versionado por campaña, con opt-in de red y defensas SSRF.
-- [ ] Añadir verificación/corroboración de afirmaciones, independencia de fuentes y registro de contradicciones.
+- [x] Añadir ledger append-only de afirmaciones, referencias a evidencias capturadas y evaluación humana supported/contradicted/unsupported/unverified.
+- [ ] Añadir corroboración asistida con revisión humana, detección de contradicciones y controles de independencia; el modelo no puede adjudicar verdad.
 - [ ] Añadir proveedor de imágenes configurable; Pexels no será requisito.
 - [ ] Añadir TTS configurable, sin acoplarlo a un proveedor.
 - [ ] Benchmarks antes de incorporar ClipsAI, FunClip, WhisperX, Silero VAD, MediaPipe, Auto-Editor o MoviePy.
