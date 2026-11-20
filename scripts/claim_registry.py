@@ -165,8 +165,13 @@ def assess_claim(project_id: str, campaign_id: str, claim_id: str, status: str, 
 def list_claims(project_id: str, campaign_id: str, *, root: Path | None = None) -> list[dict[str, Any]]:
     folder = _campaign_folder(project_id, campaign_id, root)
     events = _claim_events(folder)
+    evidence = _evidence_index(folder)
     claims: dict[str, dict[str, Any]] = {}
     for row in events:
+        if row["event_type"] == "claim_created" and any(
+            ref not in evidence for ref in row.get("evidence_ids", [])
+        ):
+            raise ClaimRegistryError("Claim references evidence missing from the source ledger.")
         claim_id = row["claim_id"]
         if row["event_type"] == "claim_created":
             claims[claim_id] = dict(row)
