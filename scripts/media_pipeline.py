@@ -58,8 +58,7 @@ def detect_scenes(source: Path, output_dir: Path, threshold: float = 27.0) -> Pa
     result = _run([
         executable, "--input", str(source), "detect-content",
         "--threshold", str(threshold), "list-scenes",
-        "--output", str(output_dir), "--filename", "$VIDEO_NAME-scenes",
-        "--format", "csv",
+        "--output", str(output_dir), "--filename", "$VIDEO_NAME-scenes.csv",
     ])
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "PySceneDetect failed")
