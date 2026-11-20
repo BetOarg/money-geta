@@ -71,7 +71,7 @@ def _project_campaign(tmp_path: Path, factual_claims_required: bool = True) -> t
         {"schema_version": 1, "evidence_id": "e2", "final_url": "https://source-two.example/b"},
     ]
     (folder / "source_ledger.jsonl").write_text(
-        "".join(json.dumps(row) + "\\n" for row in source_rows), encoding="utf-8"
+        "".join(json.dumps(row) + "\n" for row in source_rows), encoding="utf-8"
     )
     return projects, path
 
