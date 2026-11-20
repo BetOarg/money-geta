@@ -22,6 +22,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip pytest
       - run: python -m pytest
+      - name: Compile vendored GTA VI scripts
+        run: python -m compileall -q vendor/gtavi-claudecode/scripts
 
   windows-smoke:
     runs-on: windows-latest
