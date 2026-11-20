@@ -9,7 +9,7 @@ import sys
 import threading
 import uuid
 from pathlib import Path
-from tkinter import BOTH, END, LEFT, X, filedialog, messagebox, ttk
+from tkinter import BOTH, END, LEFT, X, filedialog, messagebox, simpledialog, ttk
 import tkinter as tk
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +19,7 @@ APP_DIR = APPDATA / "Money-Geta"
 SETTINGS_FILE = APP_DIR / "settings.json"
 DEFAULT_MPT = Path(os.environ.get("MONEYPRINTERTURBO_DIR", r"C:\MoneyPrinterTurbo"))
 DEFAULT_JOBS = APP_DIR / "jobs"
+DEFAULT_PROJECTS = APP_DIR / "projects"
 
 
 def load_settings() -> dict:
@@ -112,17 +113,21 @@ class MoneyGetaApp:
         self.tabs.pack(fill=BOTH, expand=True, padx=14, pady=(0, 12))
         self.home = ttk.Frame(self.tabs, padding=14)
         self.render = ttk.Frame(self.tabs, padding=14)
+        self.projects = ttk.Frame(self.tabs, padding=14)
         self.config = ttk.Frame(self.tabs, padding=14)
         self.history = ttk.Frame(self.tabs, padding=14)
         self.tabs.add(self.home, text="Analizar y cortar")
         self.tabs.add(self.render, text="Render final · MPT")
+        self.tabs.add(self.projects, text="Proyectos")
         self.tabs.add(self.config, text="Configuración")
         self.tabs.add(self.history, text="Clips y sesiones")
         self._build_home()
         self._build_render()
+        self._build_projects()
         self._build_config()
         self._build_history()
         self._set_status("Iniciando diagnóstico automático…")
+        self.refresh_projects()
         self.root.after(300, self.run_doctor)
         self.root.after(150, self._poll_events)
 
@@ -256,6 +261,103 @@ class MoneyGetaApp:
             args.extend(["--voice", self.voice_var.get().strip()])
         self._run_async(self._command(*args), "Renderizando con MoneyPrinterTurbo…")
 
+
+    def _build_projects(self):
+        self.projects.columnconfigure(0, weight=1)
+        toolbar = ttk.Frame(self.projects)
+        toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        ttk.Button(toolbar, text="Crear proyecto", command=self.create_project_ui).pack(side=LEFT)
+        ttk.Button(toolbar, text="Crear campaña", command=self.create_campaign_ui).pack(side=LEFT, padx=8)
+        ttk.Button(toolbar, text="Actualizar", command=self.refresh_projects).pack(side=LEFT)
+        self.projects_tree = ttk.Treeview(self.projects, columns=("name", "profile", "status", "topic"), show="headings", height=8)
+        for col, title in (("name", "Proyecto"), ("profile", "Perfil"), ("status", "Estado"), ("topic", "Tema")):
+            self.projects_tree.heading(col, text=title)
+        self.projects_tree.column("name", width=280)
+        self.projects_tree.column("profile", width=110, stretch=False)
+        self.projects_tree.column("status", width=90, stretch=False)
+        self.projects_tree.column("topic", width=320)
+        self.projects_tree.grid(row=1, column=0, sticky="nsew")
+        self.projects.rowconfigure(1, weight=1)
+        self.projects_tree.bind("<<TreeviewSelect>>", self._project_selected)
+        ttk.Label(self.projects, text="Campañas del proyecto seleccionado").grid(row=2, column=0, sticky="w", pady=(10, 4))
+        self.campaigns_tree = ttk.Treeview(self.projects, columns=("name", "platform", "status"), show="headings", height=6)
+        for col, title in (("name", "Campaña"), ("platform", "Plataforma"), ("status", "Estado")):
+            self.campaigns_tree.heading(col, text=title)
+        self.campaigns_tree.grid(row=3, column=0, sticky="ew")
+        ttk.Label(self.projects, text="Las campañas se crean como borradores. No se publica ni programa desde esta pestaña.").grid(row=4, column=0, sticky="w", pady=(6, 0))
+
+    def create_project_ui(self):
+        name = simpledialog.askstring("Nuevo proyecto", "Nombre del proyecto:", parent=self.root)
+        if not name or not name.strip():
+            return
+        profile = simpledialog.askstring("Perfil temático", "Perfil: gaming, viral, news o education", initialvalue="gaming", parent=self.root)
+        if not profile:
+            return
+        profile = profile.strip().lower()
+        if profile not in {"gaming", "viral", "news", "education"}:
+            messagebox.showerror("Perfil no válido", "Usa gaming, viral, news o education.")
+            return
+        self._run_async(self._command("projects", "create", "--name", name.strip(), "--profile", profile),
+                        "Creando proyecto…")
+
+    def create_campaign_ui(self):
+        selected = self.projects_tree.selection()
+        if not selected:
+            messagebox.showwarning("Selecciona un proyecto", "Selecciona el proyecto al que pertenecerá la campaña.")
+            return
+        name = simpledialog.askstring("Nueva campaña", "Nombre de la campaña:", parent=self.root)
+        if not name or not name.strip():
+            return
+        platform = simpledialog.askstring("Plataforma", "Destino (YouTube Shorts, TikTok, Instagram Reels, X):",
+                                          initialvalue="YouTube Shorts", parent=self.root)
+        if not platform or not platform.strip():
+            return
+        self._run_async(self._command("campaigns", "create", "--project", selected[0],
+                        "--name", name.strip(), "--platform", platform.strip()),
+                        "Creando borrador de campaña…")
+
+    def refresh_projects(self):
+        if not hasattr(self, "projects_tree"):
+            return
+        for item in self.projects_tree.get_children():
+            self.projects_tree.delete(item)
+        if DEFAULT_PROJECTS.is_dir():
+            for manifest in sorted(DEFAULT_PROJECTS.glob("*/project.json")):
+                try:
+                    item = json.loads(manifest.read_text(encoding="utf-8"))
+                    if item.get("schema_version") != 1:
+                        continue
+                    self.projects_tree.insert("", END, iid=item["project_id"],
+                        values=(item.get("name", ""), item.get("profile_id", ""),
+                                item.get("status", "unknown"), item.get("topic", "")))
+                except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                    self._append(f"Proyecto ignorado por manifiesto inválido: {exc}")
+
+    def _project_selected(self, _event=None):
+        self.refresh_campaigns()
+
+    def refresh_campaigns(self):
+        if not hasattr(self, "campaigns_tree"):
+            return
+        for item in self.campaigns_tree.get_children():
+            self.campaigns_tree.delete(item)
+        selected = self.projects_tree.selection()
+        if not selected:
+            return
+        folder = DEFAULT_PROJECTS / selected[0] / "campaigns"
+        if not folder.is_dir():
+            return
+        for manifest in sorted(folder.glob("*/campaign.json")):
+            try:
+                item = json.loads(manifest.read_text(encoding="utf-8"))
+                if item.get("schema_version") != 1:
+                    continue
+                self.campaigns_tree.insert("", END, iid=item["campaign_id"],
+                    values=(item.get("campaign_name", ""), item.get("platform", ""),
+                            item.get("status", "unknown")))
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                self._append(f"Campaña ignorada por manifiesto inválido: {exc}")
+
     def _build_config(self):
         self.config.columnconfigure(1, weight=1)
         ttk.Label(self.config, text="Rutas y almacenamiento", style="Section.TLabel").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 12))
@@ -362,6 +464,7 @@ class MoneyGetaApp:
         env["MONEYPRINTERTURBO_DIR"] = str(Path(self.mpt_var.get()).expanduser())
         env["GTAVI_CLAUDECODE_DIR"] = str(Path(self.gtavi_var.get()).expanduser())
         env["MONEY_GETA_JOBS_DIR"] = str(Path(self.jobs_var.get()).expanduser())
+        env["MONEY_GETA_PROJECTS_DIR"] = str(DEFAULT_PROJECTS)
         return env
 
     def _command(self, *args):
@@ -436,6 +539,8 @@ class MoneyGetaApp:
                     self.process_btn.configure(state="normal")
                     self._set_status(f"{label} {'VERDE' if code == 0 else 'ROJO'} · código {code}")
                     self.refresh_jobs()
+                    self.refresh_projects()
+                    self.refresh_campaigns()
                 elif kind == "error":
                     self.busy = False
                     self.process_btn.configure(state="normal")

@@ -29,6 +29,8 @@ money-geta doctor
 Before rendering, ensure MoneyPrinterTurbo's existing `config.toml` has `upload_post_auto_upload = false`; Money-Geta blocks rendering if automatic cross-platform publishing is enabled. Keep `config.toml`, OAuth data, API keys, jobs and exports outside this repository. The tool never copies credentials into Money-Geta. Money-Geta invokes MoneyPrinterTurbo with its own Python environment (auto-detects `.venv`, `venv` or `lib/python`); set `MONEYPRINTERTURBO_PYTHON` if your installation uses another location.
 
 ## Projects and campaigns
+The Windows desktop app includes a Projects tab for creating projects, selecting one of the four profiles, listing local projects and creating/listing campaign drafts. Its storage defaults to the local Money-Geta application-data folder. The CLI remains the full interface for entering topic and brief metadata.
+
 
 Projects bind an editorial brief to a reusable content profile. Campaigns inherit that profile and start as incomplete drafts; the existing campaign gate must block them until sources, permissions and credits are supplied and verified.
 
