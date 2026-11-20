@@ -577,6 +577,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="money-geta", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor", help="check local tools and configured upstream installations")
+    profiles = sub.add_parser("profiles", help="list or inspect declarative content profiles")
+    profile_actions = profiles.add_subparsers(dest="profile_action", required=True)
+    profile_actions.add_parser("list", help="list available content profiles")
+    profile_show = profile_actions.add_parser("show", help="show one profile's capabilities and rules")
+    profile_show.add_argument("profile_id")
     status = sub.add_parser("status", help="list recent Money-Geta workflow sessions")
     status.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     status.add_argument("--limit", type=int, choices=range(1, 101), default=20)
@@ -652,6 +657,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "media":
         from scripts.media_pipeline import main as media_main
         return media_main(args.media_args)
+    if args.command == "profiles":
+        from scripts.profile_registry import get_profile, list_profiles
+        try:
+            if args.profile_action == "list":
+                for profile in list_profiles():
+                    print(f"{profile['id']} | {profile['name']} | {profile['status']}")
+                return 0
+            profile = get_profile(args.profile_id)
+            print(json.dumps(profile, ensure_ascii=False, indent=2))
+            return 0
+        except (KeyError, ValueError) as exc:
+            print(f"FAIL: {exc}")
+            return 2
     if args.command == "doctor":
         return doctor()
     if args.command == "status":
