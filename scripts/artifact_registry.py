@@ -44,9 +44,15 @@ def _campaign_context(campaign_path: str | Path) -> tuple[Path, dict[str, Any], 
 
 
 def _reject_symlink_components(path: Path) -> None:
-    absolute = Path(os.path.abspath(path))
+    expanded = path.expanduser()
+    absolute = expanded if expanded.is_absolute() else Path.cwd() / expanded
     current = Path(absolute.anchor)
     for part in absolute.parts[1:]:
+        if part in {"", "."}:
+            continue
+        if part == "..":
+            current = current.parent
+            continue
         current = current / part
         if current.is_symlink():
             raise ArtifactReviewError("Symlink paths are blocked for reviewed artifacts.")
@@ -134,6 +140,11 @@ def register_artifact(campaign_path: str | Path, artifact_path: str | Path, *,
         "allowed_root": str(root), "file_size": path.stat().st_size,
         "sha256": _sha256(path), "engine": (metadata or {}).get("engine", "unknown"),
         "format": (metadata or {}).get("format", "unknown"),
+        "subject": (metadata or {}).get("subject", ""),
+        "language": (metadata or {}).get("language", ""),
+        "count": (metadata or {}).get("count"),
+        "voice": (metadata or {}).get("voice"),
+        "session_id": (metadata or {}).get("session_id"),
         "task_id": (metadata or {}).get("task_id"),
         "registered_at": _now(),
     }
