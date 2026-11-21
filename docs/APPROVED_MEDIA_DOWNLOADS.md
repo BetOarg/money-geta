@@ -6,7 +6,7 @@ Downloads require a candidate in the campaign's Openverse ledger and a current h
 python -m scripts.money_geta media-download --project PROJECT_ID --campaign CAMPAIGN_ID --candidate-id CANDIDATE_ID --allow-network --confirm-download
 ```
 
-Both flags are mandatory; search, review, render, or GUI actions do not trigger downloads.
+Both flags are mandatory; search, review, render, or GUI actions do not trigger downloads. In the desktop app, select a candidate whose status is `reviewed_approved`, then use **Descargar aprobada** and confirm the network request.
 
 - HTTPS only, standard port, no URL credentials or sensitive query tokens.
 - DNS checked for public addresses; redirects limited to 3 and each destination revalidated.
