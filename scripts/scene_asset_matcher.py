@@ -77,7 +77,7 @@ def build_scene_asset_plan(project_id: str, campaign_id: str, script_id: str, sh
     script_path = Path(registration.get("path", "")).expanduser()
     _reject_symlink_components(script_path)
     resolved_script = script_path.resolve(strict=True)
-    campaign_drafts = (projects_root / project_id / "campaigns" / campaign_id / "drafts").resolve(strict=True)
+    campaign_drafts = (projects_root / project_id / "campaigns" / campaign_id / "drafts").resolve(strict=False)
     if not resolved_script.is_file() or not resolved_script.is_relative_to(campaign_drafts):
         raise ValueError("Approved script path must remain inside the campaign drafts directory.")
     import json
