@@ -77,6 +77,8 @@ def test_repeat_download_returns_verified_existing_record(tmp_path,monkeypatch):
 def test_https_connection_pins_to_validated_ip(monkeypatch):
     observed = {}
     class FakeTlsContext:
+        verify_mode = __import__("ssl").CERT_REQUIRED
+        check_hostname = True
         def wrap_socket(self, sock, server_hostname):
             observed["server_hostname"] = server_hostname
             return "tls-wrapped-socket"
