@@ -115,7 +115,7 @@ def register_script(project_id: str, campaign_id: str, draft_path: Path, *, root
     event = {
         "schema_version": 1, "event_type": "script_registered", "script_id": "script-" + uuid.uuid4().hex,
         "project_id": project_id, "campaign_id": campaign_id, "path": str(validated["path"]),
-        "sha256": validated["sha256",], "input_sha256": validated["report"].get("input_sha256"),
+        "sha256": validated["sha256"], "input_sha256": validated["report"].get("input_sha256"),
         "source_ids": validated["report"].get("source_ids", []), "registered_at": now,
     }
     _append_event(campaign_path, event)
