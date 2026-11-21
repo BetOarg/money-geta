@@ -455,8 +455,9 @@ def resolve_mpt_python(mpt_dir: Path, override: Path | None = None) -> Path:
 
 def run_mpt(args: argparse.Namespace) -> int:
     mpt_dir = args.mpt_dir.expanduser().resolve()
+    mpt_runtime_root = Path(os.environ.get("MPT_HOME") or mpt_dir).expanduser().resolve()
     cli_file = mpt_dir / "cli.py"
-    config_file = mpt_dir / "config.toml"
+    config_file = mpt_runtime_root / "config.toml"
     try:
         mpt_python = resolve_mpt_python(mpt_dir, args.mpt_python)
     except FileNotFoundError as exc:
@@ -559,7 +560,7 @@ def run_mpt(args: argparse.Namespace) -> int:
     for item in videos:
         video = Path(item)
         if not video.is_absolute():
-            video = mpt_dir / video
+            video = mpt_runtime_root / video
         if not video.is_file():
             write_manifest(session, stage="render_failed", failure=f"missing artifact: {video}")
             print(f"FAIL: MoneyPrinterTurbo reported a missing video artifact: {video}")
@@ -572,9 +573,9 @@ def run_mpt(args: argparse.Namespace) -> int:
         for item in videos:
             video = Path(item)
             if not video.is_absolute():
-                video = mpt_dir / video
+                video = mpt_runtime_root / video
             registered = register_artifact(
-                args.campaign, video, allowed_root=mpt_dir,
+                args.campaign, video, allowed_root=mpt_runtime_root / "storage" / "tasks",
                 metadata={"engine": "MoneyPrinterTurbo", "format": args.aspect,
                           "subject": args.subject, "language": args.language,
                           "count": args.count, "voice": args.voice,
@@ -585,12 +586,12 @@ def run_mpt(args: argparse.Namespace) -> int:
             print(f"ARTIFACT_SHA256: {registered['sha256']}")
     except (OSError, ValueError, RuntimeError) as exc:
         write_manifest(session, stage="artifact_registration_failed", failure=str(exc),
-                       output_videos=[str((Path(item) if Path(item).is_absolute() else mpt_dir / item).resolve()) for item in videos])
+                       output_videos=[str((Path(item) if Path(item).is_absolute() else mpt_runtime_root / item).resolve()) for item in videos])
         print(f"BLOCKED: final artifact could not be safely registered for human review: {exc}")
         print(f"SESSION: {session}")
         return 1
     write_manifest(session, stage="rendered_pending_human_review", mpt_task_id=payload.get("task_id"),
-                   output_videos=[str((Path(item) if Path(item).is_absolute() else mpt_dir / item).resolve()) for item in videos],
+                   output_videos=[str((Path(item) if Path(item).is_absolute() else mpt_runtime_root / item).resolve()) for item in videos],
                    registered_artifacts=[{"artifact_id": item["artifact_id"], "sha256": item["sha256"]} for item in registered_artifacts])
     print(f"VERIFIED: {len(videos)} final video file(s) exist and are registered; human artifact approval is still pending.")
     print(f"SESSION: {session}")

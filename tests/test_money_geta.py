@@ -18,22 +18,32 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     import json
     from argparse import Namespace
     from scripts import money_geta
+    from scripts.artifact_registry import approve_artifact, check_artifact, list_artifacts, main as artifact_review_main
 
     mpt = tmp_path / "mpt"
     mpt.mkdir()
+    mpt_home = tmp_path / "mpt-runtime"
+    mpt_home.mkdir()
     (mpt / "cli.py").write_text("# fake CLI", encoding="utf-8")
-    (mpt / "config.toml").write_text("upload_post_auto_upload = false\n", encoding="utf-8")
+    (mpt_home / "config.toml").write_text("upload_post_auto_upload = false\n", encoding="utf-8")
+    monkeypatch.setenv("MPT_HOME", str(mpt_home))
     python_exe = mpt / "python.exe"
     python_exe.write_text("fake interpreter", encoding="utf-8")
-    campaign = tmp_path / "campaign.json"
-    campaign.write_text(json.dumps({
-        "campaign_name": "test",
-        "platform": "YouTube Shorts",
-        "permissions_confirmed": True,
-        "credits_confirmed": True,
-        "sources": ["https://example.test/source"],
-        "required_disclosures": [],
-    }), encoding="utf-8")
+    from scripts.campaign_registry import create_campaign, update_campaign
+    from scripts.project_registry import create_project
+
+    projects_root = tmp_path / "projects"
+    create_project("Gaming", "gaming", root=projects_root)
+    campaign = create_campaign("gaming", "test", "YouTube Shorts", root=projects_root)
+    update_campaign(
+        "gaming", "test",
+        sources=["https://example.test/source"],
+        rights_evidence=["Operator-held permission evidence reference"],
+        credits=["Source attribution recorded"],
+        confirm_permissions=True,
+        confirm_credits=True,
+        root=projects_root,
+    )
     media = tmp_path / "clip.mp4"
     media.write_bytes(b"not rendered; command is mocked")
     captured = {}
@@ -42,7 +52,7 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
         returncode = 0
         stderr = ""
 
-    video = mpt / "storage" / "tasks" / "test-task" / "final-1.mp4"
+    video = mpt_home / "storage" / "tasks" / "test-task" / "final-1.mp4"
     video.parent.mkdir(parents=True)
     video.write_bytes(b"mocked output artifact")
 
@@ -73,6 +83,21 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     assert "--video-source" in captured["command"]
     assert captured["command"][captured["command"].index("--video-source") + 1] == "local"
     assert "--video-materials" in captured["command"]
+
+    artifacts = list_artifacts(campaign)
+    assert len(artifacts) == 1
+    artifact = artifacts[0]
+    assert Path(artifact["path"]).is_relative_to((mpt_home / "storage" / "tasks").resolve())
+    assert Path(artifact["allowed_root"]) == (mpt_home / "storage" / "tasks").resolve()
+    review_args = [
+        "--campaign", str(campaign), "publication-check",
+        "--artifact-id", artifact["artifact_id"], "--sha256", artifact["sha256"],
+    ]
+    assert check_artifact(campaign, artifact["artifact_id"], artifact["sha256"])[0] is False
+    assert artifact_review_main(review_args) == 2
+    approve_artifact(campaign, artifact["artifact_id"], artifact["sha256"], reviewer="test operator")
+    assert check_artifact(campaign, artifact["artifact_id"], artifact["sha256"]) == (True, [])
+    assert artifact_review_main(review_args) == 0
 
 
 def test_analyze_video_uses_isolated_session_and_local_source(tmp_path, monkeypatch):

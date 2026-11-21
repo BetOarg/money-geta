@@ -1,8 +1,25 @@
 {
+  "schema_version": 1,
+  "project_id": "gaming",
+  "campaign_id": "gta-vi-short-form-videos",
+  "profile_id": "gaming",
+  "factual_claims_required": false,
   "campaign_name": "GTA VI short-form videos",
   "platform": "YouTube Shorts",
+  "status": "draft",
+  "sources": [],
+  "source_evidence": [],
+  "required_disclosures": [],
   "permissions_confirmed": false,
   "credits_confirmed": false,
-  "sources": [],
-  "required_disclosures": []
+  "rights_ledger": [],
+  "credit_records": [],
+  "review": {
+    "status": "pending",
+    "approved_artifact_hash": null
+  },
+  "distribution": {
+    "mode": "draft_only",
+    "human_approval_required": true
+  }
 }
