@@ -171,6 +171,7 @@ class MoneyGetaApp:
         self.qc = ttk.Frame(self.tabs, padding=14)
         self.research = ttk.Frame(self.tabs, padding=14)
         self.script = ttk.Frame(self.tabs, padding=14)
+        self.images = ttk.Frame(self.tabs, padding=14)
         self.tabs.add(self.home, text="Analizar y cortar")
         self.tabs.add(self.render, text="Render final · MPT")
         self.tabs.add(self.projects, text="Proyectos")
@@ -179,6 +180,7 @@ class MoneyGetaApp:
         self.tabs.add(self.qc, text="QC y revisión")
         self.tabs.add(self.research, text="Investigación")
         self.tabs.add(self.script, text="Guion")
+        self.tabs.add(self.images, text="Imágenes")
         self._build_home()
         self._build_render()
         self._build_projects()
@@ -187,6 +189,7 @@ class MoneyGetaApp:
         self._build_qc()
         self._build_research()
         self._build_script()
+        self._build_image_search()
         self._set_status("Iniciando diagnóstico automático…")
         self.refresh_projects()
         self.refresh_research_options()
@@ -332,6 +335,111 @@ class MoneyGetaApp:
             args.extend(["--voice", self.voice_var.get().strip()])
         self._run_async(self._command(*args), "Renderizando con MoneyPrinterTurbo…")
 
+
+    def _build_image_search(self):
+        self.images.columnconfigure(1, weight=1)
+        self.images.rowconfigure(5, weight=1)
+        ttk.Label(self.images, text="Openverse · búsqueda de imágenes reutilizables", style="Section.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(self.images, text="Proyecto (ID)").grid(row=1, column=0, sticky="w", pady=5)
+        self.image_project_combo = ttk.Combobox(self.images, textvariable=self.research_project_var, state="readonly")
+        self.image_project_combo.grid(row=1, column=1, sticky="ew", pady=5)
+        self.image_project_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_research_campaigns())
+        ttk.Label(self.images, text="Campaña (ID)").grid(row=2, column=0, sticky="w", pady=5)
+        self.image_campaign_combo = ttk.Combobox(self.images, textvariable=self.research_campaign_var, state="readonly")
+        self.image_campaign_combo.grid(row=2, column=1, sticky="ew", pady=5)
+        query_frame = ttk.Frame(self.images)
+        query_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=6)
+        ttk.Label(query_frame, text="Buscar").pack(side=LEFT)
+        self.image_query_var = tk.StringVar()
+        ttk.Entry(query_frame, textvariable=self.image_query_var, width=42).pack(side=LEFT, padx=6)
+        ttk.Label(query_frame, text="Formato").pack(side=LEFT, padx=(8, 3))
+        self.image_aspect_var = tk.StringVar(value="tall")
+        ttk.Combobox(query_frame, textvariable=self.image_aspect_var, values=("tall", "wide", "square"), state="readonly", width=8).pack(side=LEFT)
+        actions = ttk.Frame(self.images)
+        actions.grid(row=4, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Button(actions, text="Buscar imágenes", command=self.image_search_ui).pack(side=LEFT)
+        ttk.Button(actions, text="Abrir fuente seleccionada", command=self.open_image_source).pack(side=LEFT, padx=6)
+        self.image_status_var = tk.StringVar(value="PENDIENTE · DERECHOS SIN VERIFICAR")
+        ttk.Label(actions, textvariable=self.image_status_var).pack(side=LEFT, padx=8)
+        ttk.Label(self.images, text="Resultados · seleccionar para ver metadatos").grid(row=5, column=0, columnspan=2, sticky="w")
+        result_frame = ttk.Frame(self.images)
+        result_frame.grid(row=6, column=0, columnspan=2, sticky="nsew", pady=4)
+        result_frame.columnconfigure(0, weight=1)
+        result_frame.rowconfigure(0, weight=1)
+        self.image_results_list = tk.Listbox(result_frame, height=8, exportselection=False)
+        self.image_results_list.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(result_frame, orient="vertical", command=self.image_results_list.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.image_results_list.configure(yscrollcommand=scrollbar.set)
+        self.image_results_list.bind("<<ListboxSelect>>", self.show_image_candidate)
+        ttk.Label(self.images, text="Detalle/atribución · revisar licencia en la fuente original").grid(row=7, column=0, columnspan=2, sticky="w")
+        self.image_details = tk.Text(self.images, height=5, wrap="word", font=("Consolas", 9), state="disabled")
+        self.image_details.grid(row=8, column=0, columnspan=2, sticky="nsew", pady=(3, 4))
+        self.images.rowconfigure(8, weight=1)
+        self.image_candidates = []
+
+    def image_search_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        query = self.image_query_var.get().strip()
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        aspect = self.image_aspect_var.get()
+        if not query or len(query) > 200 or not project_id or not campaign_id:
+            messagebox.showwarning("Datos incompletos", "Completa query (máximo 200 caracteres), proyecto y campaña.")
+            return
+        if os.environ.get("MONEY_GETA_IMAGE_SEARCH_ALLOW_REQUESTS", "").lower() != "true":
+            messagebox.showwarning("Búsqueda desactivada", "Revisa las limitaciones de Openverse y activa MONEY_GETA_IMAGE_SEARCH_ALLOW_REQUESTS=true en el entorno local.")
+            return
+        if not messagebox.askyesno("Confirmar búsqueda", f"Se enviará la consulta a Openverse: {query}. La búsqueda no descarga archivos y sus metadatos de licencia no son verificación legal. ¿Continuar?"):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.image_status_var.set("BUSCANDO…")
+        self.image_details.configure(state="normal")
+        self.image_details.delete("1.0", END)
+        self.image_details.insert(END, "Buscando candidatos. Derechos: SIN VERIFICAR.")
+        self.image_details.configure(state="disabled")
+        def worker():
+            try:
+                from scripts.providers.openverse import ImageSearchConfig, search_openverse, save_image_candidates
+                config = ImageSearchConfig.from_env()
+                candidates = search_openverse(query, config=config, aspect_ratio=aspect)
+                saved = save_image_candidates(project_id, campaign_id, candidates)
+                self.events.put(("image_search_done", {"candidates": [item.to_dict() for item in candidates], "saved": saved}))
+            except Exception as exc:
+                self.events.put(("image_search_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def show_image_candidate(self, _event=None):
+        selection = self.image_results_list.curselection()
+        if not selection or selection[0] >= len(self.image_candidates):
+            return
+        item = self.image_candidates[selection[0]]
+        details = {
+            "title": item.get("title"), "creator": item.get("creator"),
+            "license": item.get("license"), "license_version": item.get("license_version"),
+            "license_url": item.get("license_url"), "creator_url": item.get("creator_url"),
+            "source_page_url": item.get("source_page_url"), "attribution": item.get("attribution"),
+            "dimensions": f"{item.get('width')}x{item.get('height')}", "rights_status": "UNVERIFIED",
+        }
+        self.image_details.configure(state="normal")
+        self.image_details.delete("1.0", END)
+        self.image_details.insert(END, json.dumps(details, ensure_ascii=False, indent=2))
+        self.image_details.configure(state="disabled")
+
+    def open_image_source(self):
+        selection = self.image_results_list.curselection()
+        if not selection or selection[0] >= len(self.image_candidates):
+            messagebox.showinfo("Fuente", "Selecciona primero un resultado.")
+            return
+        source_url = self.image_candidates[selection[0]].get("source_page_url")
+        if isinstance(source_url, str) and source_url.startswith(("https://", "http://")):
+            import webbrowser
+            webbrowser.open(source_url)
+        else:
+            messagebox.showerror("Fuente inválida", "No se puede abrir esta URL.")
 
     def _build_script(self):
         self.script.columnconfigure(1, weight=1)
@@ -541,6 +649,7 @@ class MoneyGetaApp:
                     continue
         self.research_project_combo["values"] = projects
         self.script_project_combo["values"] = projects
+        self.image_project_combo["values"] = projects
         if self.research_project_var.get() not in projects:
             self.research_project_var.set(projects[0] if projects else "")
         self.refresh_research_campaigns()
@@ -564,6 +673,7 @@ class MoneyGetaApp:
                     continue
         self.research_campaign_combo["values"] = campaigns
         self.script_campaign_combo["values"] = campaigns
+        self.image_campaign_combo["values"] = campaigns
         if self.research_campaign_var.get() not in campaigns:
             self.research_campaign_var.set(campaigns[0] if campaigns else "")
 
@@ -1044,6 +1154,31 @@ class MoneyGetaApp:
                     self.refresh_campaigns()
                     self.refresh_research_options()
                     self.refresh_qc()
+                elif kind == "image_search_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.image_candidates = value.get("candidates", [])
+                    self.image_results_list.delete(0, END)
+                    for index, item in enumerate(self.image_candidates, start=1):
+                        title = item.get("title", "Untitled")
+                        creator = item.get("creator", "Unknown creator")
+                        self.image_results_list.insert(END, f"{index}. {title} · {creator} · {item.get('license', 'unknown')}")
+                    saved = value.get("saved", {})
+                    self.image_status_var.set(f"{len(self.image_candidates)} candidatos · {saved.get('added', 0)} nuevos · derechos sin verificar")
+                    self.image_details.configure(state="normal")
+                    self.image_details.delete("1.0", END)
+                    self.image_details.insert(END, f"Ledger local: {saved.get('path', '')}\\nSelecciona un resultado para revisar atribución y fuente. Verifica la licencia original antes de usarlo.")
+                    self.image_details.configure(state="disabled")
+                    self._append(f"OPENVERSE IMAGE SEARCH: {len(self.image_candidates)} candidates · {saved.get('path', '')}")
+                elif kind == "image_search_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.image_status_var.set("ROJO · ERROR")
+                    self.image_details.configure(state="normal")
+                    self.image_details.delete("1.0", END)
+                    self.image_details.insert(END, value)
+                    self.image_details.configure(state="disabled")
+                    self._append("IMAGE SEARCH ERROR: " + value)
                 elif kind == "script_done":
                     self.busy = False
                     self.process_btn.configure(state="normal")
