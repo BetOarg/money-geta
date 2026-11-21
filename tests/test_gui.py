@@ -86,3 +86,17 @@ def test_gui_image_download_requires_confirmation_and_network_opt_in():
     assert "askyesno" in source
     assert "allow_network=True" in source
     assert "confirm_download=True" in source
+
+
+def test_desktop_local_media_library_tab_has_search_and_integrity_controls():
+    import inspect
+    from scripts.money_geta_gui import MoneyGetaApp
+    build_source = inspect.getsource(MoneyGetaApp._build_media_library)
+    load_source = inspect.getsource(MoneyGetaApp.media_library_load_ui)
+    verify_source = inspect.getsource(MoneyGetaApp.media_library_verify_ui)
+    poll_source = inspect.getsource(MoneyGetaApp._poll_events)
+    assert "Biblioteca local" in inspect.getsource(MoneyGetaApp.__init__)
+    assert "search_media_assets" in load_source and "list_media_assets" in load_source
+    assert "verify_media_library" in verify_source
+    assert "media_library_verify_done" in poll_source and "media_library_done" in poll_source
+    assert "media_library_items" in build_source and "usable_for_selection" in poll_source
