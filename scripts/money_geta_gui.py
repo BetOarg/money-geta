@@ -483,6 +483,42 @@ class MoneyGetaApp:
                 self.events.put(("media_review_error", f"{type(exc).__name__}: {exc}"))
         threading.Thread(target=worker, daemon=True).start()
 
+    def download_image_candidate_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        selection = self.image_results_list.curselection()
+        if not selection or selection[0] >= len(self.image_candidates):
+            messagebox.showwarning("Selecciona candidato", "Selecciona una imagen.")
+            return
+        candidate = self.image_candidates[selection[0]]
+        if candidate.get("rights_status") != "reviewed_approved":
+            messagebox.showwarning("Derechos pendientes", "Solo se descargan candidatos con revisión vigente.")
+            return
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        if not project_id or not campaign_id:
+            messagebox.showwarning("Datos incompletos", "Selecciona proyecto y campaña.")
+            return
+        prompt = ("Descargar esta imagen localmente?\\n\\n" + str(candidate.get("title")) +
+            "\\nFuente: " + str(candidate.get("source_page_url")) +
+            "\\n\\nSe usará la red y se guardará en media_assets. No se añadirá automáticamente al render.")
+        if not messagebox.askyesno("Confirmar descarga", prompt):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.image_download_btn.configure(state="disabled")
+        self.image_status_var.set("DESCARGANDO…")
+        def worker():
+            try:
+                from scripts.approved_media_download import download_approved_candidate
+                record = download_approved_candidate(project_id, campaign_id, candidate["candidate_id"],
+                    allow_network=True, confirm_download=True)
+                self.events.put(("media_download_done", record))
+            except Exception as exc:
+                self.events.put(("media_download_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
     def show_image_candidate(self, _event=None):
         selection = self.image_results_list.curselection()
         if not selection or selection[0] >= len(self.image_candidates):
