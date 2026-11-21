@@ -202,7 +202,7 @@ def load_timeline(project_id: str, campaign_id: str, script_id: str, sha: str, *
     return payload
 
 
-def timeline_visual_blocks(scenes: list[dict[str, Any]], *, pixels_per_second: float = 24.0, minimum_width: float = 40.0, gap: float = 6.0) -> list[dict[str, float | int]:
+def timeline_visual_blocks(scenes: list[dict[str, Any]], *, pixels_per_second: float = 24.0, minimum_width: float = 40.0, gap: float = 6.0) -> list[dict[str, float | int]]:
     """Calculate proportional scene block positions for a scrollable visual timeline."""
     if not isinstance(scenes, list) or not scenes:
         return []
