@@ -4,7 +4,7 @@ import hashlib, json, re
 from pathlib import Path
 from typing import Any
 from scripts.project_registry import default_projects_root, list_projects, get_project
-from scripts.campaign_registry import list_campaigns, get_campaign
+from scripts.campaign_registry import list_campaigns
 from scripts.media_registry import MediaReviewError, media_review_status, _campaign_file, _read_candidates, _candidate_hash
 from scripts.artifact_registry import _reject_symlink_components
 
