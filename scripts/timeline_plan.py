@@ -177,3 +177,25 @@ def save_timeline(timeline: dict[str, Any], *, root: Path | None = None) -> Path
         except OSError:
             pass
     return target
+
+
+def load_timeline(project_id: str, campaign_id: str, script_id: str, sha: str, *, root: Path | None = None) -> dict[str, Any] | None:
+    """Load a saved timeline for the exact script ID and SHA; return None if absent."""
+    project_id = _identifier(project_id, "project ID")
+    campaign_id = _identifier(campaign_id, "campaign ID")
+    script_id = _identifier(script_id, "script ID")
+    if not isinstance(sha, str) or not _SHA.fullmatch(sha):
+        raise ValueError("A valid script SHA-256 is required.")
+    campaign_dir = (root or default_projects_root()).expanduser().resolve() / project_id / "campaigns" / campaign_id
+    from scripts.artifact_registry import _reject_symlink_components
+    _reject_symlink_components(campaign_dir)
+    if not campaign_dir.is_dir():
+        return None
+    target = campaign_dir / "timelines" / f"timeline_{script_id}_{sha[:12]}.json"
+    _reject_symlink_components(target)
+    if not target.is_file():
+        return None
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    if payload.get("plan_type") != "editable_timeline" or payload.get("script_sha256") != sha:
+        raise ValueError("Saved timeline does not match the approved script hash.")
+    return payload
