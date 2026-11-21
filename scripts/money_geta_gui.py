@@ -1080,7 +1080,15 @@ class MoneyGetaApp:
                     self.script_approve_btn.configure(state="normal" if registered_ok else "disabled")
                     self.script_reject_btn.configure(state="normal" if registered_ok else "disabled")
                     self.script_status_var.set("EDICIÓN REGISTRADA · REVISIÓN PENDIENTE" if registered_ok else "ROJO")
-                    self._append(f"SCRIPT RE-REGISTERED: {value.get('script_id')} · {value.get('sha256')}")
+                    try:
+                        edited_payload = json.loads(Path(self.script_last_report_path).read_text(encoding="utf-8"))
+                        self.script_report.configure(state="normal")
+                        self.script_report.delete("1.0", END)
+                        self.script_report.insert(END, json.dumps(edited_payload, ensure_ascii=False, indent=2))
+                        self.script_report.configure(state="disabled")
+                    except (OSError, ValueError, TypeError) as exc:
+                        self._append(f"EDITED DRAFT DISPLAY WARNING: {exc}")
+                    self._append(f"SCRIPT RE-REGISTERED: {value.get('script_id")} · {value.get('sha256")}")
                 elif kind == "script_reregister_error":
                     self.busy = False
                     self.process_btn.configure(state="normal")
