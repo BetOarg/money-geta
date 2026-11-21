@@ -7,18 +7,19 @@ Estados: **INTEGRADO** = existe implementación verificable en la rama actual; *
 |---|---|---|---|
 | Sesiones y manifiestos locales | session_paths.py, ledger JSON | Trazabilidad de extremo a extremo | PARCIAL |
 | Descarga autorizada | yt-dlp adapter con confirmación | Adaptadores por fuente, permisos y políticas | PARCIAL |
+| Imágenes/assets | Openverse API CLI + GUI, commercial filter, campaign JSONL deduplicated; append-only hash-bound operator rights-review ledger | Controlled local download, asset usage record, alternative providers | PARCIAL |
 | Detección de momentos | GTA VI vendorizado | Motor genérico + plugins por tipo de fuente | PARCIAL |
 | Escenas | PySceneDetect | Servicio común de detección | PARCIAL |
 | Transcripción | faster-whisper | WhisperX opcional para alineación | PARCIAL |
 | Subtítulos | SRT/VTT y burn-in FFmpeg | Edición, estilos, traducción y QC | PARCIAL |
 | Reencuadre/seguimiento | cutter GTA VI; OpenCV en vendor | Motor de tracking genérico | PARCIAL |
 | Edición/render | MPT CLI y FFmpeg | Adaptador común de motores | PARCIAL |
-| Guion/LLM | scripts/providers/llm.py: Chat Completions compatible; opt-in de red | Proveedor intercambiable + prompts por perfil | PARCIAL: adaptador sin orquestación de guiones |
-| Búsqueda web | scripts/providers/search.py: Brave/Tavily, fechas explícitas y antigüedad relativa separadas | Consultas multi-fuente y control de cuotas | PARCIAL |
+| Guion/LLM | Opt-in Chat Completions; evidence-bound draft generation; local GUI; hash-bound registration and human approve/reject/check ledger | Editing/versioning, style calibration, broader editorial review | PARCIAL |
+| Búsqueda web e investigación | Brave/Tavily opt-in; `research` CLI y GUI por campaña, deduplicación URL y score de descubrimiento por consultas/frescura | Trend APIs sociales y métricas reales de plataformas | PARCIAL |
 | Lectura de fuentes | scripts/providers/source_reader.py: HTML/XHTML/texto, DNS/IP seguro, límites y ledger JSONL por campaña | Extracción documental ampliada y captura de versiones | PARCIAL |
 | Investigación y claims | Búsqueda, captura original y ledger de claims con evaluación humana | Corroboración multi-fuente, contradicciones y gate factual conectado a publicación | PARCIAL |
-| Control de calidad | campaign-check básico | QC audiovisual, factual, legal y de plataforma | PLANIFICADO |
-| Aprobación humana | Registro append-only de MP4 final con SHA-256, decisión humana y `publication-check` no publicador | Extender aprobación al guion y a los assets; integrar gate en conectores | PARCIAL |
+| Control de calidad | campaign-check + FFprobe; perceptual QC observacional con FFmpeg; QC de subtítulos; GUI QC tab runs technical/perceptual and optional subtitle checks, writes central report and hash-bound ledger event | QC factual, legal, platform preflight and full production-flow integration | PARCIAL |
+| Aprobación humana | Registro append-only de MP4 final con SHA-256, QC técnico y QC central hash-bound; `publication-check` exige QC técnico + QC central listo + aprobación humana posterior al QC | Extender aprobación al guion y a los assets; integrar gate en conectores | PARCIAL |
 | Analítica | ledger de sesiones | Métricas por plataforma/campaña | PLANIFICADO |
 
 ## Perfiles

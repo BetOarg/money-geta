@@ -119,3 +119,71 @@ def test_nested_artifact_inside_mpt_output_tree_is_allowed(tmp_path: Path) -> No
     item = register_artifact(campaign, video, allowed_root=output)
     assert item["path"] == str(video)
     assert check_artifact(campaign, item["artifact_id"], item["sha256"])[0] is False
+
+
+
+def test_central_qc_report_recorded_and_listed(tmp_path: Path) -> None:
+    from scripts.artifact_registry import record_central_qc, list_artifacts
+    campaign, output = setup_campaign(tmp_path)
+    video = output / "final.mp4"
+    video.write_bytes(b"video")
+    item = register_artifact(campaign, video, allowed_root=output)
+    report = output / "central.json"
+    report.write_text(json.dumps({
+        "schema_version": 1, "artifact": str(video.resolve()), "sha256": item["sha256"],
+        "status": "READY_FOR_HUMAN_REVIEW", "blocking": [], "review": [], "checks": {}
+    }), encoding="utf-8")
+    event = record_central_qc(campaign, item["artifact_id"], item["sha256"], report)
+    assert event["status"] == "READY_FOR_HUMAN_REVIEW"
+    listed = list_artifacts(campaign)[0]
+    assert listed["latest_central_qc"]["sha256"] == item["sha256"]
+
+
+def test_central_qc_rejects_report_with_stale_hash(tmp_path: Path) -> None:
+    from scripts.artifact_registry import record_central_qc
+    campaign, output = setup_campaign(tmp_path)
+    video = output / "final.mp4"
+    video.write_bytes(b"video")
+    item = register_artifact(campaign, video, allowed_root=output)
+    report = output / "central.json"
+    report.write_text(json.dumps({
+        "schema_version": 1, "artifact": str(video.resolve()), "sha256": "0" * 64,
+        "status": "READY_FOR_HUMAN_REVIEW"
+    }), encoding="utf-8")
+    with pytest.raises(ArtifactReviewError, match="hash does not match"):
+        record_central_qc(campaign, item["artifact_id"], item["sha256"], report)
+
+
+def test_publication_check_blocks_without_central_qc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    from scripts.artifact_registry import main, run_artifact_qc
+    campaign, output = setup_campaign(tmp_path)
+    video = output / "final.mp4"
+    video.write_bytes(b"video")
+    item = register_artifact(campaign, video, allowed_root=output)
+    import scripts.quality_control as qc
+    monkeypatch.setattr(qc, "inspect_media", lambda *a, **k: {
+        "passed": True, "problems": [], "probe": {}
+    })
+    run_artifact_qc(campaign, item["artifact_id"], item["sha256"])
+    approve_artifact(campaign, item["artifact_id"], item["sha256"], reviewer="test reviewer")
+    import scripts.campaign_check as campaign_check
+    monkeypatch.setattr(campaign_check, "check_file", lambda *a, **k: (True, []))
+    result = main(["--campaign", str(campaign), "publication-check",
+        "--artifact-id", item["artifact_id"], "--sha256", item["sha256"]])
+    assert result == 2
+    assert "central QC has not been recorded" in capsys.readouterr().out
+
+
+def test_central_qc_ready_status_rejects_findings(tmp_path: Path) -> None:
+    from scripts.artifact_registry import record_central_qc
+    campaign, output = setup_campaign(tmp_path)
+    video = output / "final.mp4"
+    video.write_bytes(b"video")
+    item = register_artifact(campaign, video, allowed_root=output)
+    report = output / "central.json"
+    report.write_text(json.dumps({
+        "schema_version": 1, "artifact": str(video.resolve()), "sha256": item["sha256"],
+        "status": "READY_FOR_HUMAN_REVIEW", "blocking": [], "review": ["Freeze observation"], "checks": {}
+    }), encoding="utf-8")
+    with pytest.raises(ArtifactReviewError, match="cannot contain blocking issues or review findings"):
+        record_central_qc(campaign, item["artifact_id"], item["sha256"], report)

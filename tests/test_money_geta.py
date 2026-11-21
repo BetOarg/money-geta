@@ -19,6 +19,8 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     from argparse import Namespace
     from scripts import money_geta
     from scripts.artifact_registry import approve_artifact, check_artifact, list_artifacts, main as artifact_review_main
+    import scripts.quality_control as quality_control
+    monkeypatch.setattr(quality_control, "inspect_media", lambda *args, **kwargs: {"passed": True, "problems": [], "probe": {}})
 
     mpt = tmp_path / "mpt"
     mpt.mkdir()
@@ -95,6 +97,17 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     ]
     assert check_artifact(campaign, artifact["artifact_id"], artifact["sha256"])[0] is False
     assert artifact_review_main(review_args) == 2
+    central_report = Path(artifact["path"]).parent / "central-qc.json"
+    central_report.write_text(json.dumps({
+        "schema_version": 1, "artifact": artifact["path"], "sha256": artifact["sha256"],
+        "status": "READY_FOR_HUMAN_REVIEW", "blocking": [], "review": [], "checks": {}
+    }), encoding="utf-8")
+    central_args = [
+        "--campaign", str(campaign), "central-qc-record",
+        "--artifact-id", artifact["artifact_id"], "--sha256", artifact["sha256"],
+        "--report", str(central_report),
+    ]
+    assert artifact_review_main(central_args) == 0
     approve_artifact(campaign, artifact["artifact_id"], artifact["sha256"], reviewer="test operator")
     assert check_artifact(campaign, artifact["artifact_id"], artifact["sha256"]) == (True, [])
     assert artifact_review_main(review_args) == 0

@@ -29,6 +29,14 @@ Variables de entorno (no incluir en Git ni en manifiestos de campaña):
 
 Las llamadas pueden generar consumo/cargos según el plan del proveedor. No activar la variable de red hasta revisar la cuenta, el precio, la cuota y los límites.
 
+## Uso CLI
+
+El radar por campaña permite consultas manuales con cuotas controladas. Ver `docs/CAMPAIGN_RESEARCH.md`.
+
+```powershell
+python -m scripts.money_geta research --project mi-proyecto --campaign mi-campana --query "tema" --query "fuente oficial"
+```
+
 ## Uso Python
 
 ```python

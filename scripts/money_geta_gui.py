@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from tkinter import BOTH, END, LEFT, X, filedialog, messagebox, simpledialog, ttk
 import tkinter as tk
@@ -57,14 +58,63 @@ def candidate_rows(job_dir: Path) -> list[dict]:
 
 
 
-def build_campaign_payload(name, platform, sources, disclosures, permissions, credits):
-    payload = {"campaign_name": name.strip(), "platform": platform.strip(),
-        "permissions_confirmed": permissions is True, "credits_confirmed": credits is True,
-        "sources": [x.strip() for x in sources if x.strip()],
-        "required_disclosures": [x.strip() for x in disclosures if x.strip()]}
-    if not payload["campaign_name"] or not payload["platform"] or not payload["sources"] or not permissions or not credits:
-        raise ValueError("Completa nombre, plataforma y fuentes; confirma permisos y créditos.")
+def build_campaign_payload(name, platform, sources, rights_evidence, disclosures, credits,
+                           permissions, credits_confirmed, no_credits_required):
+    clean_sources = [x.strip() for x in sources if x.strip()]
+    evidence = [x.strip() for x in rights_evidence if x.strip()]
+    clean_credits = [x.strip() for x in credits if x.strip()]
+    clean_disclosures = [x.strip() for x in disclosures if x.strip()]
+    if not name.strip() or not platform.strip() or not clean_sources:
+        raise ValueError("Completa nombre, plataforma y al menos una fuente.")
+    if len(clean_sources) != len(evidence):
+        raise ValueError("Debe existir una referencia de evidencia de derechos por cada fuente.")
+    if not permissions or not credits_confirmed:
+        raise ValueError("Confirma permisos y revisión de créditos.")
+    if not clean_credits and not no_credits_required:
+        raise ValueError("Indica créditos o confirma explícitamente que no son requeridos.")
+    if clean_credits and no_credits_required:
+        raise ValueError("No puedes agregar créditos y confirmar que no son requeridos.")
+    now = datetime.now(timezone.utc).isoformat()
+    campaign_id = "render-" + uuid.uuid4().hex
+    project_id = "gui-" + uuid.uuid4().hex
+    payload = {
+        "schema_version": 1, "project_id": project_id, "campaign_id": campaign_id,
+        "profile_id": "viral", "factual_claims_required": False,
+        "campaign_name": name.strip(), "platform": platform.strip(), "status": "draft",
+        "created_at": now, "updated_at": now,
+        "sources": clean_sources,
+        "source_evidence": [{"source": source, "reference": ref} for source, ref in zip(clean_sources, evidence)],
+        "rights_ledger": [{"source": source, "evidence": ref, "status": "operator_attested", "attested_at": now}
+                           for source, ref in zip(clean_sources, evidence)],
+        "required_disclosures": clean_disclosures,
+        "permissions_confirmed": True,
+        "permission_attestation": {"confirmed": True, "actor": "operator", "confirmed_at": now, "source_count": len(clean_sources)},
+        "credit_records": clean_credits,
+        "credits_confirmed": True,
+        "credit_attestation": {"confirmed": True, "actor": "operator", "confirmed_at": now,
+                               "no_credits_required": bool(no_credits_required), "credit_count": len(clean_credits)},
+        "review": {"status": "pending", "approved_artifact_hash": None},
+        "distribution": {"mode": "draft_only", "human_approval_required": True},
+    }
     return payload
+
+
+def save_campaign_manifest(payload, campaigns_root: Path) -> Path:
+    project_id, campaign_id = payload["project_id"], payload["campaign_id"]
+    folder = campaigns_root / project_id / "campaigns" / campaign_id
+    folder.mkdir(parents=True, exist_ok=False)
+    target = folder / "campaign.json"
+    try:
+        with target.open("x", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+    except Exception:
+        try:
+            folder.rmdir()
+        except OSError:
+            pass
+        raise
+    return target
 
 
 def session_video_outputs(session_dir):
@@ -93,6 +143,8 @@ class MoneyGetaApp:
         self.settings = load_settings()
         self.events: queue.Queue = queue.Queue()
         self.current_job: Path | None = None
+        self.qc_records: list[dict] = []
+        self.qc_selected_record: dict | None = None
         self.busy = False
 
         style = ttk.Style()
@@ -116,18 +168,38 @@ class MoneyGetaApp:
         self.projects = ttk.Frame(self.tabs, padding=14)
         self.config = ttk.Frame(self.tabs, padding=14)
         self.history = ttk.Frame(self.tabs, padding=14)
+        self.qc = ttk.Frame(self.tabs, padding=14)
+        self.research = ttk.Frame(self.tabs, padding=14)
+        self.script = ttk.Frame(self.tabs, padding=14)
+        self.images = ttk.Frame(self.tabs, padding=14)
+        self.library = ttk.Frame(self.tabs, padding=14)
+        self.scene_visual = ttk.Frame(self.tabs, padding=14)
         self.tabs.add(self.home, text="Analizar y cortar")
         self.tabs.add(self.render, text="Render final · MPT")
         self.tabs.add(self.projects, text="Proyectos")
         self.tabs.add(self.config, text="Configuración")
         self.tabs.add(self.history, text="Clips y sesiones")
+        self.tabs.add(self.qc, text="QC y revisión")
+        self.tabs.add(self.research, text="Investigación")
+        self.tabs.add(self.script, text="Guion")
+        self.tabs.add(self.images, text="Imágenes")
+        self.tabs.add(self.library, text="Biblioteca local")
+        self.tabs.add(self.scene_visual, text="Plan visual")
         self._build_home()
         self._build_render()
         self._build_projects()
         self._build_config()
         self._build_history()
+        self._build_qc()
+        self._build_research()
+        self._build_script()
+        self._build_image_search()
+        self._build_media_library()
+        self._build_scene_visual_plan()
         self._set_status("Iniciando diagnóstico automático…")
         self.refresh_projects()
+        self.refresh_research_options()
+        self.refresh_qc()
         self.root.after(300, self.run_doctor)
         self.root.after(150, self._poll_events)
 
@@ -183,17 +255,25 @@ class MoneyGetaApp:
         ttk.Button(buttons, text="Agregar…", command=self._add_render_materials).pack(fill=X, pady=2)
         ttk.Button(buttons, text="Quitar", command=self._remove_render_materials).pack(fill=X, pady=2)
         ttk.Label(self.render, text="Fuentes (una por línea)").grid(row=4, column=0, sticky="nw", pady=5)
-        self.sources_text = tk.Text(self.render, height=3)
+        self.sources_text = tk.Text(self.render, height=2)
         self.sources_text.grid(row=4, column=1, columnspan=2, sticky="ew")
-        ttk.Label(self.render, text="Avisos requeridos (uno por línea)").grid(row=5, column=0, sticky="nw", pady=5)
+        ttk.Label(self.render, text="Evidencia de derechos (una referencia por fuente, mismo orden)").grid(row=5, column=0, sticky="nw", pady=5)
+        self.rights_evidence_text = tk.Text(self.render, height=2)
+        self.rights_evidence_text.grid(row=5, column=1, columnspan=2, sticky="ew")
+        ttk.Label(self.render, text="Avisos requeridos (uno por línea)").grid(row=6, column=0, sticky="nw", pady=5)
         self.disclosures_text = tk.Text(self.render, height=2)
-        self.disclosures_text.grid(row=5, column=1, columnspan=2, sticky="ew")
+        self.disclosures_text.grid(row=6, column=1, columnspan=2, sticky="ew")
+        ttk.Label(self.render, text="Créditos/atribuciones (uno por línea)").grid(row=7, column=0, sticky="nw", pady=5)
+        self.credit_records_text = tk.Text(self.render, height=2)
+        self.credit_records_text.grid(row=7, column=1, columnspan=2, sticky="ew")
         self.permissions_var = tk.BooleanVar(value=False)
         self.credits_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(self.render, text="Confirmo permisos de uso de los materiales", variable=self.permissions_var).grid(row=6, column=1, columnspan=2, sticky="w")
-        ttk.Checkbutton(self.render, text="Confirmo que créditos y atribuciones están completos", variable=self.credits_var).grid(row=7, column=1, columnspan=2, sticky="w")
+        self.no_credits_required_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.render, text="Confirmo permisos de uso de los materiales", variable=self.permissions_var).grid(row=8, column=1, columnspan=2, sticky="w")
+        ttk.Checkbutton(self.render, text="Confirmo que créditos y atribuciones están completos", variable=self.credits_var).grid(row=9, column=1, columnspan=2, sticky="w")
+        ttk.Checkbutton(self.render, text="No se requieren créditos", variable=self.no_credits_required_var).grid(row=10, column=1, columnspan=2, sticky="w")
         opts = ttk.Frame(self.render)
-        opts.grid(row=8, column=0, columnspan=3, sticky="ew", pady=8)
+        opts.grid(row=11, column=0, columnspan=3, sticky="ew", pady=8)
         self.aspect_var = tk.StringVar(value="9:16")
         self.count_var = tk.StringVar(value="1")
         self.language_var = tk.StringVar(value="es")
@@ -206,8 +286,8 @@ class MoneyGetaApp:
         ttk.Entry(opts, textvariable=self.language_var, width=8).pack(side=LEFT, padx=5)
         ttk.Label(opts, text="Voz (opcional)").pack(side=LEFT)
         ttk.Entry(opts, textvariable=self.voice_var, width=16).pack(side=LEFT, padx=5)
-        ttk.Button(self.render, text="Validar campaña y renderizar", command=self.start_render).grid(row=9, column=1, sticky="w")
-        ttk.Label(self.render, text="Salida local; la publicación automática permanece deshabilitada.").grid(row=10, column=1, columnspan=2, sticky="w")
+        ttk.Button(self.render, text="Validar campaña y renderizar", command=self.start_render).grid(row=12, column=1, sticky="w")
+        ttk.Label(self.render, text="Salida local; la publicación automática permanece deshabilitada.").grid(row=13, column=1, columnspan=2, sticky="w")
 
     def _add_render_materials(self):
         for raw in filedialog.askopenfilenames(filetypes=[("Videos", "*.mp4 *.mkv *.mov *.webm *.avi"), ("Todos", "*.*")]):
@@ -240,17 +320,17 @@ class MoneyGetaApp:
                 raise ValueError("Cantidad válida: de 1 a 20.")
             campaign = build_campaign_payload(self.campaign_name_var.get(), self.platform_var.get(),
                 self.sources_text.get("1.0", "end").splitlines(),
+                self.rights_evidence_text.get("1.0", "end").splitlines(),
                 self.disclosures_text.get("1.0", "end").splitlines(),
-                self.permissions_var.get(), self.credits_var.get())
+                self.credit_records_text.get("1.0", "end").splitlines(),
+                self.permissions_var.get(), self.credits_var.get(), self.no_credits_required_var.get())
         except ValueError as exc:
             messagebox.showerror("Campaña incompleta", str(exc))
             return
         campaign_dir = APP_DIR / "campaigns"
-        campaign_dir.mkdir(parents=True, exist_ok=True)
-        campaign_path = campaign_dir / ("campaign-" + uuid.uuid4().hex + ".json")
         try:
-            campaign_path.write_text(json.dumps(campaign, ensure_ascii=False, indent=2), encoding="utf-8")
-        except OSError as exc:
+            campaign_path = save_campaign_manifest(campaign, campaign_dir)
+        except (OSError, ValueError) as exc:
             messagebox.showerror("No se pudo guardar la campaña", str(exc))
             return
         args = ["render", "--mpt-dir", self.mpt_var.get(), "--campaign", str(campaign_path),
@@ -261,6 +341,743 @@ class MoneyGetaApp:
             args.extend(["--voice", self.voice_var.get().strip()])
         self._run_async(self._command(*args), "Renderizando con MoneyPrinterTurbo…")
 
+
+    def _build_image_search(self):
+        self.images.columnconfigure(1, weight=1)
+        self.images.rowconfigure(5, weight=1)
+        ttk.Label(self.images, text="Openverse · búsqueda de imágenes reutilizables", style="Section.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(self.images, text="Proyecto (ID)").grid(row=1, column=0, sticky="w", pady=5)
+        self.image_project_combo = ttk.Combobox(self.images, textvariable=self.research_project_var, state="readonly")
+        self.image_project_combo.grid(row=1, column=1, sticky="ew", pady=5)
+        self.image_project_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_research_campaigns())
+        ttk.Label(self.images, text="Campaña (ID)").grid(row=2, column=0, sticky="w", pady=5)
+        self.image_campaign_combo = ttk.Combobox(self.images, textvariable=self.research_campaign_var, state="readonly")
+        self.image_campaign_combo.grid(row=2, column=1, sticky="ew", pady=5)
+        query_frame = ttk.Frame(self.images)
+        query_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=6)
+        ttk.Label(query_frame, text="Buscar").pack(side=LEFT)
+        self.image_query_var = tk.StringVar()
+        ttk.Entry(query_frame, textvariable=self.image_query_var, width=42).pack(side=LEFT, padx=6)
+        ttk.Label(query_frame, text="Formato").pack(side=LEFT, padx=(8, 3))
+        self.image_aspect_var = tk.StringVar(value="tall")
+        ttk.Combobox(query_frame, textvariable=self.image_aspect_var, values=("tall", "wide", "square"), state="readonly", width=8).pack(side=LEFT)
+        actions = ttk.Frame(self.images)
+        actions.grid(row=4, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Button(actions, text="Buscar imágenes", command=self.image_search_ui).pack(side=LEFT)
+        ttk.Button(actions, text="Abrir fuente seleccionada", command=self.open_image_source).pack(side=LEFT, padx=6)
+        self.image_download_btn = ttk.Button(actions, text="Descargar aprobada", command=self.download_image_candidate_ui, state="disabled")
+        self.image_download_btn.pack(side=LEFT, padx=6)
+        self.image_status_var = tk.StringVar(value="PENDIENTE · DERECHOS SIN VERIFICAR")
+        ttk.Label(actions, textvariable=self.image_status_var).pack(side=LEFT, padx=8)
+        ttk.Label(self.images, text="Resultados · seleccionar para ver metadatos").grid(row=5, column=0, columnspan=2, sticky="w")
+        result_frame = ttk.Frame(self.images)
+        result_frame.grid(row=6, column=0, columnspan=2, sticky="nsew", pady=4)
+        result_frame.columnconfigure(0, weight=1)
+        result_frame.rowconfigure(0, weight=1)
+        self.image_results_list = tk.Listbox(result_frame, height=8, exportselection=False)
+        self.image_results_list.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(result_frame, orient="vertical", command=self.image_results_list.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.image_results_list.configure(yscrollcommand=scrollbar.set)
+        self.image_results_list.bind("<<ListboxSelect>>", self.show_image_candidate)
+        review = ttk.LabelFrame(self.images, text="Revisión de derechos · después de abrir la fuente", padding=6)
+        review.grid(row=8, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Label(review, text="Revisor").grid(row=0, column=0, sticky="w")
+        self.media_reviewer_var = tk.StringVar(value="Operador")
+        ttk.Entry(review, textvariable=self.media_reviewer_var, width=18).grid(row=0, column=1, sticky="ew", padx=4)
+        ttk.Label(review, text="Licencia revisada").grid(row=1, column=0, sticky="w")
+        self.media_license_var = tk.StringVar()
+        ttk.Entry(review, textvariable=self.media_license_var, width=34).grid(row=1, column=1, sticky="ew", padx=4)
+        ttk.Label(review, text="Evidencia de derechos").grid(row=2, column=0, sticky="w")
+        self.media_rights_evidence_var = tk.StringVar()
+        ttk.Entry(review, textvariable=self.media_rights_evidence_var, width=50).grid(row=2, column=1, sticky="ew", padx=4)
+        ttk.Label(review, text="Atribución").grid(row=3, column=0, sticky="w")
+        self.media_attribution_var = tk.StringVar()
+        ttk.Entry(review, textvariable=self.media_attribution_var, width=50).grid(row=3, column=1, sticky="ew", padx=4)
+        review_actions = ttk.Frame(review)
+        review_actions.grid(row=4, column=0, columnspan=2, sticky="ew", pady=3)
+        self.media_approve_btn = ttk.Button(review_actions, text="Aprobar derechos", command=lambda: self.review_media_ui("approved"), state="disabled")
+        self.media_approve_btn.pack(side=LEFT)
+        self.media_reject_btn = ttk.Button(review_actions, text="Rechazar", command=lambda: self.review_media_ui("rejected"), state="disabled")
+        self.media_reject_btn.pack(side=LEFT, padx=5)
+        ttk.Label(self.images, text="Detalle/atribución · revisar licencia en la fuente original").grid(row=7, column=0, columnspan=2, sticky="w")
+        self.image_details = tk.Text(self.images, height=5, wrap="word", font=("Consolas", 9), state="disabled")
+        self.image_details.grid(row=9, column=0, columnspan=2, sticky="nsew", pady=(3, 4))
+        self.images.rowconfigure(9, weight=1)
+        self.image_candidates = []
+
+    def image_search_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        query = self.image_query_var.get().strip()
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        aspect = self.image_aspect_var.get()
+        if not query or len(query) > 200 or not project_id or not campaign_id:
+            messagebox.showwarning("Datos incompletos", "Completa query (máximo 200 caracteres), proyecto y campaña.")
+            return
+        if os.environ.get("MONEY_GETA_IMAGE_SEARCH_ALLOW_REQUESTS", "").lower() != "true":
+            messagebox.showwarning("Búsqueda desactivada", "Revisa las limitaciones de Openverse y activa MONEY_GETA_IMAGE_SEARCH_ALLOW_REQUESTS=true en el entorno local.")
+            return
+        if not messagebox.askyesno("Confirmar búsqueda", f"Se enviará la consulta a Openverse: {query}. La búsqueda no descarga archivos y sus metadatos de licencia no son verificación legal. ¿Continuar?"):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.image_status_var.set("BUSCANDO…")
+        self.image_details.configure(state="normal")
+        self.image_details.delete("1.0", END)
+        self.image_details.insert(END, "Buscando candidatos. Derechos: SIN VERIFICAR.")
+        self.image_details.configure(state="disabled")
+        def worker():
+            try:
+                from scripts.providers.openverse import ImageSearchConfig, search_openverse, save_image_candidates
+                from scripts.media_registry import media_review_status
+                config = ImageSearchConfig.from_env()
+                candidates = search_openverse(query, config=config, aspect_ratio=aspect)
+                saved = save_image_candidates(project_id, campaign_id, candidates)
+                candidate_records = []
+                for item in candidates:
+                    record = item.to_dict()
+                    try:
+                        record["rights_status"] = media_review_status(project_id, campaign_id, item.candidate_id)
+                    except Exception:
+                        record["rights_status"] = "review_unavailable"
+                    candidate_records.append(record)
+                self.events.put(("image_search_done", {"candidates": candidate_records, "saved": saved}))
+            except Exception as exc:
+                self.events.put(("image_search_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def review_media_ui(self, decision):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        selection = self.image_results_list.curselection()
+        if not selection or selection[0] >= len(self.image_candidates):
+            messagebox.showwarning("Selecciona candidato", "Selecciona una imagen de los resultados.")
+            return
+        candidate = self.image_candidates[selection[0]]
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        reviewer = self.media_reviewer_var.get().strip()
+        license_text = self.media_license_var.get().strip()
+        rights_evidence = self.media_rights_evidence_var.get().strip()
+        attribution = self.media_attribution_var.get().strip() or candidate.get("attribution", "")
+        if not project_id or not campaign_id or not reviewer:
+            messagebox.showwarning("Datos incompletos", "Selecciona proyecto/campaña e indica el revisor.")
+            return
+        if decision == "approved" and (not license_text or not rights_evidence):
+            messagebox.showwarning("Evidencia requerida", "Para aprobar, completa licencia revisada y evidencia de derechos después de abrir la fuente original.")
+            return
+        if not messagebox.askyesno("Confirmar revisión", f"Decisión: {decision.upper()}\nCandidato: {candidate.get('title')}\nFuente: {candidate.get('source_page_url')}\n\nConfirma que revisaste la página original y sus condiciones. Esta decisión quedará registrada localmente. ¿Continuar?"):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.image_status_var.set("REGISTRANDO REVISIÓN…")
+        def worker():
+            try:
+                from scripts.media_registry import review_media_candidate, check_media_candidate
+                event = review_media_candidate(project_id, campaign_id, candidate["candidate_id"],
+                    decision=decision, reviewer=reviewer, rights_evidence=rights_evidence,
+                    reviewed_license=license_text, attribution=attribution,
+                    source_reviewed=(decision == "approved"), notes="")
+                passed, problems = check_media_candidate(project_id, campaign_id, candidate["candidate_id"])
+                self.events.put(("media_review_done", {"event": event, "passed": passed, "problems": problems,
+                    "candidate_id": candidate["candidate_id"], "decision": decision}))
+            except Exception as exc:
+                self.events.put(("media_review_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def download_image_candidate_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        selection = self.image_results_list.curselection()
+        if not selection or selection[0] >= len(self.image_candidates):
+            messagebox.showwarning("Selecciona candidato", "Selecciona una imagen.")
+            return
+        candidate = self.image_candidates[selection[0]]
+        if candidate.get("rights_status") != "reviewed_approved":
+            messagebox.showwarning("Derechos pendientes", "Solo se descargan candidatos con revisión vigente.")
+            return
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        if not project_id or not campaign_id:
+            messagebox.showwarning("Datos incompletos", "Selecciona proyecto y campaña.")
+            return
+        prompt = ("Descargar esta imagen localmente?\n\n" + str(candidate.get("title")) +
+            "\nFuente: " + str(candidate.get("source_page_url")) +
+            "\n\nSe usará la red y se guardará en media_assets. No se añadirá automáticamente al render.")
+        if not messagebox.askyesno("Confirmar descarga", prompt):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.image_download_btn.configure(state="disabled")
+        self.image_status_var.set("DESCARGANDO…")
+        def worker():
+            try:
+                from scripts.approved_media_download import download_approved_candidate
+                record = download_approved_candidate(project_id, campaign_id, candidate["candidate_id"],
+                    allow_network=True, confirm_download=True)
+                self.events.put(("media_download_done", record))
+            except Exception as exc:
+                self.events.put(("media_download_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def show_image_candidate(self, _event=None):
+        selection = self.image_results_list.curselection()
+        if not selection or selection[0] >= len(self.image_candidates):
+            return
+        item = self.image_candidates[selection[0]]
+        self.image_download_btn.configure(state="normal" if item.get("rights_status") == "reviewed_approved" else "disabled")
+        details = {
+            "title": item.get("title"), "creator": item.get("creator"),
+            "license": item.get("license"), "license_version": item.get("license_version"),
+            "license_url": item.get("license_url"), "creator_url": item.get("creator_url"),
+            "source_page_url": item.get("source_page_url"), "attribution": item.get("attribution"),
+            "dimensions": f"{item.get('width')}x{item.get('height')}", "rights_status": item.get("rights_status", "unverified").upper(),
+        }
+        self.image_details.configure(state="normal")
+        self.image_details.delete("1.0", END)
+        self.image_details.insert(END, json.dumps(details, ensure_ascii=False, indent=2))
+        self.image_details.configure(state="disabled")
+
+    def open_image_source(self):
+        selection = self.image_results_list.curselection()
+        if not selection or selection[0] >= len(self.image_candidates):
+            messagebox.showinfo("Fuente", "Selecciona primero un resultado.")
+            return
+        source_url = self.image_candidates[selection[0]].get("source_page_url")
+        if isinstance(source_url, str) and source_url.startswith(("https://", "http://")):
+            import webbrowser
+            webbrowser.open(source_url)
+        else:
+            messagebox.showerror("Fuente inválida", "No se puede abrir esta URL.")
+
+    def _build_media_library(self):
+        self.library.columnconfigure(0, weight=1)
+        self.library.rowconfigure(3, weight=1)
+        ttk.Label(self.library, text="Biblioteca multimedia local · catálogo de solo lectura", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(self.library, text="Filtros: usa el proyecto y campaña seleccionados en la pestaña Imágenes.").grid(row=1, column=0, sticky="w", pady=(3, 6))
+        toolbar = ttk.Frame(self.library)
+        toolbar.grid(row=2, column=0, sticky="ew", pady=(0, 6))
+        self.library_query_var = tk.StringVar()
+        ttk.Entry(toolbar, textvariable=self.library_query_var, width=32).pack(side=LEFT, padx=(0, 5))
+        ttk.Button(toolbar, text="Buscar", command=lambda: self.media_library_load_ui(search=True)).pack(side=LEFT)
+        ttk.Button(toolbar, text="Actualizar catálogo", command=self.media_library_load_ui).pack(side=LEFT, padx=5)
+        ttk.Button(toolbar, text="Verificar integridad y derechos", command=self.media_library_verify_ui).pack(side=LEFT, padx=5)
+        self.library_status_var = tk.StringVar(value="PENDIENTE · catálogo sin cargar")
+        ttk.Label(toolbar, textvariable=self.library_status_var).pack(side=LEFT, padx=8)
+        table_frame = ttk.Frame(self.library)
+        table_frame.grid(row=3, column=0, sticky="nsew")
+        table_frame.columnconfigure(0, weight=1)
+        table_frame.rowconfigure(0, weight=1)
+        self.library_tree = ttk.Treeview(table_frame, columns=("creator", "campaign", "license", "rights", "integrity"), show="tree headings", height=9)
+        self.library_tree.heading("#0", text="Recurso")
+        self.library_tree.heading("creator", text="Autor")
+        self.library_tree.heading("campaign", text="Campaña")
+        self.library_tree.heading("license", text="Licencia")
+        self.library_tree.heading("rights", text="Derechos")
+        self.library_tree.heading("integrity", text="SHA")
+        self.library_tree.column("#0", width=240)
+        self.library_tree.column("creator", width=150)
+        self.library_tree.column("campaign", width=130)
+        self.library_tree.column("license", width=100)
+        self.library_tree.column("rights", width=140)
+        self.library_tree.column("integrity", width=120)
+        self.library_tree.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.library_tree.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.library_tree.configure(yscrollcommand=scroll.set)
+        self.library_tree.bind("<<TreeviewSelect>>", self.show_media_library_asset)
+        self.library_details = tk.Text(self.library, height=6, wrap="word", font=("Consolas", 9), state="disabled")
+        self.library_details.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        self.media_library_items = []
+
+    def media_library_load_ui(self, search=False):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        project = self.research_project_var.get().strip() or None
+        campaign = self.research_campaign_var.get().strip() or None
+        query = self.library_query_var.get().strip()
+        if search and not query:
+            messagebox.showwarning("Búsqueda vacía", "Introduce términos para buscar en el catálogo.")
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.library_status_var.set("BUSCANDO…" if search else "ACTUALIZANDO…")
+        def worker():
+            try:
+                from scripts.media_library import list_media_assets, search_media_assets
+                items = search_media_assets(query, project_id=project, campaign_id=campaign) if search else list_media_assets(project_id=project, campaign_id=campaign)
+                self.events.put(("media_library_done", items))
+            except Exception as exc:
+                self.events.put(("media_library_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def media_library_verify_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        project = self.research_project_var.get().strip() or None
+        campaign = self.research_campaign_var.get().strip() or None
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.library_status_var.set("VERIFICANDO…")
+        def worker():
+            try:
+                from scripts.media_library import verify_media_library
+                report = verify_media_library(project_id=project, campaign_id=campaign)
+                self.events.put(("media_library_verify_done", report))
+            except Exception as exc:
+                self.events.put(("media_library_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def show_media_library_asset(self, _event=None):
+        selection = self.library_tree.selection()
+        if not selection:
+            return
+        index = int(selection[0])
+        if index < 0 or index >= len(self.media_library_items):
+            return
+        item = self.media_library_items[index]
+        self.library_details.configure(state="normal")
+        self.library_details.delete("1.0", END)
+        self.library_details.insert(END, json.dumps(item, ensure_ascii=False, indent=2))
+        self.library_details.configure(state="disabled")
+
+    def _build_script(self):
+        self.script.columnconfigure(1, weight=1)
+        self.script.rowconfigure(5, weight=1)
+        ttk.Label(self.script, text="Guion draft-only desde fuentes capturadas", style="Section.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(self.script, text="Proyecto (ID)").grid(row=1, column=0, sticky="w", pady=5)
+        self.script_project_combo = ttk.Combobox(self.script, textvariable=self.research_project_var, state="readonly")
+        self.script_project_combo.grid(row=1, column=1, sticky="ew", pady=5)
+        self.script_project_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_research_campaigns())
+        ttk.Label(self.script, text="Campaña (ID)").grid(row=2, column=0, sticky="w", pady=5)
+        self.script_campaign_combo = ttk.Combobox(self.script, textvariable=self.research_campaign_var, state="readonly")
+        self.script_campaign_combo.grid(row=2, column=1, sticky="ew", pady=5)
+        settings = ttk.Frame(self.script)
+        settings.grid(row=3, column=1, sticky="ew", pady=5)
+        ttk.Label(self.script, text="Idioma").grid(row=3, column=0, sticky="w", pady=5)
+        self.script_language_var = tk.StringVar(value="es-AR")
+        ttk.Combobox(settings, textvariable=self.script_language_var, values=("es-AR", "en-US", "pt-BR"), state="readonly", width=10).pack(side=LEFT)
+        ttk.Label(settings, text="Tokens").pack(side=LEFT, padx=(12, 4))
+        self.script_tokens_var = tk.StringVar(value="2000")
+        ttk.Combobox(settings, textvariable=self.script_tokens_var, values=("1000", "1500", "2000", "2500", "3000", "4000"), state="readonly", width=8).pack(side=LEFT)
+        actions = ttk.Frame(self.script)
+        actions.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 8))
+        ttk.Button(actions, text="Actualizar proyectos/campañas", command=self.refresh_research_options).pack(side=LEFT)
+        ttk.Button(actions, text="Generar guion", command=self.generate_script_ui).pack(side=LEFT, padx=8)
+        ttk.Button(actions, text="Abrir draft", command=self.open_script_draft).pack(side=LEFT)
+        self.script_reregister_btn = ttk.Button(actions, text="Re-registrar edición", command=self.reregister_script_ui, state="disabled")
+        self.script_reregister_btn.pack(side=LEFT, padx=5)
+        self.script_status_var = tk.StringVar(value="PENDIENTE")
+        ttk.Label(actions, textvariable=self.script_status_var).pack(side=LEFT, padx=8)
+        review = ttk.Frame(self.script)
+        review.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(4, 8))
+        ttk.Label(review, text="Script ID").pack(side=LEFT)
+        self.script_review_id_var = tk.StringVar(value="")
+        ttk.Entry(review, textvariable=self.script_review_id_var, width=24, state="readonly").pack(side=LEFT, padx=4)
+        ttk.Label(review, text="SHA-256").pack(side=LEFT)
+        self.script_review_sha_var = tk.StringVar(value="")
+        ttk.Entry(review, textvariable=self.script_review_sha_var, width=18, state="readonly").pack(side=LEFT, padx=4)
+        ttk.Label(review, text="Revisor").pack(side=LEFT)
+        self.script_reviewer_var = tk.StringVar(value="Operador")
+        ttk.Entry(review, textvariable=self.script_reviewer_var, width=14).pack(side=LEFT, padx=4)
+        self.script_approve_btn = ttk.Button(review, text="Aprobar", command=lambda: self.review_script_ui("approved"), state="disabled")
+        self.script_approve_btn.pack(side=LEFT, padx=3)
+        self.script_reject_btn = ttk.Button(review, text="Rechazar", command=lambda: self.review_script_ui("rejected"), state="disabled")
+        self.script_reject_btn.pack(side=LEFT, padx=3)
+        ttk.Label(self.script, text="Guion y referencias · requiere revisión humana").grid(row=6, column=0, columnspan=2, sticky="w")
+        self.script_report = tk.Text(self.script, height=12, wrap="word", font=("Consolas", 9), state="disabled")
+        self.script_report.grid(row=7, column=0, columnspan=2, sticky="nsew", pady=(4, 4))
+        self.script.rowconfigure(7, weight=1)
+
+    def generate_script_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        if os.environ.get("MONEY_GETA_LLM_ALLOW_REQUESTS", "").lower() != "true":
+            messagebox.showwarning("LLM desactivado", "No hay permiso de red. Revisa proveedor, modelo, cuota y costos antes de activar MONEY_GETA_LLM_ALLOW_REQUESTS=true.")
+            return
+        if not os.environ.get("MONEY_GETA_LLM_BASE_URL") or not os.environ.get("MONEY_GETA_LLM_MODEL"):
+            messagebox.showwarning("Configuración incompleta", "Configura MONEY_GETA_LLM_BASE_URL y MONEY_GETA_LLM_MODEL en el entorno local.")
+            return
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        language = self.script_language_var.get().strip()
+        try:
+            max_tokens = int(self.script_tokens_var.get())
+        except ValueError:
+            messagebox.showerror("Tokens inválidos", "Selecciona un límite de tokens válido.")
+            return
+        if not project_id or not campaign_id:
+            messagebox.showwarning("Selecciona campaña", "Selecciona proyecto y campaña.")
+            return
+        from scripts.providers.llm import LLMConfig, ProviderConfigurationError
+        try:
+            config = LLMConfig.from_env()
+            config.validate()
+            if not config.allow_requests:
+                raise ProviderConfigurationError("LLM requests are disabled.")
+        except ValueError as exc:
+            messagebox.showerror("Configuración LLM", str(exc))
+            return
+        if not messagebox.askyesno("Confirmar generación", f"Se enviarán fuentes capturadas y claims al modelo {config.model}. Puede consumir cuota o generar cargos. ¿Generar el guion?"):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.script_status_var.set("GENERANDO…")
+        self.script_report.configure(state="normal")
+        self.script_report.delete("1.0", END)
+        self.script_report.insert(END, "Generando draft. No se aprobará ni publicará automáticamente.\\n")
+        self.script_report.configure(state="disabled")
+        def worker():
+            try:
+                from scripts.scriptwriter import draft_campaign_script
+                result = draft_campaign_script(project_id, campaign_id, language=language, config=config, max_tokens=max_tokens)
+                try:
+                    from scripts.script_registry import register_script
+                    registration = register_script(project_id, campaign_id, Path(result["report_path"]))
+                    result["review_registration"] = registration
+                    result["review_registration_error"] = None
+                except Exception as review_exc:
+                    result["review_registration"] = None
+                    result["review_registration_error"] = f"{type(review_exc).__name__}: {review_exc}"
+                self.events.put(("script_done", result))
+            except Exception as exc:
+                self.events.put(("script_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def review_script_ui(self, decision):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        script_id = self.script_review_id_var.get().strip()
+        sha256 = self.script_review_sha_var.get().strip()
+        reviewer = self.script_reviewer_var.get().strip()
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        if not script_id or not sha256 or not project_id or not campaign_id or not reviewer:
+            messagebox.showwarning("Revisión incompleta", "Selecciona proyecto/campaña y registra el draft antes de decidir.")
+            return
+        if not messagebox.askyesno("Confirmar decisión", f"Decisión: {decision.upper()}\nScript: {script_id}\nSHA-256: {sha256}\nRevisor: {reviewer}\n\nEsta decisión quedará registrada localmente. ¿Continuar?"):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.script_status_var.set("REGISTRANDO DECISIÓN…")
+        def worker():
+            try:
+                from scripts.script_registry import approve_script, check_script
+                approve_script(project_id, campaign_id, script_id, sha256, reviewer=reviewer, decision=decision)
+                passed, problems = check_script(project_id, campaign_id, script_id, sha256)
+                self.events.put(("script_review_done", {"decision": decision, "passed": passed, "problems": problems}))
+            except Exception as exc:
+                self.events.put(("script_review_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def reregister_script_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        path_text = getattr(self, "script_last_report_path", "")
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        if not path_text or not Path(path_text).is_file() or not project_id or not campaign_id:
+            messagebox.showwarning("Draft no disponible", "Genera o abre un draft local válido para el proyecto/campaña seleccionados.")
+            return
+        if not messagebox.askyesno("Validar edición", "Se volverá a validar el JSON editado y se registrará su hash. Si el contenido cambió, será una nueva versión con aprobación pendiente. ¿Continuar?"):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.script_status_var.set("VALIDANDO EDICIÓN…")
+        def worker():
+            try:
+                from scripts.script_registry import register_script
+                result = register_script(project_id, campaign_id, Path(path_text))
+                self.events.put(("script_reregister_done", result))
+            except Exception as exc:
+                self.events.put(("script_reregister_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def open_script_draft(self):
+        if not getattr(self, "script_last_report_path", None):
+            messagebox.showinfo("Draft", "Genera primero un guion.")
+            return
+        path = Path(self.script_last_report_path)
+        if path.is_file():
+            os.startfile(str(path))
+        else:
+            messagebox.showerror("Draft no encontrado", str(path))
+
+    def _build_research(self):
+        self.research.columnconfigure(1, weight=1)
+        ttk.Label(self.research, text="Radar de descubrimiento por campaña", style="Section.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(self.research, text="Proyecto (ID)").grid(row=1, column=0, sticky="w", pady=5)
+        self.research_project_var = tk.StringVar()
+        self.research_project_combo = ttk.Combobox(self.research, textvariable=self.research_project_var, state="readonly")
+        self.research_project_combo.grid(row=1, column=1, sticky="ew", pady=5)
+        self.research_project_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_research_campaigns())
+        ttk.Label(self.research, text="Campaña (ID)").grid(row=2, column=0, sticky="w", pady=5)
+        self.research_campaign_var = tk.StringVar()
+        self.research_campaign_combo = ttk.Combobox(self.research, textvariable=self.research_campaign_var, state="readonly")
+        self.research_campaign_combo.grid(row=2, column=1, sticky="ew", pady=5)
+        ttk.Label(self.research, text="Consultas (una por línea; máximo 10)").grid(row=3, column=0, sticky="nw", pady=5)
+        self.research_queries = tk.Text(self.research, height=4, wrap="word")
+        self.research_queries.grid(row=3, column=1, sticky="ew", pady=5)
+        actions = ttk.Frame(self.research)
+        actions.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 8))
+        ttk.Button(actions, text="Actualizar proyectos/campañas", command=self.refresh_research_options).pack(side=LEFT)
+        ttk.Button(actions, text="Buscar señales", command=self.run_campaign_research_ui).pack(side=LEFT, padx=8)
+        self.research_status_var = tk.StringVar(value="PENDIENTE")
+        ttk.Label(actions, textvariable=self.research_status_var).pack(side=LEFT, padx=8)
+        ttk.Label(self.research, text="Informe · el score de descubrimiento no es popularidad ni verificación").grid(row=5, column=0, columnspan=2, sticky="w")
+        self.research_output = tk.Text(self.research, height=10, wrap="word", font=("Consolas", 9), state="disabled")
+        self.research_output.grid(row=6, column=0, columnspan=2, sticky="nsew", pady=(4, 4))
+        self.research.rowconfigure(6, weight=1)
+
+    def refresh_research_options(self):
+        if not hasattr(self, "research_project_combo"):
+            return
+        projects = []
+        if DEFAULT_PROJECTS.is_dir() and not DEFAULT_PROJECTS.is_symlink():
+            for manifest in sorted(DEFAULT_PROJECTS.glob("*/project.json")):
+                if manifest.is_symlink() or not manifest.is_file():
+                    continue
+                try:
+                    data = json.loads(manifest.read_text(encoding="utf-8"))
+                    project_id = data.get("project_id")
+                    if isinstance(project_id, str) and project_id:
+                        projects.append(project_id)
+                except (OSError, ValueError):
+                    continue
+        self.research_project_combo["values"] = projects
+        self.script_project_combo["values"] = projects
+        self.image_project_combo["values"] = projects
+        if self.research_project_var.get() not in projects:
+            self.research_project_var.set(projects[0] if projects else "")
+        self.refresh_research_campaigns()
+
+    def refresh_research_campaigns(self):
+        if not hasattr(self, "research_campaign_combo"):
+            return
+        project_id = self.research_project_var.get().strip()
+        campaigns = []
+        folder = DEFAULT_PROJECTS / project_id / "campaigns" if project_id else None
+        if folder and folder.is_dir() and not folder.is_symlink():
+            for manifest in sorted(folder.glob("*/campaign.json")):
+                if manifest.is_symlink() or not manifest.is_file():
+                    continue
+                try:
+                    data = json.loads(manifest.read_text(encoding="utf-8"))
+                    campaign_id = data.get("campaign_id")
+                    if isinstance(campaign_id, str) and campaign_id:
+                        campaigns.append(campaign_id)
+                except (OSError, ValueError):
+                    continue
+        self.research_campaign_combo["values"] = campaigns
+        self.script_campaign_combo["values"] = campaigns
+        self.image_campaign_combo["values"] = campaigns
+        if self.research_campaign_var.get() not in campaigns:
+            self.research_campaign_var.set(campaigns[0] if campaigns else "")
+
+    def run_campaign_research_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        if os.environ.get("MONEY_GETA_SEARCH_ALLOW_REQUESTS", "").lower() != "true":
+            messagebox.showwarning("Búsqueda desactivada", "La red está desactivada. Revisa proveedor, API key, cuota y costos; solo entonces habilita MONEY_GETA_SEARCH_ALLOW_REQUESTS=true en el entorno.")
+            return
+        if not os.environ.get("MONEY_GETA_SEARCH_PROVIDER") or not os.environ.get("MONEY_GETA_SEARCH_API_KEY"):
+            messagebox.showwarning("Configuración incompleta", "Configura MONEY_GETA_SEARCH_PROVIDER y MONEY_GETA_SEARCH_API_KEY en el entorno local.")
+            return
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        queries = [line.strip() for line in self.research_queries.get("1.0", "end").splitlines() if line.strip()]
+        if not project_id or not campaign_id:
+            messagebox.showwarning("Selecciona campaña", "Selecciona proyecto y campaña.")
+            return
+        if not 1 <= len(queries) <= 10 or any(len(query) > 600 for query in queries):
+            messagebox.showerror("Consultas inválidas", "Introduce entre 1 y 10 consultas de hasta 600 caracteres.")
+            return
+        from scripts.providers.search import SearchConfig, SearchConfigurationError
+        try:
+            config = SearchConfig.from_env()
+            config.validate()
+            if not config.allow_requests:
+                raise SearchConfigurationError("Search requests are disabled.")
+        except ValueError as exc:
+            messagebox.showerror("Configuración de búsqueda", str(exc))
+            return
+        if not messagebox.askyesno("Confirmar búsqueda externa", f"Se realizarán {len(queries)} consultas a {config.provider}. Puede consumir cuota o generar cargos. ¿Continuar?"):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.research_status_var.set("BUSCANDO…")
+        self.research_output.configure(state="normal")
+        self.research_output.delete("1.0", END)
+        self.research_output.insert(END, "Consulta en curso; los leads no son métricas de popularidad ni validación factual/legal.\n")
+        self.research_output.configure(state="disabled")
+        def worker():
+            try:
+                from scripts.campaign_research import run_campaign_research
+                result = run_campaign_research(project_id, campaign_id, queries, config=config)
+                self.events.put(("research_done", result))
+            except Exception as exc:
+                self.events.put(("research_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _build_qc(self):
+        self.qc.columnconfigure(0, weight=1)
+        self.qc.rowconfigure(2, weight=1)
+        ttk.Label(self.qc, text="Control de calidad de artefactos registrados", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        toolbar = ttk.Frame(self.qc)
+        toolbar.grid(row=1, column=0, sticky="ew", pady=(8, 6))
+        ttk.Button(toolbar, text="Actualizar", command=self.refresh_qc).pack(side=LEFT)
+        ttk.Button(toolbar, text="Ejecutar QC completo", command=self.run_selected_qc).pack(side=LEFT, padx=6)
+        ttk.Button(toolbar, text="Abrir video", command=self.open_qc_video).pack(side=LEFT, padx=6)
+        ttk.Button(toolbar, text="Aprobar tras revisión", command=self.approve_qc_video).pack(side=LEFT)
+        self.qc_tree = ttk.Treeview(self.qc, columns=("status", "file", "campaign", "hash"), show="headings", height=8)
+        for col, label in (("status", "QC central"), ("file", "Video"), ("campaign", "Campaña"), ("hash", "SHA-256")):
+            self.qc_tree.heading(col, text=label)
+        self.qc_tree.column("status", width=190, stretch=False)
+        self.qc_tree.column("file", width=260)
+        self.qc_tree.column("campaign", width=170)
+        self.qc_tree.column("hash", width=150, stretch=False)
+        self.qc_tree.grid(row=2, column=0, sticky="nsew")
+        self.qc_tree.bind("<<TreeviewSelect>>", self._qc_selected)
+        subtitle = ttk.Frame(self.qc)
+        subtitle.grid(row=3, column=0, sticky="ew", pady=(8, 4))
+        self.qc_subtitle_var = tk.BooleanVar(value=False)
+        self.qc_subtitle_path_var = tk.StringVar()
+        ttk.Checkbutton(subtitle, text="Incluir QC de subtítulos", variable=self.qc_subtitle_var).pack(side=LEFT)
+        ttk.Entry(subtitle, textvariable=self.qc_subtitle_path_var).pack(side=LEFT, fill=X, expand=True, padx=6)
+        ttk.Button(subtitle, text="Buscar SRT/VTT…", command=self.browse_qc_subtitle).pack(side=LEFT)
+        self.qc_reviewed_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.qc, text="Confirmo que revisé visualmente el video completo antes de aprobar.", variable=self.qc_reviewed_var).grid(row=4, column=0, sticky="w", pady=(4, 6))
+        ttk.Label(self.qc, text="Informe del artefacto seleccionado").grid(row=5, column=0, sticky="w")
+        self.qc_report = tk.Text(self.qc, height=10, wrap="word", font=("Consolas", 9), state="disabled")
+        self.qc_report.grid(row=6, column=0, sticky="nsew", pady=(4, 4))
+        self.qc.rowconfigure(6, weight=1)
+
+    def refresh_qc(self):
+        if not hasattr(self, "qc_tree"):
+            return
+        from scripts.gui_qc import discover_registered_artifacts
+        previous = self.qc_tree.selection()
+        previous_id = previous[0] if previous else None
+        for row in self.qc_tree.get_children():
+            self.qc_tree.delete(row)
+        records, errors = discover_registered_artifacts(APP_DIR / "campaigns", DEFAULT_PROJECTS)
+        self.qc_records = records
+        for error in errors:
+            self._append("QC discovery warning: " + error)
+        for item in records:
+            central = item.get("latest_central_qc", {}).get("status", "PENDIENTE")
+            self.qc_tree.insert("", END, iid=item["artifact_id"], values=(
+                central, Path(item["path"]).name, Path(item["campaign_path"]).parent.name,
+                str(item.get("sha256", ""))[:12]))
+        if previous_id and previous_id in self.qc_tree.get_children():
+            self.qc_tree.selection_set(previous_id)
+        elif records:
+            self.qc_tree.selection_set(records[0]["artifact_id"])
+        self._qc_selected()
+
+    def _qc_selected(self, _event=None):
+        selected = self.qc_tree.selection() if hasattr(self, "qc_tree") else ()
+        self.qc_selected_record = next((item for item in self.qc_records if selected and item["artifact_id"] == selected[0]), None)
+        self.qc_reviewed_var.set(False)
+        if not self.qc_selected_record or not hasattr(self, "qc_report"):
+            return
+        record = self.qc_selected_record
+        details = {
+            "video": record.get("path"), "campaign_manifest": record.get("campaign_path"),
+            "artifact_id": record.get("artifact_id"), "sha256": record.get("sha256"),
+            "latest_technical_qc": record.get("latest_qc"),
+            "latest_central_qc": record.get("latest_central_qc"),
+            "latest_human_decision": record.get("latest_decision"),
+        }
+        self.qc_report.configure(state="normal")
+        self.qc_report.delete("1.0", END)
+        self.qc_report.insert(END, json.dumps(details, ensure_ascii=False, indent=2, default=str))
+        self.qc_report.configure(state="disabled")
+
+    def browse_qc_subtitle(self):
+        path = filedialog.askopenfilename(filetypes=[("Subtitles", "*.srt *.vtt"), ("All files", "*.*")])
+        if path:
+            self.qc_subtitle_path_var.set(path)
+            self.qc_subtitle_var.set(True)
+
+    def run_selected_qc(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        record = self.qc_selected_record
+        if not record:
+            messagebox.showwarning("Selecciona un video", "Elige un artefacto registrado.")
+            return
+        subtitle = None
+        if self.qc_subtitle_var.get():
+            raw = self.qc_subtitle_path_var.get().strip()
+            if not raw or not Path(raw).expanduser().is_file():
+                messagebox.showerror("Subtítulos no encontrados", "Selecciona un archivo SRT o VTT válido.")
+                return
+            subtitle = Path(raw).expanduser().resolve()
+        campaign = Path(record["campaign_path"])
+        artifact_id, sha256 = record["artifact_id"], record["sha256"]
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self._set_status("Ejecutando QC técnico, perceptual y subtítulos…")
+        self._append(f"QC iniciado para {Path(record['path']).name} · hash {sha256[:12]}")
+        def worker():
+            try:
+                from scripts.gui_qc import run_registered_artifact_qc
+                result = run_registered_artifact_qc(campaign, artifact_id, sha256, subtitle_path=subtitle)
+                self.events.put(("qc_done", result))
+            except Exception as exc:
+                self.events.put(("qc_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def open_qc_video(self):
+        record = self.qc_selected_record
+        if not record:
+            messagebox.showinfo("Video", "Selecciona un artefacto registrado.")
+            return
+        path = Path(record["path"])
+        if path.is_file():
+            os.startfile(str(path))
+        else:
+            messagebox.showerror("Video no encontrado", str(path))
+
+    def approve_qc_video(self):
+        record = self.qc_selected_record
+        if not record:
+            messagebox.showwarning("Selecciona un video", "Elige un artefacto registrado.")
+            return
+        latest = record.get("latest_central_qc", {})
+        if latest.get("sha256") != record.get("sha256") or latest.get("status") != "READY_FOR_HUMAN_REVIEW":
+            messagebox.showerror("Aprobación bloqueada", "El QC central debe estar VERDE y coincidir con el hash actual.")
+            return
+        if not self.qc_reviewed_var.get():
+            messagebox.showwarning("Revisión humana requerida", "Abre y revisa el video completo; luego confirma la casilla.")
+            return
+        reviewer = simpledialog.askstring("Revisor", "Nombre o identificador del revisor:", parent=self.root)
+        if not reviewer or not reviewer.strip():
+            return
+        notes = simpledialog.askstring("Notas", "Notas de revisión (opcional):", parent=self.root) or ""
+        if not messagebox.askyesno("Confirmar aprobación", f"¿Aprobar el video revisado con hash {record['sha256'][:12]}?"):
+            return
+        try:
+            from scripts.artifact_registry import approve_artifact
+            approve_artifact(Path(record["campaign_path"]), record["artifact_id"], record["sha256"],
+                            reviewer=reviewer.strip(), decision="approved", notes=notes.strip())
+            self._append(f"APROBADO POR HUMANO: {record['artifact_id']} · {record['sha256']}")
+            self.refresh_qc()
+        except (OSError, ValueError, RuntimeError) as exc:
+            messagebox.showerror("Aprobación fallida", str(exc))
 
     def _build_projects(self):
         self.projects.columnconfigure(0, weight=1)
@@ -332,6 +1149,7 @@ class MoneyGetaApp:
                                 item.get("status", "unknown"), item.get("topic", "")))
                 except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
                     self._append(f"Proyecto ignorado por manifiesto inválido: {exc}")
+        self.refresh_research_options()
 
     def _project_selected(self, _event=None):
         self.refresh_campaigns()
@@ -527,6 +1345,238 @@ class MoneyGetaApp:
         args = ["cut-video", "--job-dir", str(self.current_job), "--pick", number, "--layout", self.layout_var.get(), "--captions", self.caption_var.get(), "--credit", credit, "--gtavi-dir", self.gtavi_var.get()]
         self._run_async(self._command(*args), f"Creando clip #{number}…")
 
+    def _build_scene_visual_plan(self):
+        self.scene_visual.columnconfigure(0, weight=1)
+        self.scene_visual.rowconfigure(4, weight=1)
+        ttk.Label(self.scene_visual, text="Plan visual · asignación manual de recursos a escenas", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        selectors = ttk.Frame(self.scene_visual)
+        selectors.grid(row=1, column=0, sticky="ew", pady=(6, 8))
+        ttk.Label(selectors, text="Proyecto").pack(side=LEFT)
+        self.scene_plan_project_combo = ttk.Combobox(selectors, textvariable=self.research_project_var, state="readonly", width=24)
+        self.scene_plan_project_combo.pack(side=LEFT, padx=(5, 10))
+        self.scene_plan_project_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_research_campaigns())
+        ttk.Label(selectors, text="Campaña").pack(side=LEFT)
+        self.scene_plan_campaign_combo = ttk.Combobox(selectors, textvariable=self.research_campaign_var, state="readonly", width=24)
+        self.scene_plan_campaign_combo.pack(side=LEFT, padx=5)
+        actions = ttk.Frame(self.scene_visual)
+        actions.grid(row=2, column=0, sticky="ew", pady=(0, 6))
+        ttk.Button(actions, text="Actualizar guiones aprobados", command=self.scene_plan_refresh_scripts_ui).pack(side=LEFT)
+        ttk.Button(actions, text="Generar plan de escenas", command=self.scene_plan_build_ui).pack(side=LEFT, padx=5)
+        self.scene_plan_status_var = tk.StringVar(value="PENDIENTE · selecciona proyecto/campaña y actualiza guiones")
+        ttk.Label(actions, textvariable=self.scene_plan_status_var).pack(side=LEFT, padx=8)
+        script_frame = ttk.LabelFrame(self.scene_visual, text="Guiones con aprobación vigente (hash verificado)", padding=6)
+        script_frame.grid(row=3, column=0, sticky="ew", pady=(0, 6))
+        self.scene_plan_script_list = tk.Listbox(script_frame, height=3, exportselection=False)
+        self.scene_plan_script_list.pack(fill=X)
+        content = ttk.Frame(self.scene_visual)
+        content.grid(row=4, column=0, sticky="nsew")
+        content.columnconfigure(0, weight=2)
+        content.columnconfigure(1, weight=1)
+        content.rowconfigure(0, weight=1)
+        scene_frame = ttk.LabelFrame(content, text="Escenas", padding=5)
+        scene_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+        scene_frame.rowconfigure(0, weight=1)
+        scene_frame.columnconfigure(0, weight=1)
+        self.scene_plan_scene_tree = ttk.Treeview(scene_frame, columns=("visual", "selected", "review"), show="tree headings", height=9)
+        self.scene_plan_scene_tree.heading("#0", text="Escena")
+        self.scene_plan_scene_tree.heading("visual", text="Descripción visual")
+        self.scene_plan_scene_tree.heading("selected", text="Recurso elegido")
+        self.scene_plan_scene_tree.heading("review", text="Revisión")
+        self.scene_plan_scene_tree.column("#0", width=80, stretch=False)
+        self.scene_plan_scene_tree.column("visual", width=330)
+        self.scene_plan_scene_tree.column("selected", width=180)
+        self.scene_plan_scene_tree.column("review", width=95, stretch=False)
+        self.scene_plan_scene_tree.grid(row=0, column=0, sticky="nsew")
+        scene_scroll = ttk.Scrollbar(scene_frame, orient="vertical", command=self.scene_plan_scene_tree.yview)
+        scene_scroll.grid(row=0, column=1, sticky="ns")
+        self.scene_plan_scene_tree.configure(yscrollcommand=scene_scroll.set)
+        self.scene_plan_scene_tree.bind("<<TreeviewSelect>>", self._scene_plan_scene_selected)
+        right = ttk.LabelFrame(content, text="Recursos sugeridos para la escena", padding=5)
+        right.grid(row=0, column=1, sticky="nsew")
+        right.rowconfigure(0, weight=1)
+        right.columnconfigure(0, weight=1)
+        self.scene_plan_recommendations_list = tk.Listbox(right, height=9, exportselection=False)
+        self.scene_plan_recommendations_list.grid(row=0, column=0, sticky="nsew")
+        suggestion_scroll = ttk.Scrollbar(right, orient="vertical", command=self.scene_plan_recommendations_list.yview)
+        suggestion_scroll.grid(row=0, column=1, sticky="ns")
+        self.scene_plan_recommendations_list.configure(yscrollcommand=suggestion_scroll.set)
+        self.scene_plan_recommendations_list.bind("<<ListboxSelect>>", self._scene_plan_suggestion_selected)
+        buttons = ttk.Frame(right)
+        buttons.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        ttk.Button(buttons, text="Asignar", command=self.scene_plan_assign_asset_ui).pack(side=LEFT)
+        ttk.Button(buttons, text="Quitar asignación", command=self.scene_plan_clear_asset_ui).pack(side=LEFT, padx=4)
+        ttk.Button(buttons, text="Marcar / desmarcar revisada", command=self.scene_plan_toggle_review_ui).pack(side=LEFT)
+        self.scene_plan_details = tk.Text(right, height=6, wrap="word", state="disabled")
+        self.scene_plan_details.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        bottom = ttk.Frame(self.scene_visual)
+        bottom.grid(row=5, column=0, sticky="ew", pady=(8, 0))
+        ttk.Button(bottom, text="Guardar plan visual local", command=self.scene_plan_save_ui).pack(side=LEFT)
+        ttk.Label(bottom, text="Guardar no habilita render ni publicación. Cada escena requiere revisión humana.").pack(side=LEFT, padx=10)
+
+    def scene_plan_refresh_scripts_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        project = self.research_project_var.get().strip()
+        campaign = self.research_campaign_var.get().strip()
+        if not project or not campaign:
+            messagebox.showwarning("Selección incompleta", "Selecciona proyecto y campaña.")
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.scene_plan_status_var.set("BUSCANDO APROBACIONES VIGENTES…")
+        def worker():
+            try:
+                from scripts.script_registry import check_script, list_scripts
+                registrations = list_scripts(project, campaign)
+                approved = []
+                for row in registrations:
+                    script_id, sha = row.get("script_id"), row.get("sha256")
+                    if script_id and sha:
+                        passed, _problems = check_script(project, campaign, script_id, sha)
+                        if passed:
+                            approved.append(row)
+                self.events.put(("scene_plan_scripts_done", approved))
+            except Exception as exc:
+                self.events.put(("scene_plan_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def scene_plan_build_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        selected = self.scene_plan_script_list.curselection()
+        if not selected or selected[0] >= len(getattr(self, "scene_plan_scripts", [])):
+            messagebox.showwarning("Guion requerido", "Selecciona un guion aprobado de la lista.")
+            return
+        if getattr(self, "scene_visual_plan", None) and any(scene.get("selected_candidate_id") or scene.get("human_reviewed") for scene in self.scene_visual_plan.get("scenes", [])):
+            if not messagebox.askyesno("Reemplazar plan", "Generar otro plan descartará las asignaciones y revisiones aún no guardadas. ¿Continuar?"):
+                return
+        row = self.scene_plan_scripts[selected[0]]
+        project, campaign = self.research_project_var.get().strip(), self.research_campaign_var.get().strip()
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.scene_plan_status_var.set("GENERANDO SUGERENCIAS…")
+        def worker():
+            try:
+                from scripts.scene_asset_matcher import build_scene_asset_plan
+                result = build_scene_asset_plan(project, campaign, row["script_id"], row["sha256"], limit_per_scene=5)
+                self.events.put(("scene_plan_done", result))
+            except Exception as exc:
+                self.events.put(("scene_plan_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _scene_plan_scene_selected(self, _event=None):
+        if not getattr(self, "scene_visual_plan", None):
+            return
+        selection = self.scene_plan_scene_tree.selection()
+        if not selection:
+            return
+        index = int(selection[0])
+        scenes = self.scene_visual_plan.get("scenes", [])
+        if 0 <= index < len(scenes):
+            scene = scenes[index]
+            suggestions = scene.get("suggestions", [])
+            self.scene_plan_recommendations_list.delete(0, END)
+            for item in suggestions:
+                self.scene_plan_recommendations_list.insert(END, f"{item.get('title') or item.get('candidate_id')} · score {item.get('score', 0):.3f}")
+            self.scene_plan_details.configure(state="normal")
+            self.scene_plan_details.delete("1.0", END)
+            current = scene.get("selected_asset") or {}
+            details = {
+                "scene": scene.get("scene_index"),
+                "selected_candidate_id": scene.get("selected_candidate_id") or None,
+                "selected_asset": current,
+                "human_reviewed": scene.get("human_reviewed", False),
+                "suggestions": suggestions,
+            }
+            self.scene_plan_details.insert(END, json.dumps(details, ensure_ascii=False, indent=2))
+            self.scene_plan_details.configure(state="disabled")
+
+    def _scene_plan_suggestion_selected(self, _event=None):
+        if not getattr(self, "scene_visual_plan", None):
+            return
+        scene_sel = self.scene_plan_scene_tree.selection()
+        item_sel = self.scene_plan_recommendations_list.curselection()
+        if not scene_sel or not item_sel:
+            return
+        scene = self.scene_visual_plan["scenes"][int(scene_sel[0])]
+        suggestions = scene.get("suggestions", [])
+        if item_sel[0] >= len(suggestions):
+            return
+        item = suggestions[item_sel[0]]
+        self.scene_plan_details.configure(state="normal")
+        self.scene_plan_details.delete("1.0", END)
+        self.scene_plan_details.insert(END, json.dumps(item, ensure_ascii=False, indent=2))
+        self.scene_plan_details.configure(state="disabled")
+
+    def scene_plan_assign_asset_ui(self):
+        scene_sel = self.scene_plan_scene_tree.selection()
+        item_sel = self.scene_plan_recommendations_list.curselection()
+        if not scene_sel or not item_sel:
+            messagebox.showwarning("Selección requerida", "Selecciona una escena y un recurso sugerido.")
+            return
+        scene_index, item_index = int(scene_sel[0]), item_sel[0]
+        scene = self.scene_visual_plan["scenes"][scene_index]
+        suggestions = scene.get("suggestions", [])
+        if item_index >= len(suggestions):
+            return
+        asset = suggestions[item_index]
+        scene["selected_candidate_id"] = asset.get("candidate_id", "")
+        scene["selected_asset"] = dict(asset)
+        scene["human_reviewed"] = False
+        self.scene_plan_scene_tree.set(str(scene_index), "selected", asset.get("title") or asset.get("candidate_id") or "Recurso")
+        self.scene_plan_scene_tree.set(str(scene_index), "review", "PENDIENTE")
+        self._scene_plan_scene_selected()
+
+    def scene_plan_clear_asset_ui(self):
+        scene_sel = self.scene_plan_scene_tree.selection()
+        if not scene_sel:
+            return
+        index = int(scene_sel[0])
+        scene = self.scene_visual_plan["scenes"][index]
+        scene["selected_candidate_id"] = ""
+        scene["selected_asset"] = None
+        scene["human_reviewed"] = False
+        self.scene_plan_scene_tree.set(str(index), "selected", "—")
+        self.scene_plan_scene_tree.set(str(index), "review", "PENDIENTE")
+        self._scene_plan_scene_selected()
+
+    def scene_plan_toggle_review_ui(self):
+        scene_sel = self.scene_plan_scene_tree.selection()
+        if not scene_sel:
+            messagebox.showwarning("Escena requerida", "Selecciona la escena que vas a revisar.")
+            return
+        index = int(scene_sel[0])
+        scene = self.scene_visual_plan["scenes"][index]
+        scene["human_reviewed"] = not scene.get("human_reviewed", False)
+        self.scene_plan_scene_tree.set(str(index), "review", "REVISADA" if scene["human_reviewed"] else "PENDIENTE")
+        self.scene_plan_status_var.set(f"Revisión humana: {sum(s.get('human_reviewed', False) for s in self.scene_visual_plan['scenes'])}/{len(self.scene_visual_plan['scenes'])} escenas")
+        self._scene_plan_scene_selected()
+
+    def scene_plan_save_ui(self):
+        if not getattr(self, "scene_visual_plan", None):
+            messagebox.showwarning("Plan inexistente", "Genera primero las sugerencias de escenas.")
+            return
+        plan = dict(self.scene_visual_plan)
+        plan["scenes"] = []
+        for scene in self.scene_visual_plan.get("scenes", []):
+            item = dict(scene)
+            item["selected_candidate_id"] = scene.get("selected_candidate_id", "")
+            item["selected_asset"] = scene.get("selected_asset")
+            item["human_reviewed"] = bool(scene.get("human_reviewed", False))
+            plan["scenes"].append(item)
+        try:
+            from scripts.scene_visual_plan_store import save_scene_visual_plan
+            path = save_scene_visual_plan(plan)
+        except (OSError, ValueError, RuntimeError) as exc:
+            messagebox.showerror("No se pudo guardar el plan visual", str(exc))
+            self.scene_plan_status_var.set("ROJO · NO GUARDADO")
+            return
+        reviewed = sum(scene.get("human_reviewed", False) for scene in plan["scenes"])
+        self.scene_plan_status_var.set(f"PLAN GUARDADO · {reviewed}/{len(plan['scenes'])} revisadas · render bloqueado")
+        self._append(f"SCENE VISUAL PLAN SAVED: {path}")
+
     def _poll_events(self):
         try:
             while True:
@@ -541,6 +1591,260 @@ class MoneyGetaApp:
                     self.refresh_jobs()
                     self.refresh_projects()
                     self.refresh_campaigns()
+                    self.refresh_research_options()
+                    self.refresh_qc()
+                elif kind == "image_search_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.image_candidates = value.get("candidates", [])
+                    self.image_download_btn.configure(state="disabled")
+                    self.media_approve_btn.configure(state="normal" if self.image_candidates else "disabled")
+                    self.media_reject_btn.configure(state="normal" if self.image_candidates else "disabled")
+                    self.image_results_list.delete(0, END)
+                    for index, item in enumerate(self.image_candidates, start=1):
+                        title = item.get("title", "Untitled")
+                        creator = item.get("creator", "Unknown creator")
+                        status_label = item.get("rights_status", "unverified").upper()
+                        self.image_results_list.insert(END, f"{index}. {title} · {creator} · {item.get('license', 'unknown')} · {status_label}")
+                    saved = value.get("saved", {})
+                    self.image_status_var.set(f"{len(self.image_candidates)} candidatos · {saved.get('added', 0)} nuevos · derechos sin verificar")
+                    self.image_details.configure(state="normal")
+                    self.image_details.delete("1.0", END)
+                    self.image_details.insert(END, f"Ledger local: {saved.get('path', '')}\\nSelecciona un resultado para revisar atribución y fuente. Verifica la licencia original antes de usarlo.")
+                    self.image_details.configure(state="disabled")
+                    self._append(f"OPENVERSE IMAGE SEARCH: {len(self.image_candidates)} candidates · {saved.get('path', '')}")
+                elif kind == "media_review_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    passed = value.get("passed")
+                    status = "RIGHTS REVIEW PASS · OPERATOR ATTESTATION" if passed else "RIGHTS REVIEW BLOCKED"
+                    self.image_status_var.set(status)
+                    for index, item in enumerate(self.image_candidates):
+                        if item.get("candidate_id") == value.get("candidate_id"):
+                            item["rights_status"] = "reviewed_approved" if passed else ("reviewed_rejected" if value.get("decision") == "rejected" else "review_blocked")
+                            base_title = item.get("title", "Untitled")
+                            creator = item.get("creator", "Unknown creator")
+                            self.image_results_list.delete(index)
+                            license_name = item.get("license", "unknown")
+                            self.image_results_list.insert(index, f"{index + 1}. {base_title} · {creator} · {license_name} · {item['rights_status'].upper()}")
+                    selected = self.image_results_list.curselection()
+                    selected_candidate = self.image_candidates[selected[0]] if selected and selected[0] < len(self.image_candidates) else None
+                    self.image_download_btn.configure(state="normal" if passed and selected_candidate and selected_candidate.get("candidate_id") == value.get("candidate_id") else "disabled")
+                    self._append(f"MEDIA RIGHTS REVIEW: {value.get('decision')} · {'PASS' if passed else 'BLOCKED'} · {value.get('candidate_id')}")
+                    if value.get("problems"):
+                        messagebox.showwarning("Revisión", "; ".join(value["problems"]))
+                elif kind == "media_library_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.media_library_items = value
+                    for row in self.library_tree.get_children():
+                        self.library_tree.delete(row)
+                    for index, item in enumerate(value):
+                        self.library_tree.insert("", "end", iid=str(index), text=item.get("title") or item.get("candidate_id"),
+                            values=(item.get("creator", ""), item.get("campaign_id", ""), item.get("license", ""),
+                            item.get("rights_status", ""), item.get("integrity_status", "")))
+                    usable = sum(item.get("usable_for_selection") is True for item in value)
+                    self.library_status_var.set(f"{len(value)} recursos · {usable} utilizables")
+                    self._append(f"MEDIA LIBRARY: {len(value)} local assets · {usable} current approved and integrity-verified")
+                elif kind == "scene_plan_scripts_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.scene_plan_scripts = value
+                    self.scene_plan_script_list.delete(0, END)
+                    for row in value:
+                        self.scene_plan_script_list.insert(END, f"{row.get('script_id')} · {row.get('sha256', '')[:12]} · {row.get('registered_at', '')}")
+                    self.scene_plan_status_var.set(f"{len(value)} guiones aprobados disponibles")
+                elif kind == "scene_plan_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.scene_visual_plan = value
+                    for row in self.scene_plan_scene_tree.get_children():
+                        self.scene_plan_scene_tree.delete(row)
+                    for index, scene in enumerate(value.get("scenes", [])):
+                        scene["selected_candidate_id"] = ""
+                        scene["selected_asset"] = None
+                        scene["human_reviewed"] = False
+                        visual = str(scene.get("visual", "")).replace("\\n", " ")[:140]
+                        self.scene_plan_scene_tree.insert("", "end", iid=str(index), text=f"Escena {index + 1}", values=(visual, "—", "PENDIENTE"))
+                    count = value.get("scene_count", 0)
+                    self.scene_plan_status_var.set(f"PLAN GENERADO · {count} escenas · sugerencias sin aprobar")
+                    if value.get("scenes"):
+                        first = str(0)
+                        self.scene_plan_scene_tree.selection_set(first)
+                        self.scene_plan_scene_tree.focus(first)
+                        self._scene_plan_scene_selected()
+                    self._append(f"SCENE VISUAL PLAN: {count} scenes · suggestions only · render/publishing disabled")
+                elif kind == "scene_plan_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.scene_plan_status_var.set("ROJO · NO SE PUDO GENERAR EL PLAN")
+                    messagebox.showerror("Plan visual", value)
+                elif kind == "media_library_verify_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    report = value
+                    self.library_status_var.set(f"LIBRARY {report.get('status')} · {report.get('usable_count', 0)} utilizables · {report.get('blocked_count', 0)} bloqueados")
+                    self.library_details.configure(state="normal")
+                    self.library_details.delete("1.0", END)
+                    self.library_details.insert(END, json.dumps(report, ensure_ascii=False, indent=2))
+                    self.library_details.configure(state="disabled")
+                    self._append(f"MEDIA LIBRARY VERIFY: {report.get('status')} · {report.get('asset_count', 0)} assets · {report.get('usable_count', 0)} usable")
+                elif kind == "media_library_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.library_status_var.set("ROJO · ERROR DE CATÁLOGO")
+                    self._append("MEDIA LIBRARY ERROR: " + value)
+                    messagebox.showerror("Biblioteca local", value)
+                elif kind == "media_download_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.image_status_var.set("DESCARGA VERIFICADA · VERDE")
+                    self.image_details.configure(state="normal")
+                    self.image_details.insert(END, "\n\nLocal: " + value.get("local_path", "") + "\nSHA-256: " + value.get("sha256", ""))
+                    self.image_details.configure(state="disabled")
+                    self._append(f"APPROVED IMAGE SAVED: {value.get('local_path')} · SHA256 {value.get('sha256')}")
+                elif kind == "media_download_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.image_status_var.set("ROJO · DESCARGA FALLIDA")
+                    self._append("MEDIA DOWNLOAD ERROR: " + value)
+                    messagebox.showerror("Descarga fallida", value)
+                elif kind == "media_review_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.image_status_var.set("ROJO · ERROR DE REVISIÓN")
+                    self._append("MEDIA REVIEW ERROR: " + value)
+                elif kind == "image_search_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.image_status_var.set("ROJO · ERROR")
+                    self.image_details.configure(state="normal")
+                    self.image_details.delete("1.0", END)
+                    self.image_details.insert(END, value)
+                    self.image_details.configure(state="disabled")
+                    self._append("IMAGE SEARCH ERROR: " + value)
+                elif kind == "script_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.refresh_qc()
+                    self.script_status_var.set("DRAFT · REVISIÓN PENDIENTE")
+                    registration = value.get("review_registration") or {}
+                    self.script_review_id_var.set(registration.get("script_id", ""))
+                    self.script_review_sha_var.set(registration.get("sha256", ""))
+                    registered_ok = bool(registration.get("script_id") and registration.get("sha256"))
+                    self.script_approve_btn.configure(state="normal" if registered_ok else "disabled")
+                    self.script_reject_btn.configure(state="normal" if registered_ok else "disabled")
+                    if value.get("review_registration_error"):
+                        self._append("SCRIPT REGISTRATION BLOCKED: " + value["review_registration_error"])
+                    self.script_last_report_path = value.get("report_path")
+                    self.script_reregister_btn.configure(state="normal" if self.script_last_report_path else "disabled")
+                    self.script_report.configure(state="normal")
+                    self.script_report.delete("1.0", END)
+                    display = {
+                        "status": value.get("status"), "title": value.get("script", {}).get("title"),
+                        "hook": value.get("script", {}).get("hook"), "narration": value.get("script", {}).get("narration"),
+                        "scenes": value.get("script", {}).get("scenes"), "cta": value.get("script", {}).get("cta"),
+                        "source_ids": value.get("source_ids"), "supported_claim_ids": value.get("supported_claim_ids"),
+                        "report_path": value.get("report_path"), "approval": value.get("approval"),
+                    }
+                    self.script_report.insert(END, json.dumps(display, ensure_ascii=False, indent=2, default=str))
+                    self.script_report.configure(state="disabled")
+                    self._append(f"SCRIPT DRAFT: {value.get('script', {}).get('title', '')} · {value.get('report_path', '')}")
+                elif kind == "script_reregister_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.script_review_id_var.set(value.get("script_id", ""))
+                    self.script_review_sha_var.set(value.get("sha256", ""))
+                    registered_ok = bool(value.get("script_id") and value.get("sha256"))
+                    self.script_approve_btn.configure(state="normal" if registered_ok else "disabled")
+                    self.script_reject_btn.configure(state="normal" if registered_ok else "disabled")
+                    self.script_status_var.set("EDICIÓN REGISTRADA · REVISIÓN PENDIENTE" if registered_ok else "ROJO")
+                    try:
+                        edited_payload = json.loads(Path(self.script_last_report_path).read_text(encoding="utf-8"))
+                        self.script_report.configure(state="normal")
+                        self.script_report.delete("1.0", END)
+                        self.script_report.insert(END, json.dumps(edited_payload, ensure_ascii=False, indent=2))
+                        self.script_report.configure(state="disabled")
+                    except (OSError, ValueError, TypeError) as exc:
+                        self._append(f"EDITED DRAFT DISPLAY WARNING: {exc}")
+                    self._append(f"SCRIPT RE-REGISTERED: {value.get('script_id')} · {value.get('sha256')}")
+                elif kind == "script_reregister_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.script_status_var.set("ROJO · EDICIÓN INVALIDA")
+                    self._append("SCRIPT RE-REGISTER ERROR: " + value)
+                elif kind == "script_review_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.script_status_var.set("APROBADO · PASS" if value.get("passed") else "RECHAZADO/BLOQUEADO")
+                    self._append(f"SCRIPT REVIEW: {value.get('decision')} · check={'PASS' if value.get('passed') else 'BLOCKED'}")
+                    if value.get("problems"):
+                        self.script_report.configure(state="normal")
+                        self.script_report.insert(END, "\\n\\nReview check: " + "; ".join(value["problems"]))
+                        self.script_report.configure(state="disabled")
+                elif kind == "script_review_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.script_status_var.set("ROJO · ERROR REVISIÓN")
+                    self._append("SCRIPT REVIEW ERROR: " + value)
+                elif kind == "script_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.script_status_var.set("ROJO")
+                    self.script_report.configure(state="normal")
+                    self.script_report.delete("1.0", END)
+                    self.script_report.insert(END, value)
+                    self.script_report.configure(state="disabled")
+                    self._append("SCRIPT ERROR: " + value)
+                elif kind == "research_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.refresh_qc()
+                    status = value.get("status", "failed").upper()
+                    self.research_status_var.set(status)
+                    display = {
+                        "status": value.get("status"), "queries": value.get("queries"),
+                        "results": value.get("result_count"), "unique_sources": value.get("unique_source_count"),
+                        "report_path": value.get("report_path"), "provider_errors": value.get("provider_errors"),
+                        "top_results": value.get("ranked_results", [])[:10],
+                    }
+                    self.research_output.configure(state="normal")
+                    self.research_output.delete("1.0", END)
+                    self.research_output.insert(END, json.dumps(display, ensure_ascii=False, indent=2, default=str))
+                    self.research_output.configure(state="disabled")
+                    self._append(f"RESEARCH: {status} · {value.get('unique_source_count', 0)} fuentes · {value.get('report_path', '')}")
+                elif kind == "research_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.research_status_var.set("ROJO")
+                    self.research_output.configure(state="normal")
+                    self.research_output.delete("1.0", END)
+                    self.research_output.insert(END, value)
+                    self.research_output.configure(state="disabled")
+                    self._append("RESEARCH ERROR: " + value)
+                elif kind == "qc_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.refresh_qc()
+                    central = value.get("central", {})
+                    qc_status = central.get("status", "FAILED")
+                    label = {"READY_FOR_HUMAN_REVIEW": "VERDE", "REVIEW_REQUIRED": "REVISAR", "FAILED": "ROJO"}.get(qc_status, "ROJO")
+                    self._set_status(f"QC central: {label} · {qc_status}")
+                    self._append(f"QC completado para {value.get('artifact', {}).get('path', '')}: {qc_status}")
+                    self.qc_report.configure(state="normal")
+                    self.qc_report.delete("1.0", END)
+                    self.qc_report.insert(END, json.dumps(value, ensure_ascii=False, indent=2, default=str))
+                    self.qc_report.configure(state="disabled")
+                    self.qc_reviewed_var.set(False)
+                elif kind == "qc_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self._append("QC ERROR: " + value)
+                    self._set_status("QC ROJO · no se pudo completar el control.")
+                    self.qc_report.configure(state="normal")
+                    self.qc_report.delete("1.0", END)
+                    self.qc_report.insert(END, value)
+                    self.qc_report.configure(state="disabled")
                 elif kind == "error":
                     self.busy = False
                     self.process_btn.configure(state="normal")
