@@ -500,9 +500,9 @@ class MoneyGetaApp:
         if not project_id or not campaign_id:
             messagebox.showwarning("Datos incompletos", "Selecciona proyecto y campaña.")
             return
-        prompt = ("Descargar esta imagen localmente?\\n\\n" + str(candidate.get("title")) +
-            "\\nFuente: " + str(candidate.get("source_page_url")) +
-            "\\n\\nSe usará la red y se guardará en media_assets. No se añadirá automáticamente al render.")
+        prompt = ("Descargar esta imagen localmente?\n\n" + str(candidate.get("title")) +
+            "\nFuente: " + str(candidate.get("source_page_url")) +
+            "\n\nSe usará la red y se guardará en media_assets. No se añadirá automáticamente al render.")
         if not messagebox.askyesno("Confirmar descarga", prompt):
             return
         self.busy = True
@@ -1307,7 +1307,7 @@ class MoneyGetaApp:
                     self.process_btn.configure(state="normal")
                     self.image_status_var.set("DESCARGA VERIFICADA · VERDE")
                     self.image_details.configure(state="normal")
-                    self.image_details.insert(END, "\\n\\nLocal: " + value.get("local_path", "") + "\\nSHA-256: " + value.get("sha256", ""))
+                    self.image_details.insert(END, "\n\nLocal: " + value.get("local_path", "") + "\nSHA-256: " + value.get("sha256", ""))
                     self.image_details.configure(state="disabled")
                     self._append(f"APPROVED IMAGE SAVED: {value.get('local_path')} · SHA256 {value.get('sha256')}")
                 elif kind == "media_download_error":
