@@ -68,6 +68,6 @@ def main(argv:list[str]|None=None)->int:
     except (OSError,ValueError) as exc: report={"schema_version":1,"file":str(args.file),"passed":False,"problems":[str(exc)],"scope":"technical media checks only"}
     serialized=json.dumps(report,ensure_ascii=False,indent=2); print(serialized)
     if args.report:
-        destination=args.report.expanduser().resolve(); destination.parent.mkdir(parents=True,exist_ok=True); destination.write_text(serialized+"\\n",encoding="utf-8")
+        destination=args.report.expanduser().resolve(); destination.parent.mkdir(parents=True,exist_ok=True); destination.write_text(serialized+"\n",encoding="utf-8")
     return 0 if report["passed"] else 2
 if __name__=="__main__": sys.exit(main())
