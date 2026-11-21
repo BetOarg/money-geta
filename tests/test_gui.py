@@ -69,3 +69,11 @@ def test_gui_exposes_image_candidate_rights_review_controls():
     assert hasattr(gui.MoneyGetaApp, "review_media_ui")
     assert "media_approve_btn" in gui.MoneyGetaApp._build_image_search.__code__.co_names
     assert "media_rights_evidence_var" in gui.MoneyGetaApp._build_image_search.__code__.co_names
+
+
+def test_gui_download_action_requires_reviewed_candidate_state():
+    import scripts.money_geta_gui as gui
+    assert hasattr(gui.MoneyGetaApp, "download_image_candidate_ui")
+    assert "image_download_btn" in gui.MoneyGetaApp._build_image_search.__code__.co_names
+    assert "reviewed_approved" in gui.MoneyGetaApp.show_image_candidate.__code__.co_consts
+    assert "media_download_done" in gui.MoneyGetaApp._poll_events.__code__.co_consts
