@@ -1244,7 +1244,8 @@ class MoneyGetaApp:
                             base_title = item.get("title", "Untitled")
                             creator = item.get("creator", "Unknown creator")
                             self.image_results_list.delete(index)
-                            self.image_results_list.insert(index, f"{index + 1}. {base_title} · {creator} · {item.get('license', \"unknown\")} · {item['rights_status'].upper()})
+                            license_name = item.get("license", "unknown")
+                            self.image_results_list.insert(index, f"{index + 1}. {base_title} · {creator} · {license_name} · {item['rights_status'].upper()}")
                     self._append(f"MEDIA RIGHTS REVIEW: {value.get('decision')} · {'PASS' if passed else 'BLOCKED'} · {value.get('candidate_id')}")
                     if value.get("problems"):
                         messagebox.showwarning("Revisión", "; ".join(value["problems"]))
