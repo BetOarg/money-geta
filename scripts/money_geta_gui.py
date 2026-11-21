@@ -1698,8 +1698,13 @@ class MoneyGetaApp:
             if subtitle_end:
                 from scripts.timeline_plan import update_subtitle_timing
                 self.timeline_plan = update_subtitle_timing(self.timeline_plan, index, start_seconds=float(self.timeline_subtitle_start_var.get() or 0), end_seconds=float(subtitle_end))
-            elif float(self.timeline_subtitle_start_var.get() or 0) != 0:
-                raise ValueError("Subtitle end is required when start is non-zero.")
+            else:
+                scene_row = dict(self.timeline_plan["scenes"][index])
+                scene_row.pop("subtitle_start_seconds", None)
+                scene_row.pop("subtitle_end_seconds", None)
+                rows = list(self.timeline_plan["scenes"])
+                rows[index] = scene_row
+                self.timeline_plan["scenes"] = rows
         except (ValueError, TypeError) as exc:
             messagebox.showerror("Datos de escena inválidos", str(exc))
             return
