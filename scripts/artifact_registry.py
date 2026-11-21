@@ -101,7 +101,9 @@ def _read_events(ledger: Path) -> list[dict[str, Any]]:
             if event in {"artifact_approved", "artifact_rejected"}:
                 if not isinstance(row.get("reviewer"), str) or not row["reviewer"].strip():
                     raise ArtifactReviewError("Artifact decision is missing its reviewer.")
-            elif not isinstance(row.get("passed"), bool) or not isinstance(row.get("problems"), list):
+            elif (not isinstance(row.get("passed"), bool) or not isinstance(row.get("problems"), list)
+                  or any(not isinstance(item, str) for item in row.get("problems", []))
+                  or not isinstance(row.get("probe", {}), dict)):
                 raise ArtifactReviewError("Artifact QC event is malformed.")
         else:
             raise ArtifactReviewError("Artifact ledger contains an unknown event type.")
@@ -166,6 +168,8 @@ def list_artifacts(campaign_path: str | Path) -> list[dict[str, Any]]:
     for row in rows:
         if row["event_type"] in {"artifact_approved", "artifact_rejected"}:
             registrations[row["artifact_id"]]["latest_decision"] = row
+        elif row["event_type"] == "artifact_qc":
+            registrations[row["artifact_id"]]["latest_qc"] = row
     return list(registrations.values())
 
 
@@ -303,7 +307,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.action == "list":
             for item in list_artifacts(args.campaign):
                 decision = item.get("latest_decision", {}).get("event_type", "pending")
-                print(f'{item["artifact_id"]} | {item["sha256"]} | {decision} | {item["path"]}')
+                qc_status = "qc-passed" if item.get("latest_qc", {}).get("passed") else ("qc-failed" if item.get("latest_qc") else "qc-pending")
+                print(f'{item["artifact_id"]} | {item["sha256"]} | {decision} | {qc_status} | {item["path"]}')
             return 0
         if args.action == "approve":
             result = approve_artifact(args.campaign, args.artifact_id, args.sha256,
