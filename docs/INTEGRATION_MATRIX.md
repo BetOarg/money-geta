@@ -18,7 +18,7 @@ Estados: **INTEGRADO** = existe implementación verificable en la rama actual; *
 | Lectura de fuentes | scripts/providers/source_reader.py: HTML/XHTML/texto, DNS/IP seguro, límites y ledger JSONL por campaña | Extracción documental ampliada y captura de versiones | PARCIAL |
 | Investigación y claims | Búsqueda, captura original y ledger de claims con evaluación humana | Corroboración multi-fuente, contradicciones y gate factual conectado a publicación | PARCIAL |
 | Control de calidad | campaign-check + money-geta-qc/FFprobe; perceptual QC observacional con FFmpeg (blackdetect/freezedetect/silencedetect); QC de subtítulos | QC perceptual, subtítulos, factual, legal y plataforma; integrar observaciones de forma segura en artifact publication-check tras calibración | PARCIAL |
-| Aprobación humana | Registro append-only de MP4 final con SHA-256, decisión humana y `publication-check` no publicador | Extender aprobación al guion y a los assets; integrar gate en conectores | PARCIAL |
+| Aprobación humana | Registro append-only de MP4 final con SHA-256, QC técnico y QC central hash-bound; `publication-check` exige QC técnico + QC central listo + aprobación humana posterior al QC | Extender aprobación al guion y a los assets; integrar gate en conectores | PARCIAL |
 | Analítica | ledger de sesiones | Métricas por plataforma/campaña | PLANIFICADO |
 
 ## Perfiles
