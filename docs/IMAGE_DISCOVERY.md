@@ -4,6 +4,9 @@ Money-Geta provides an optional Openverse image discovery adapter. It searches t
 
 ## Enable and run
 
+The Windows desktop GUI also provides an **Imágenes** tab: select project/campaign, enter a query, choose tall/wide/square, confirm the search, select a result and open its source page for manual review. The GUI uses the same opt-in and writes to the same campaign ledger.
+
+
 Review the API usage limits and the current provider terms first. Enable requests only for the session:
 
 ```powershell
