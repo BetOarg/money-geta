@@ -97,6 +97,33 @@ def move_scene(timeline: dict[str, Any], scene_index: int, offset: int) -> dict[
     return result
 
 
+TRANSITIONS = {"cut", "fade", "dissolve", "slide"}
+
+
+def update_scene_transition(timeline: dict[str, Any], scene_index: int, *, transition: str, duration_seconds: float) -> dict[str, Any]:
+    rows = list(timeline.get("scenes", []))
+    if not 0 <= scene_index < len(rows):
+        raise ValueError("Scene index out of range.")
+    kind = str(transition).strip().lower()
+    duration = float(duration_seconds)
+    scene_duration = float(rows[scene_index].get("duration_seconds", 0))
+    if kind not in TRANSITIONS:
+        raise ValueError("Unsupported transition type.")
+    if not math.isfinite(duration) or duration < 0:
+        raise ValueError("Transition duration must be finite and non-negative.")
+    if kind == "cut" and duration != 0:
+        raise ValueError("Cut transition duration must be zero.")
+    if kind != "cut" and (duration <= 0 or duration > scene_duration):
+        raise ValueError("Transition duration must be positive and fit inside the scene.")
+    row = dict(rows[scene_index])
+    row["transition_in"] = kind
+    row["transition_duration_seconds"] = round(duration, 3)
+    rows[scene_index] = row
+    result = dict(timeline)
+    result["scenes"] = rows
+    return result
+
+
 def update_subtitle_timing(timeline: dict[str, Any], scene_index: int, *, start_seconds: float, end_seconds: float) -> dict[str, Any]:
     rows = list(timeline.get("scenes", []))
     if not 0 <= scene_index < len(rows):
@@ -200,6 +227,14 @@ def save_timeline(timeline: dict[str, Any], *, root: Path | None = None) -> Path
             _, kind = resolve_scene_preview_path(row.get("visual_path", ""))
             if kind != "video":
                 raise ValueError("Media trim controls require a local video asset.")
+        transition = str(row.get("transition_in", "cut")).lower()
+        transition_duration = float(row.get("transition_duration_seconds", 0))
+        if transition not in TRANSITIONS or not math.isfinite(transition_duration) or transition_duration < 0:
+            raise ValueError("Invalid transition metadata.")
+        if transition == "cut" and transition_duration != 0:
+            raise ValueError("Cut transition duration must be zero.")
+        if transition != "cut" and (transition_duration <= 0 or transition_duration > duration):
+            raise ValueError("Transition duration must be positive and fit inside the scene.")
         subtitle_start = float(row.get("subtitle_start_seconds", 0))
         subtitle_end_raw = row.get("subtitle_end_seconds")
         subtitle_end = None if subtitle_end_raw is None else float(subtitle_end_raw)

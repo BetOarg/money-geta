@@ -131,3 +131,18 @@ def test_subtitle_timing_rejects_non_finite_values():
     timeline={"scenes":[{"duration_seconds":5,"subtitle_text":"Hola"}]}
     with pytest.raises(ValueError,match="finite"):
         update_subtitle_timing(timeline,0,start_seconds=float("nan"),end_seconds=2)
+
+
+def test_scene_transition_metadata_and_validation():
+    from scripts.timeline_plan import update_scene_transition
+    timeline={"scenes":[{"duration_seconds":5,"visual_description":"Scene 1"},{"duration_seconds":4,"visual_description":"Scene 2"}]}
+    result=update_scene_transition(timeline,1,transition="fade",duration_seconds=1.25)
+    assert result["scenes"][1]["transition_in"]=="fade"
+    assert result["scenes"][1]["transition_duration_seconds"]==1.25
+    assert result["scenes"][0].get("transition_in") is None
+    with pytest.raises(ValueError,match="zero"):
+        update_scene_transition(timeline,0,transition="cut",duration_seconds=0.2)
+    with pytest.raises(ValueError,match="fit inside"):
+        update_scene_transition(timeline,0,transition="dissolve",duration_seconds=6)
+    with pytest.raises(ValueError,match="Unsupported"):
+        update_scene_transition(timeline,0,transition="wipe",duration_seconds=1)
