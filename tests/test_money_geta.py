@@ -19,6 +19,8 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     from argparse import Namespace
     from scripts import money_geta
     from scripts.artifact_registry import approve_artifact, check_artifact, list_artifacts, main as artifact_review_main
+    import scripts.quality_control as quality_control
+    monkeypatch.setattr(quality_control, "inspect_media", lambda *args, **kwargs: {"passed": True, "problems": [], "probe": {}})
 
     mpt = tmp_path / "mpt"
     mpt.mkdir()
