@@ -359,10 +359,25 @@ class MoneyGetaApp:
         ttk.Button(actions, text="Abrir draft", command=self.open_script_draft).pack(side=LEFT)
         self.script_status_var = tk.StringVar(value="PENDIENTE")
         ttk.Label(actions, textvariable=self.script_status_var).pack(side=LEFT, padx=8)
-        ttk.Label(self.script, text="Guion y referencias · requiere revisión humana").grid(row=5, column=0, columnspan=2, sticky="w")
+        review = ttk.Frame(self.script)
+        review.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(4, 8))
+        ttk.Label(review, text="Script ID").pack(side=LEFT)
+        self.script_review_id_var = tk.StringVar(value="")
+        ttk.Entry(review, textvariable=self.script_review_id_var, width=24, state="readonly").pack(side=LEFT, padx=4)
+        ttk.Label(review, text="SHA-256").pack(side=LEFT)
+        self.script_review_sha_var = tk.StringVar(value="")
+        ttk.Entry(review, textvariable=self.script_review_sha_var, width=18, state="readonly").pack(side=LEFT, padx=4)
+        ttk.Label(review, text="Revisor").pack(side=LEFT)
+        self.script_reviewer_var = tk.StringVar(value="Operador")
+        ttk.Entry(review, textvariable=self.script_reviewer_var, width=14).pack(side=LEFT, padx=4)
+        self.script_approve_btn = ttk.Button(review, text="Aprobar", command=lambda: self.review_script_ui("approved"), state="disabled")
+        self.script_approve_btn.pack(side=LEFT, padx=3)
+        self.script_reject_btn = ttk.Button(review, text="Rechazar", command=lambda: self.review_script_ui("rejected"), state="disabled")
+        self.script_reject_btn.pack(side=LEFT, padx=3)
+        ttk.Label(self.script, text="Guion y referencias · requiere revisión humana").grid(row=6, column=0, columnspan=2, sticky="w")
         self.script_report = tk.Text(self.script, height=12, wrap="word", font=("Consolas", 9), state="disabled")
-        self.script_report.grid(row=6, column=0, columnspan=2, sticky="nsew", pady=(4, 4))
-        self.script.rowconfigure(6, weight=1)
+        self.script_report.grid(row=7, column=0, columnspan=2, sticky="nsew", pady=(4, 4))
+        self.script.rowconfigure(7, weight=1)
 
     def generate_script_ui(self):
         if self.busy:
@@ -407,9 +422,44 @@ class MoneyGetaApp:
             try:
                 from scripts.scriptwriter import draft_campaign_script
                 result = draft_campaign_script(project_id, campaign_id, language=language, config=config, max_tokens=max_tokens)
+                try:
+                    from scripts.script_registry import register_script
+                    registration = register_script(project_id, campaign_id, Path(result["report_path"]))
+                    result["review_registration"] = registration
+                    result["review_registration_error"] = None
+                except Exception as review_exc:
+                    result["review_registration"] = None
+                    result["review_registration_error"] = f"{type(review_exc).__name__}: {review_exc}"
                 self.events.put(("script_done", result))
             except Exception as exc:
                 self.events.put(("script_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def review_script_ui(self, decision):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        script_id = self.script_review_id_var.get().strip()
+        sha256 = self.script_review_sha_var.get().strip()
+        reviewer = self.script_reviewer_var.get().strip()
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        if not script_id or not sha256 or not project_id or not campaign_id or not reviewer:
+            messagebox.showwarning("Revisión incompleta", "Selecciona proyecto/campaña y registra el draft antes de decidir.")
+            return
+        if not messagebox.askyesno("Confirmar decisión", f"Decisión: {decision.upper()}\nScript: {script_id}\nSHA-256: {sha256}\nRevisor: {reviewer}\n\nEsta decisión quedará registrada localmente. ¿Continuar?"):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.script_status_var.set("REGISTRANDO DECISIÓN…")
+        def worker():
+            try:
+                from scripts.script_registry import approve_script, check_script
+                approve_script(project_id, campaign_id, script_id, sha256, reviewer=reviewer, decision=decision)
+                passed, problems = check_script(project_id, campaign_id, script_id, sha256)
+                self.events.put(("script_review_done", {"decision": decision, "passed": passed, "problems": problems}))
+            except Exception as exc:
+                self.events.put(("script_review_error", f"{type(exc).__name__}: {exc}"))
         threading.Thread(target=worker, daemon=True).start()
 
     def open_script_draft(self):
@@ -973,6 +1023,14 @@ class MoneyGetaApp:
                     self.process_btn.configure(state="normal")
                     self.refresh_qc()
                     self.script_status_var.set("DRAFT · REVISIÓN PENDIENTE")
+                    registration = value.get("review_registration") or {}
+                    self.script_review_id_var.set(registration.get("script_id", ""))
+                    self.script_review_sha_var.set(registration.get("sha256", ""))
+                    registered_ok = bool(registration.get("script_id") and registration.get("sha256"))
+                    self.script_approve_btn.configure(state="normal" if registered_ok else "disabled")
+                    self.script_reject_btn.configure(state="normal" if registered_ok else "disabled")
+                    if value.get("review_registration_error"):
+                        self._append("SCRIPT REGISTRATION BLOCKED: " + value["review_registration_error"])
                     self.script_last_report_path = value.get("report_path")
                     self.script_report.configure(state="normal")
                     self.script_report.delete("1.0", END)
@@ -986,6 +1044,20 @@ class MoneyGetaApp:
                     self.script_report.insert(END, json.dumps(display, ensure_ascii=False, indent=2, default=str))
                     self.script_report.configure(state="disabled")
                     self._append(f"SCRIPT DRAFT: {value.get('script', {}).get('title', '')} · {value.get('report_path', '')}")
+                elif kind == "script_review_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.script_status_var.set("APROBADO · PASS" if value.get("passed") else "RECHAZADO/BLOQUEADO")
+                    self._append(f"SCRIPT REVIEW: {value.get('decision')} · check={'PASS' if value.get('passed') else 'BLOCKED'}")
+                    if value.get("problems"):
+                        self.script_report.configure(state="normal")
+                        self.script_report.insert(END, "\\n\\nReview check: " + "; ".join(value["problems"]))
+                        self.script_report.configure(state="disabled")
+                elif kind == "script_review_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.script_status_var.set("ROJO · ERROR REVISIÓN")
+                    self._append("SCRIPT REVIEW ERROR: " + value)
                 elif kind == "script_error":
                     self.busy = False
                     self.process_btn.configure(state="normal")
