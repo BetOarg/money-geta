@@ -359,6 +359,8 @@ class MoneyGetaApp:
         actions.grid(row=4, column=0, columnspan=2, sticky="ew", pady=4)
         ttk.Button(actions, text="Buscar imágenes", command=self.image_search_ui).pack(side=LEFT)
         ttk.Button(actions, text="Abrir fuente seleccionada", command=self.open_image_source).pack(side=LEFT, padx=6)
+        self.image_download_btn = ttk.Button(actions, text="Descargar aprobada", command=self.download_image_candidate_ui, state="disabled")
+        self.image_download_btn.pack(side=LEFT, padx=6)
         self.image_status_var = tk.StringVar(value="PENDIENTE · DERECHOS SIN VERIFICAR")
         ttk.Label(actions, textvariable=self.image_status_var).pack(side=LEFT, padx=8)
         ttk.Label(self.images, text="Resultados · seleccionar para ver metadatos").grid(row=5, column=0, columnspan=2, sticky="w")
@@ -481,11 +483,48 @@ class MoneyGetaApp:
                 self.events.put(("media_review_error", f"{type(exc).__name__}: {exc}"))
         threading.Thread(target=worker, daemon=True).start()
 
+    def download_image_candidate_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        selection = self.image_results_list.curselection()
+        if not selection or selection[0] >= len(self.image_candidates):
+            messagebox.showwarning("Selecciona candidato", "Selecciona una imagen.")
+            return
+        candidate = self.image_candidates[selection[0]]
+        if candidate.get("rights_status") != "reviewed_approved":
+            messagebox.showwarning("Derechos pendientes", "Solo se descargan candidatos con revisión vigente.")
+            return
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        if not project_id or not campaign_id:
+            messagebox.showwarning("Datos incompletos", "Selecciona proyecto y campaña.")
+            return
+        prompt = ("Descargar esta imagen localmente?\n\n" + str(candidate.get("title")) +
+            "\nFuente: " + str(candidate.get("source_page_url")) +
+            "\n\nSe usará la red y se guardará en media_assets. No se añadirá automáticamente al render.")
+        if not messagebox.askyesno("Confirmar descarga", prompt):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.image_download_btn.configure(state="disabled")
+        self.image_status_var.set("DESCARGANDO…")
+        def worker():
+            try:
+                from scripts.approved_media_download import download_approved_candidate
+                record = download_approved_candidate(project_id, campaign_id, candidate["candidate_id"],
+                    allow_network=True, confirm_download=True)
+                self.events.put(("media_download_done", record))
+            except Exception as exc:
+                self.events.put(("media_download_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
     def show_image_candidate(self, _event=None):
         selection = self.image_results_list.curselection()
         if not selection or selection[0] >= len(self.image_candidates):
             return
         item = self.image_candidates[selection[0]]
+        self.image_download_btn.configure(state="normal" if item.get("rights_status") == "reviewed_approved" else "disabled")
         details = {
             "title": item.get("title"), "creator": item.get("creator"),
             "license": item.get("license"), "license_version": item.get("license_version"),
@@ -1227,6 +1266,7 @@ class MoneyGetaApp:
                     self.busy = False
                     self.process_btn.configure(state="normal")
                     self.image_candidates = value.get("candidates", [])
+                    self.image_download_btn.configure(state="disabled")
                     self.media_approve_btn.configure(state="normal" if self.image_candidates else "disabled")
                     self.media_reject_btn.configure(state="normal" if self.image_candidates else "disabled")
                     self.image_results_list.delete(0, END)
@@ -1256,9 +1296,26 @@ class MoneyGetaApp:
                             self.image_results_list.delete(index)
                             license_name = item.get("license", "unknown")
                             self.image_results_list.insert(index, f"{index + 1}. {base_title} · {creator} · {license_name} · {item['rights_status'].upper()}")
+                    selected = self.image_results_list.curselection()
+                    selected_candidate = self.image_candidates[selected[0]] if selected and selected[0] < len(self.image_candidates) else None
+                    self.image_download_btn.configure(state="normal" if passed and selected_candidate and selected_candidate.get("candidate_id") == value.get("candidate_id") else "disabled")
                     self._append(f"MEDIA RIGHTS REVIEW: {value.get('decision')} · {'PASS' if passed else 'BLOCKED'} · {value.get('candidate_id')}")
                     if value.get("problems"):
                         messagebox.showwarning("Revisión", "; ".join(value["problems"]))
+                elif kind == "media_download_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.image_status_var.set("DESCARGA VERIFICADA · VERDE")
+                    self.image_details.configure(state="normal")
+                    self.image_details.insert(END, "\n\nLocal: " + value.get("local_path", "") + "\nSHA-256: " + value.get("sha256", ""))
+                    self.image_details.configure(state="disabled")
+                    self._append(f"APPROVED IMAGE SAVED: {value.get('local_path')} · SHA256 {value.get('sha256')}")
+                elif kind == "media_download_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.image_status_var.set("ROJO · DESCARGA FALLIDA")
+                    self._append("MEDIA DOWNLOAD ERROR: " + value)
+                    messagebox.showerror("Descarga fallida", value)
                 elif kind == "media_review_error":
                     self.busy = False
                     self.process_btn.configure(state="normal")

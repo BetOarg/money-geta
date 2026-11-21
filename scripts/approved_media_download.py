@@ -1,10 +1,9 @@
 """Safe, explicit local downloads of operator-approved Openverse image candidates."""
 from __future__ import annotations
-import hashlib, ipaddress, json, os, re, socket, tempfile
+import hashlib, http.client, ipaddress, json, os, re, socket, ssl, tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlsplit, parse_qsl
-from urllib.request import Request, HTTPRedirectHandler, build_opener
+from urllib.parse import urlsplit, parse_qsl, urljoin
 from scripts.media_registry import _campaign_file, _read_candidates, check_media_candidate, _candidate_hash
 from scripts.artifact_registry import _reject_symlink_components
 
@@ -20,36 +19,77 @@ class MediaDownloadError(ValueError):
 def _resolve_public(host, port=443, resolver=socket.getaddrinfo):
     try: records=resolver(host,port,type=socket.SOCK_STREAM)
     except OSError as exc: raise MediaDownloadError(f"DNS resolution failed: {host}") from exc
-    addresses={r[4][0] for r in records}
+    addresses=sorted({r[4][0] for r in records})
     if not addresses: raise MediaDownloadError("Host has no address records.")
     for raw in addresses:
         try: ip=ipaddress.ip_address(raw.split("%",1)[0])
         except ValueError: raise MediaDownloadError("DNS returned an invalid address.") from None
         if not ip.is_global: raise MediaDownloadError("Private, reserved or non-global network destinations are blocked.")
+    return addresses
 
 def _validate_url(url, resolver=socket.getaddrinfo):
     if not isinstance(url,str) or len(url)>4096: raise MediaDownloadError("Image URL is invalid or too long.")
-    parsed=urlsplit(url)
+    try: parsed=urlsplit(url); port=parsed.port
+    except ValueError: raise MediaDownloadError("Malformed image URL.") from None
     if parsed.scheme.lower()!="https" or not parsed.hostname or parsed.username or parsed.password:
         raise MediaDownloadError("Only credential-free HTTPS URLs are permitted.")
-    if parsed.port not in (None,443): raise MediaDownloadError("Nonstandard HTTPS ports are blocked.")
+    if port not in (None,443): raise MediaDownloadError("Nonstandard HTTPS ports are blocked.")
     if any(k.lower() in SENSITIVE_QUERY_KEYS for k,_ in parse_qsl(parsed.query,keep_blank_values=True)):
         raise MediaDownloadError("URL contains a sensitive query parameter; refusing to persist it.")
-    _resolve_public(parsed.hostname,parsed.port or 443,resolver=resolver)
+    _resolve_public(parsed.hostname,port or 443,resolver=resolver)
     return url
 
-class _SafeRedirect(HTTPRedirectHandler):
-    def __init__(self,resolver=socket.getaddrinfo): super().__init__(); self.resolver=resolver; self.count=0
-    def redirect_request(self,req,fp,code,msg,headers,newurl):
-        self.count+=1
-        if self.count>MAX_REDIRECTS: raise MediaDownloadError("Too many redirects.")
-        _validate_url(newurl,resolver=self.resolver)
-        if urlsplit(newurl).scheme.lower()!="https": raise MediaDownloadError("HTTPS downgrade redirects are blocked.")
-        return super().redirect_request(req,fp,code,msg,headers,newurl)
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, host, pinned_ip, timeout, context):
+        super().__init__(host, timeout=timeout, context=context)
+        self.pinned_ip=pinned_ip
+    def connect(self):
+        raw=socket.create_connection((self.pinned_ip,self.port),timeout=self.timeout)
+        self.sock=self._context.wrap_socket(raw,server_hostname=self.host)
+
+class _ResponseAdapter:
+    def __init__(self,connection,response): self.connection=connection; self.response=response; self.headers=response.headers
+    def read(self,size=-1): return self.response.read(size)
+    def close(self):
+        try: self.response.close()
+        finally: self.connection.close()
 
 def _open_checked(url,*,resolver=socket.getaddrinfo,timeout=TIMEOUT):
-    opener=build_opener(_SafeRedirect(resolver=resolver))
-    return opener.open(Request(_validate_url(url,resolver=resolver),headers={"User-Agent":"Money-Geta/0.1","Accept":"image/*"}),timeout=timeout)
+    current=url
+    for redirect_count in range(MAX_REDIRECTS+1):
+        _validate_url(current,resolver=resolver)
+        parsed=urlsplit(current)
+        ips=_resolve_public(parsed.hostname,parsed.port or 443,resolver=resolver)
+        context=ssl.create_default_context()
+        path=parsed.path or "/"
+        if parsed.query: path+="?"+parsed.query
+        last_error=None
+        response=None
+        connection=None
+        for ip in ips:
+            connection=_PinnedHTTPSConnection(parsed.hostname,ip,timeout,context)
+            try:
+                connection.request("GET",path,headers={"User-Agent":"Money-Geta/0.1","Accept":"image/*"})
+                response=connection.getresponse()
+                break
+            except OSError as exc:
+                connection.close()
+                last_error=exc
+        if response is None:
+            raise MediaDownloadError("Could not connect to any validated public address.") from last_error
+        if response.status in {301,302,303,307,308}:
+            location=response.getheader("Location")
+            response.close(); connection.close()
+            if not location: raise MediaDownloadError("Redirect response has no Location header.")
+            if redirect_count>=MAX_REDIRECTS: raise MediaDownloadError("Too many redirects.")
+            current=urljoin(current,location)
+            _validate_url(current,resolver=resolver)
+            continue
+        if response.status<200 or response.status>=300:
+            response.close(); connection.close()
+            raise MediaDownloadError(f"Image server returned HTTP {response.status}.")
+        return _ResponseAdapter(connection,response)
+    raise MediaDownloadError("Too many redirects.")
 
 def _image_signature(data):
     checks=[(b"\xff\xd8\xff","image/jpeg",".jpg"),(b"\x89PNG\r\n\x1a\n","image/png",".png"),
