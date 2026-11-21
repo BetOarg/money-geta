@@ -1761,8 +1761,15 @@ class MoneyGetaApp:
         def worker():
             try:
                 from scripts.timeline_composer import compose_preview
+                from scripts.timeline_preview_qc import review_preview
                 result = compose_preview(snapshot, Path(destination))
-                self.events.put(("timeline_preview_done", str(result)))
+                report_path = Path(destination).with_name(Path(destination).stem + "-preview-qc.json")
+                suffix = 1
+                while report_path.exists():
+                    report_path = Path(destination).with_name(Path(destination).stem + f"-preview-qc-{suffix}.json")
+                    suffix += 1
+                qc = review_preview(result, snapshot, report_path=report_path)
+                self.events.put(("timeline_preview_done", {"path": str(result), "qc": qc}))
             except Exception as exc:
                 self.events.put(("timeline_preview_error", f"{type(exc).__name__}: {exc}"))
         threading.Thread(target=worker, daemon=True).start()
@@ -2057,9 +2064,12 @@ class MoneyGetaApp:
                 elif kind == "timeline_preview_done":
                     self.timeline_preview_busy = False
                     self.timeline_preview_button.configure(state="normal")
-                    self.timeline_status_var.set("PREVIEW GENERADA · VERDE · no autorizada para publicación")
-                    self._append("TIMELINE PREVIEW: VERDE · " + value)
-                    messagebox.showinfo("Preview completada", "Preview MP4 local generado:\n" + value)
+                    preview_path = value.get("path", "")
+                    qc = value.get("qc", {})
+                    qc_status = qc.get("status", "REVIEW_REQUIRED")
+                    self.timeline_status_var.set(f"PREVIEW VERDE · QC {qc_status} · no autorizada para publicación")
+                    self._append(f"TIMELINE PREVIEW: VERDE · {preview_path} · QC {qc_status} · {qc.get('report_path', '')}")
+                    messagebox.showinfo("Preview completada", f"Preview MP4 local:\n{preview_path}\n\nQC técnico: {qc_status}\nReporte: {qc.get('report_path', '')}\n\nLas observaciones perceptuales no son defectos automáticos.")
                 elif kind == "timeline_preview_error":
                     self.timeline_preview_busy = False
                     self.timeline_preview_button.configure(state="normal")
