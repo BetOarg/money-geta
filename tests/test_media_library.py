@@ -104,3 +104,22 @@ def test_cli_asset_library_list_search_verify(tmp_path, monkeypatch, capsys):
 def test_empty_search_rejected():
     with pytest.raises(ValueError, match="must not be empty"):
         search_media_assets("  ")
+
+
+def test_empty_library_is_not_reported_as_pass(tmp_path):
+    root = tmp_path / "projects"
+    create_project("Empty library", "viral", root=root)
+    create_campaign("empty-library", "Campaign", "YouTube Shorts", root=root)
+    assert verify_media_library(project_id="empty-library", root=root)["status"] == "EMPTY"
+
+
+def test_malformed_candidate_id_in_download_ledger_is_rejected(tmp_path):
+    from scripts.media_library import MediaLibraryError, _read_download_ledger
+    campaign_file = tmp_path / "campaign" / "campaign.json"
+    campaign_file.parent.mkdir()
+    campaign_file.write_text("{}")
+    ledger = campaign_file.parent / "media_download_ledger.jsonl"
+    ledger.write_text(json.dumps({"schema_version": 1, "event_type": "approved_media_download",
+        "candidate_id": 123, "candidate_sha256": "a" * 64, "sha256": "b" * 64}) + "\n")
+    with pytest.raises(MediaLibraryError, match="unsafe candidate ID"):
+        _read_download_ledger(campaign_file)
