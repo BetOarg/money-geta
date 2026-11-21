@@ -1598,7 +1598,8 @@ class MoneyGetaApp:
             return
         path = filedialog.askopenfilename(parent=self.root, title="Seleccionar archivo de audio local", filetypes=[("Audio", "*.wav *.mp3 *.ogg *.m4a *.aac *.flac"), ("Todos", "*.*")])
         if not path:
-            path = ""
+            messagebox.showinfo("Pista de audio", "La fuente local es necesaria para agregar una pista.")
+            return
         start = simpledialog.askfloat("Pista de audio", "Inicio en segundos:", parent=self.root, minvalue=0)
         if start is None:
             return
@@ -1616,6 +1617,9 @@ class MoneyGetaApp:
             return
         try:
             project_root = Path(self.timeline_plan.get("project_root", "")) if self.timeline_plan.get("project_root") else None
+            if project_root is None:
+                messagebox.showerror("Pista de audio", "No se pudo determinar la carpeta raíz del proyecto; no se acepta audio fuera de un proyecto.")
+                return
             draft = {"name": name, "source_path": path, "start_seconds": start, "duration_seconds": duration,
                      "volume": volume, "fade_in_seconds": fade_in, "fade_out_seconds": fade_out}
             self.timeline_plan = update_audio_track(self.timeline_plan, len(self.timeline_plan.get("audio_tracks", [])), draft, project_root=project_root)
