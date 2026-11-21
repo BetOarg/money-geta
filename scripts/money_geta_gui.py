@@ -424,9 +424,15 @@ class MoneyGetaApp:
         def worker():
             try:
                 from scripts.providers.openverse import ImageSearchConfig, search_openverse, save_image_candidates
+                from scripts.media_registry import media_review_status
                 config = ImageSearchConfig.from_env()
                 candidates = search_openverse(query, config=config, aspect_ratio=aspect)
                 saved = save_image_candidates(project_id, campaign_id, candidates)
+                for item in candidates:
+                    try:
+                        item.rights_status = media_review_status(project_id, campaign_id, item.candidate_id)
+                    except Exception:
+                        item.rights_status = "review_unavailable"
                 self.events.put(("image_search_done", {"candidates": [item.to_dict() for item in candidates], "saved": saved}))
             except Exception as exc:
                 self.events.put(("image_search_error", f"{type(exc).__name__}: {exc}"))
@@ -1224,7 +1230,8 @@ class MoneyGetaApp:
                     for index, item in enumerate(self.image_candidates, start=1):
                         title = item.get("title", "Untitled")
                         creator = item.get("creator", "Unknown creator")
-                        self.image_results_list.insert(END, f"{index}. {title} · {creator} · {item.get('license', 'unknown')}")
+                        status_label = item.get("rights_status", "unverified").upper()
+                        self.image_results_list.insert(END, f"{index}. {title} · {creator} · {item.get('license', 'unknown')} · {status_label}")
                     saved = value.get("saved", {})
                     self.image_status_var.set(f"{len(self.image_candidates)} candidatos · {saved.get('added', 0)} nuevos · derechos sin verificar")
                     self.image_details.configure(state="normal")
