@@ -88,3 +88,11 @@ def test_new_license_metadata_version_invalidates_old_review(tmp_path):
     passed, problems = check_media_candidate("media-review", "campaign", candidate.candidate_id, root=root)
     assert passed is False
     assert "stale" in problems[0]
+
+
+def test_approval_rejects_license_type_mismatch(tmp_path):
+    root, candidate = _fixture(tmp_path)
+    with pytest.raises(MediaReviewError, match="does not match"):
+        review_media_candidate("media-review", "campaign", candidate.candidate_id,
+            decision="approved", reviewer="Operator", rights_evidence="Source page inspected.",
+            reviewed_license="CC BY-SA 4.0", source_reviewed=True, root=root)
