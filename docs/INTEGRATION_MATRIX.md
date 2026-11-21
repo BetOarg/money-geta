@@ -7,7 +7,7 @@ Estados: **INTEGRADO** = existe implementación verificable en la rama actual; *
 |---|---|---|---|
 | Sesiones y manifiestos locales | session_paths.py, ledger JSON | Trazabilidad de extremo a extremo | PARCIAL |
 | Descarga autorizada | yt-dlp adapter con confirmación | Adaptadores por fuente, permisos y políticas | PARCIAL |
-| Imágenes/assets | Openverse API image-search, comercial filtrado, JSONL local deduplicado; derechos permanecen unverified | Verificación de licencia y descarga local controlada; proveedores alternativos | PARCIAL |
+| Imágenes/assets | Openverse API CLI + GUI, commercial filter, campaign JSONL deduplicated; rights remain unverified | License verification and controlled local downloads; alternative providers | PARCIAL |
 | Detección de momentos | GTA VI vendorizado | Motor genérico + plugins por tipo de fuente | PARCIAL |
 | Escenas | PySceneDetect | Servicio común de detección | PARCIAL |
 | Transcripción | faster-whisper | WhisperX opcional para alineación | PARCIAL |
