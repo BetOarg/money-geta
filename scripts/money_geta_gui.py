@@ -1350,11 +1350,11 @@ class MoneyGetaApp:
 
     def _build_timeline(self):
         self.timeline.columnconfigure(0, weight=1)
-        self.timeline.rowconfigure(1, weight=1)
+        self.timeline.rowconfigure(2, weight=1)
         ttk.Label(self.timeline, text="Timeline editable · borrador local", style="Section.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(self.timeline, text="Reordená escenas y ajustá duración, narración y subtítulos. No genera ni publica videos.").grid(row=0, column=0, sticky="w", pady=(24, 6))
+        ttk.Label(self.timeline, text="Reordená escenas y ajustá duración, narración y subtítulos. No genera ni publica videos.").grid(row=1, column=0, sticky="w", pady=(6, 6))
         content = ttk.Frame(self.timeline)
-        content.grid(row=1, column=0, sticky="nsew")
+        content.grid(row=2, column=0, sticky="nsew")
         content.columnconfigure(0, weight=1)
         content.columnconfigure(1, weight=1)
         content.rowconfigure(0, weight=1)
@@ -1382,13 +1382,13 @@ class MoneyGetaApp:
         self.timeline_subtitles.grid(row=4, column=0, columnspan=2, sticky="ew", pady=3)
         ttk.Button(editor, text="Aplicar a escena", command=self._timeline_apply_ui).grid(row=5, column=0, columnspan=2, sticky="w", pady=(5, 0))
         controls = ttk.Frame(self.timeline)
-        controls.grid(row=2, column=0, sticky="ew", pady=8)
+        controls.grid(row=3, column=0, sticky="ew", pady=8)
         ttk.Button(controls, text="↑ Subir", command=lambda: self._timeline_move_ui(-1)).pack(side=LEFT)
         ttk.Button(controls, text="↓ Bajar", command=lambda: self._timeline_move_ui(1)).pack(side=LEFT, padx=4)
         ttk.Button(controls, text="Cargar guardado", command=self.scene_plan_load_timeline_ui).pack(side=LEFT, padx=4)
         ttk.Button(controls, text="Guardar timeline", command=self.scene_plan_save_timeline_ui).pack(side=LEFT, padx=4)
         self.timeline_status_var = tk.StringVar(value="PENDIENTE · abrí el editor desde un plan visual generado")
-        ttk.Label(self.timeline, textvariable=self.timeline_status_var).grid(row=3, column=0, sticky="w")
+        ttk.Label(self.timeline, textvariable=self.timeline_status_var).grid(row=4, column=0, sticky="w")
 
     def scene_plan_open_timeline_ui(self):
         plan = getattr(self, "scene_visual_plan", None)
