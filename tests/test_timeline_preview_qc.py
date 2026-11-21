@@ -45,3 +45,14 @@ def test_preview_qc_rejects_bad_duration_and_report_overwrite(tmp_path):
     timeline["scenes"][0]["duration_seconds"] = 2
     with pytest.raises(ValueError, match="already exists"):
         review_preview(media, timeline, report_path=report, technical_checker=lambda *args, **kwargs: {"passed": True}, perceptual_checker=lambda *args, **kwargs: {})
+
+
+def test_preview_qc_captures_technical_tool_error_as_review_required(tmp_path):
+    media = tmp_path / "preview.mp4"
+    media.write_bytes(b"fake")
+    timeline = {"plan_type": "editable_timeline", "scenes": [{"duration_seconds": 1}]}
+    result = review_preview(media, timeline,
+        technical_checker=lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("ffprobe missing")),
+        perceptual_checker=lambda *args, **kwargs: {"observations": {}})
+    assert result["status"] == "REVIEW_REQUIRED"
+    assert "ffprobe missing" in result["technical_error"]
