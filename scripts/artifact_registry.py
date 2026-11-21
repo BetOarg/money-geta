@@ -94,12 +94,15 @@ def _read_events(ledger: Path) -> list[dict[str, Any]]:
             if not re.fullmatch(r"[0-9a-f]{64}", str(row.get("sha256", ""))):
                 raise ArtifactReviewError("Artifact registration has an invalid SHA-256.")
             registered_hashes[artifact_id] = row["sha256"]
-        elif event in {"artifact_approved", "artifact_rejected"}:
+        elif event in {"artifact_approved", "artifact_rejected", "artifact_qc"}:
             if (artifact_id not in seen or row.get("sha256") != registered_hashes.get(artifact_id)
                     or not re.fullmatch(r"[0-9a-f]{64}", str(row.get("sha256", "")))):
-                raise ArtifactReviewError("Artifact decision is malformed or precedes registration.")
-            if not isinstance(row.get("reviewer"), str) or not row["reviewer"].strip():
-                raise ArtifactReviewError("Artifact decision is missing its reviewer.")
+                raise ArtifactReviewError("Artifact decision/QC is malformed or precedes registration.")
+            if event in {"artifact_approved", "artifact_rejected"}:
+                if not isinstance(row.get("reviewer"), str) or not row["reviewer"].strip():
+                    raise ArtifactReviewError("Artifact decision is missing its reviewer.")
+            elif not isinstance(row.get("passed"), bool) or not isinstance(row.get("problems"), list):
+                raise ArtifactReviewError("Artifact QC event is malformed.")
         else:
             raise ArtifactReviewError("Artifact ledger contains an unknown event type.")
     return rows
@@ -203,6 +206,40 @@ def approve_artifact(campaign_path: str | Path, artifact_id: str, sha256: str, *
     return event
 
 
+def run_artifact_qc(campaign_path: str | Path, artifact_id: str, sha256: str, *,
+                     ffprobe: str | None = None, timeout: int = 30,
+                     min_duration: float = 1.0, max_duration: float | None = None,
+                     expected_aspect: str | None = None, require_audio: bool = False) -> dict[str, Any]:
+    """Run technical QC and append a result bound to the registered artifact hash."""
+    from scripts.quality_control import inspect_media
+    rows = _read_events(_campaign_context(campaign_path)[2])
+    registration = next((row for row in rows if row["event_type"] == "artifact_registered"
+                        and row["artifact_id"] == artifact_id), None)
+    if not registration or registration.get("sha256") != sha256:
+        raise ArtifactReviewError("Artifact ID/hash does not match registration.")
+    path, root = Path(registration["path"]), Path(registration["allowed_root"])
+    _reject_symlink_components(path)
+    _reject_symlink_components(root)
+    try:
+        path.relative_to(root)
+    except ValueError:
+        raise ArtifactReviewError("Artifact moved outside its allowed output directory.") from None
+    if not path.is_file() or path.is_symlink() or _sha256(path) != sha256:
+        raise ArtifactReviewError("Artifact is missing or changed since registration.")
+    try:
+        report = inspect_media(path, ffprobe=ffprobe, timeout=timeout,
+            min_duration=min_duration, max_duration=max_duration,
+            expected_aspect=expected_aspect, require_audio=require_audio)
+    except (OSError, ValueError) as exc:
+        report = {"passed": False, "problems": [str(exc)]}
+    event = {"schema_version": 1, "event_type": "artifact_qc", "artifact_id": artifact_id,
+        "sha256": sha256, "passed": bool(report.get("passed")),
+        "problems": report.get("problems", []), "probe": report.get("probe", {}),
+        "qc_at": _now()}
+    _append(_campaign_context(campaign_path)[2], event)
+    return event
+
+
 def check_artifact(campaign_path: str | Path, artifact_id: str, sha256: str) -> tuple[bool, list[str]]:
     rows = _read_events(_campaign_context(campaign_path)[2])
     registration = next((row for row in rows if row["event_type"] == "artifact_registered"
@@ -252,6 +289,15 @@ def main(argv: list[str] | None = None) -> int:
     publication = sub.add_parser("publication-check", help="combine campaign readiness and exact artifact approval")
     publication.add_argument("--artifact-id", required=True)
     publication.add_argument("--sha256", required=True)
+    qc = sub.add_parser("qc", help="run technical QC and record it against an exact artifact hash")
+    qc.add_argument("--artifact-id", required=True)
+    qc.add_argument("--sha256", required=True)
+    qc.add_argument("--ffprobe")
+    qc.add_argument("--timeout", type=int, default=30)
+    qc.add_argument("--min-duration", type=float, default=1.0)
+    qc.add_argument("--max-duration", type=float)
+    qc.add_argument("--aspect", choices=("9:16", "16:9", "1:1"))
+    qc.add_argument("--require-audio", action="store_true")
     args = parser.parse_args(argv)
     try:
         if args.action == "list":
@@ -264,10 +310,27 @@ def main(argv: list[str] | None = None) -> int:
                                       reviewer=args.reviewer, decision=args.decision, notes=args.notes)
             print(f'{result["event_type"]}: {result["artifact_id"]} sha256={result["sha256"]}')
             return 0
+        if args.action == "qc":
+            result = run_artifact_qc(args.campaign, args.artifact_id, args.sha256,
+                ffprobe=args.ffprobe, timeout=args.timeout, min_duration=args.min_duration,
+                max_duration=args.max_duration, expected_aspect=args.aspect, require_audio=args.require_audio)
+            print("QC: PASS" if result["passed"] else "QC: FAIL")
+            for issue in result["problems"]: print(f"- {issue}")
+            return 0 if result["passed"] else 2
         passed, problems = check_artifact(args.campaign, args.artifact_id, args.sha256)
         if args.action == "publication-check":
             from scripts.campaign_check import check_file
             campaign_passed, campaign_problems = check_file(args.campaign)
+            qc_events = [row for row in _read_events(_campaign_context(args.campaign)[2])
+                if row.get("event_type") == "artifact_qc" and row.get("artifact_id") == args.artifact_id]
+            if not qc_events:
+                problems.append("technical QC has not been recorded for this artifact")
+                passed = False
+            else:
+                latest_qc = qc_events[-1]
+                if latest_qc.get("sha256") != args.sha256 or not latest_qc.get("passed"):
+                    problems.append("latest technical QC does not pass for this exact artifact hash")
+                    passed = False
             if not campaign_passed:
                 problems = [f"campaign: {item}" for item in campaign_problems] + problems
                 passed = False
