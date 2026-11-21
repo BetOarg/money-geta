@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,13 +21,14 @@ def canonical_url(value: str) -> str:
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ValueError("Research source URL must be HTTP(S).")
     host = parsed.hostname.lower()
-    if parsed.port and parsed.port not in {80, 443}:
-        host = f"{host}:{parsed.port}"
+    port = parsed.port
+    if port and port != (443 if parsed.scheme.lower() == "https" else 80):
+        host = f"{host}:{port}"
     query = sorted((key, item) for key, item in parse_qsl(parsed.query, keep_blank_values=True)
                    if key.lower() not in TRACKING_KEYS and not key.lower().startswith(TRACKING_PREFIXES))
     path = parsed.path or "/"
     if path != "/":
-        path = path.rstrip("/") or "/'
+    path = path.rstrip("/") or "/"
     return urlunsplit((parsed.scheme.lower(), host, path, urlencode(query), ""))
 
 
