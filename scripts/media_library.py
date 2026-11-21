@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 from scripts.project_registry import default_projects_root, list_projects, get_project
 from scripts.campaign_registry import list_campaigns, get_campaign
-from scripts.media_registry import media_review_status, _campaign_file, _read_candidates, _candidate_hash
+from scripts.media_registry import MediaReviewError, media_review_status, _campaign_file, _read_candidates, _candidate_hash
 from scripts.artifact_registry import _reject_symlink_components
 
 class MediaLibraryError(ValueError):
@@ -43,9 +43,17 @@ def _hash_file(path: Path) -> str:
 
 def _catalog_campaign(project_id: str, campaign_id: str, campaign_file: Path, projects_root: Path) -> list[dict[str,Any]]:
     rows=_read_download_ledger(campaign_file)
+    if not rows:
+        return []
     campaign_root=campaign_file.parent.resolve()
     assets_dir=campaign_root/"media_assets"
-    candidates=_read_candidates(campaign_file)
+    try:
+        candidates=_read_candidates(campaign_file)
+    except MediaReviewError as exc:
+        if "No image candidate ledger" in str(exc):
+            candidates={}
+        else:
+            raise
     results=[]
     for record in rows:
         cid=record["candidate_id"]
@@ -66,7 +74,7 @@ def _catalog_campaign(project_id: str, campaign_id: str, campaign_file: Path, pr
                     integrity="verified" if _hash_file(resolved)==record["sha256"] else "hash_mismatch"
                     local_path=resolved
             except (OSError,ValueError,RuntimeError): integrity="missing_or_unsafe"
-        rights=media_review_status(project_id,campaign_id,cid,root=projects_root)
+        rights=media_review_status(project_id,campaign_id,cid,root=projects_root) if candidate else "not_found"
         approved=rights=="reviewed_approved"
         results.append({
             "project_id":project_id,"campaign_id":campaign_id,"candidate_id":cid,
