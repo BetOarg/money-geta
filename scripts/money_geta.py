@@ -656,6 +656,28 @@ def main(argv: list[str] | None = None) -> int:
     session = sub.add_parser("new-session", help="allocate a unique, non-destructive recording workspace")
     session.add_argument("job_id")
     session.add_argument("--root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
+    script_review = sub.add_parser("script-review", help="register, approve, list or check hash-bound script drafts")
+    review_actions = script_review.add_subparsers(dest="review_action", required=True)
+    script_register = review_actions.add_parser("register")
+    script_register.add_argument("--project", required=True)
+    script_register.add_argument("--campaign", required=True)
+    script_register.add_argument("--draft", type=Path, required=True)
+    script_approve = review_actions.add_parser("approve")
+    script_approve.add_argument("--project", required=True)
+    script_approve.add_argument("--campaign", required=True)
+    script_approve.add_argument("--script-id", required=True)
+    script_approve.add_argument("--sha256", required=True)
+    script_approve.add_argument("--reviewer", required=True)
+    script_approve.add_argument("--decision", choices=("approved", "rejected"), required=True)
+    script_approve.add_argument("--notes", default="")
+    script_check = review_actions.add_parser("check")
+    script_check.add_argument("--project", required=True)
+    script_check.add_argument("--campaign", required=True)
+    script_check.add_argument("--script-id", required=True)
+    script_check.add_argument("--sha256", required=True)
+    script_list = review_actions.add_parser("list")
+    script_list.add_argument("--project", required=True)
+    script_list.add_argument("--campaign", required=True)
     scriptdraft = sub.add_parser("script-draft", help="generate a local unapproved script draft from captured source evidence")
     scriptdraft.add_argument("--project", required=True)
     scriptdraft.add_argument("--campaign", required=True)
@@ -746,6 +768,30 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         except (KeyError, ValueError) as exc:
             print(f"FAIL: {exc}")
+            return 2
+    if args.command == "script-review":
+        from scripts.script_registry import ScriptReviewError, register_script, approve_script, check_script, list_scripts
+        try:
+            if args.review_action == "register":
+                result = register_script(args.project, args.campaign, args.draft)
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 0
+            if args.review_action == "approve":
+                result = approve_script(args.project, args.campaign, args.script_id, args.sha256,
+                                      reviewer=args.reviewer, decision=args.decision, notes=args.notes)
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 0
+            if args.review_action == "list":
+                result = list_scripts(args.project, args.campaign)
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 0
+            passed, problems = check_script(args.project, args.campaign, args.script_id, args.sha256)
+            print("SCRIPT_APPROVAL: PASS" if passed else "SCRIPT_APPROVAL: BLOCKED")
+            for problem in problems:
+                print(f"- {problem}")
+            return 0 if passed else 2
+        except (OSError, ValueError, RuntimeError, ScriptReviewError) as exc:
+            print(f"FAIL: script review: {exc}")
             return 2
     if args.command == "script-draft":
         from scripts.scriptwriter import draft_campaign_script
