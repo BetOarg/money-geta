@@ -240,6 +240,11 @@ def load_timeline(project_id: str, campaign_id: str, script_id: str, sha: str, *
     payload = json.loads(target.read_text(encoding="utf-8"))
     if payload.get("plan_type") != "editable_timeline" or payload.get("script_sha256") != sha:
         raise ValueError("Saved timeline does not match the approved script hash.")
+    audio_rows = payload.get("audio_tracks", [])
+    if not isinstance(audio_rows, list):
+        raise ValueError("Saved audio tracks must be a list.")
+    from scripts.timeline_audio import validate_audio_track
+    payload["audio_tracks"] = [validate_audio_track(row) for row in audio_rows]
     return payload
 
 
