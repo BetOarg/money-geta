@@ -129,6 +129,23 @@ def review_media_candidate(project_id: str, campaign_id: str, candidate_id: str,
     return event
 
 
+def media_review_status(project_id: str, campaign_id: str, candidate_id: str, *,
+                         root: Path | None = None) -> str:
+    campaign_file = _campaign_file(project_id, campaign_id, root)
+    candidate = _read_candidates(campaign_file).get(candidate_id)
+    if candidate is None:
+        return "not_found"
+    reviews = [event for event in _read_reviews(campaign_file) if event["candidate_id"] == candidate_id]
+    if not reviews:
+        return "unverified"
+    latest = reviews[-1]
+    if latest.get("candidate_sha256") != _candidate_hash(candidate):
+        return "review_stale"
+    if latest.get("decision") == "approved" and latest.get("source_reviewed") and latest.get("rights_evidence") and latest.get("reviewed_license"):
+        return "reviewed_approved"
+    return "reviewed_rejected"
+
+
 def check_media_candidate(project_id: str, campaign_id: str, candidate_id: str, *,
                         root: Path | None = None) -> tuple[bool, list[str]]:
     try:
