@@ -372,10 +372,30 @@ class MoneyGetaApp:
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.image_results_list.configure(yscrollcommand=scrollbar.set)
         self.image_results_list.bind("<<ListboxSelect>>", self.show_image_candidate)
+        review = ttk.LabelFrame(self.images, text="Revisión de derechos · después de abrir la fuente", padding=6)
+        review.grid(row=8, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Label(review, text="Revisor").grid(row=0, column=0, sticky="w")
+        self.media_reviewer_var = tk.StringVar(value="Operador")
+        ttk.Entry(review, textvariable=self.media_reviewer_var, width=18).grid(row=0, column=1, sticky="ew", padx=4)
+        ttk.Label(review, text="Licencia revisada").grid(row=1, column=0, sticky="w")
+        self.media_license_var = tk.StringVar()
+        ttk.Entry(review, textvariable=self.media_license_var, width=34).grid(row=1, column=1, sticky="ew", padx=4)
+        ttk.Label(review, text="Evidencia de derechos").grid(row=2, column=0, sticky="w")
+        self.media_rights_evidence_var = tk.StringVar()
+        ttk.Entry(review, textvariable=self.media_rights_evidence_var, width=50).grid(row=2, column=1, sticky="ew", padx=4)
+        ttk.Label(review, text="Atribución").grid(row=3, column=0, sticky="w")
+        self.media_attribution_var = tk.StringVar()
+        ttk.Entry(review, textvariable=self.media_attribution_var, width=50).grid(row=3, column=1, sticky="ew", padx=4)
+        review_actions = ttk.Frame(review)
+        review_actions.grid(row=4, column=0, columnspan=2, sticky="ew", pady=3)
+        self.media_approve_btn = ttk.Button(review_actions, text="Aprobar derechos", command=lambda: self.review_media_ui("approved"), state="disabled")
+        self.media_approve_btn.pack(side=LEFT)
+        self.media_reject_btn = ttk.Button(review_actions, text="Rechazar", command=lambda: self.review_media_ui("rejected"), state="disabled")
+        self.media_reject_btn.pack(side=LEFT, padx=5)
         ttk.Label(self.images, text="Detalle/atribución · revisar licencia en la fuente original").grid(row=7, column=0, columnspan=2, sticky="w")
         self.image_details = tk.Text(self.images, height=5, wrap="word", font=("Consolas", 9), state="disabled")
-        self.image_details.grid(row=8, column=0, columnspan=2, sticky="nsew", pady=(3, 4))
-        self.images.rowconfigure(8, weight=1)
+        self.image_details.grid(row=9, column=0, columnspan=2, sticky="nsew", pady=(3, 4))
+        self.images.rowconfigure(9, weight=1)
         self.image_candidates = []
 
     def image_search_ui(self):
@@ -410,6 +430,46 @@ class MoneyGetaApp:
                 self.events.put(("image_search_done", {"candidates": [item.to_dict() for item in candidates], "saved": saved}))
             except Exception as exc:
                 self.events.put(("image_search_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def review_media_ui(self, decision):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        selection = self.image_results_list.curselection()
+        if not selection or selection[0] >= len(self.image_candidates):
+            messagebox.showwarning("Selecciona candidato", "Selecciona una imagen de los resultados.")
+            return
+        candidate = self.image_candidates[selection[0]]
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        reviewer = self.media_reviewer_var.get().strip()
+        license_text = self.media_license_var.get().strip()
+        rights_evidence = self.media_rights_evidence_var.get().strip()
+        attribution = self.media_attribution_var.get().strip() or candidate.get("attribution", "")
+        if not project_id or not campaign_id or not reviewer:
+            messagebox.showwarning("Datos incompletos", "Selecciona proyecto/campaña e indica el revisor.")
+            return
+        if decision == "approved" and (not license_text or not rights_evidence):
+            messagebox.showwarning("Evidencia requerida", "Para aprobar, completa licencia revisada y evidencia de derechos después de abrir la fuente original.")
+            return
+        if not messagebox.askyesno("Confirmar revisión", f"Decisión: {decision.upper()}\nCandidato: {candidate.get('title')}\nFuente: {candidate.get('source_page_url')}\n\nConfirma que revisaste la página original y sus condiciones. Esta decisión quedará registrada localmente. ¿Continuar?"):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.image_status_var.set("REGISTRANDO REVISIÓN…")
+        def worker():
+            try:
+                from scripts.media_registry import review_media_candidate, check_media_candidate
+                event = review_media_candidate(project_id, campaign_id, candidate["candidate_id"],
+                    decision=decision, reviewer=reviewer, rights_evidence=rights_evidence,
+                    reviewed_license=license_text, attribution=attribution,
+                    source_reviewed=(decision == "approved"), notes="")
+                passed, problems = check_media_candidate(project_id, campaign_id, candidate["candidate_id"])
+                self.events.put(("media_review_done", {"event": event, "passed": passed, "problems": problems,
+                    "candidate_id": candidate["candidate_id"], "decision": decision}))
+            except Exception as exc:
+                self.events.put(("media_review_error", f"{type(exc).__name__}: {exc}"))
         threading.Thread(target=worker, daemon=True).start()
 
     def show_image_candidate(self, _event=None):
@@ -1158,6 +1218,8 @@ class MoneyGetaApp:
                     self.busy = False
                     self.process_btn.configure(state="normal")
                     self.image_candidates = value.get("candidates", [])
+                    self.media_approve_btn.configure(state="normal" if self.image_candidates else "disabled")
+                    self.media_reject_btn.configure(state="normal" if self.image_candidates else "disabled")
                     self.image_results_list.delete(0, END)
                     for index, item in enumerate(self.image_candidates, start=1):
                         title = item.get("title", "Untitled")
@@ -1170,6 +1232,23 @@ class MoneyGetaApp:
                     self.image_details.insert(END, f"Ledger local: {saved.get('path', '')}\\nSelecciona un resultado para revisar atribución y fuente. Verifica la licencia original antes de usarlo.")
                     self.image_details.configure(state="disabled")
                     self._append(f"OPENVERSE IMAGE SEARCH: {len(self.image_candidates)} candidates · {saved.get('path', '')}")
+                elif kind == "media_review_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    passed = value.get("passed")
+                    status = "RIGHTS REVIEW PASS · OPERATOR ATTESTATION" if passed else "RIGHTS REVIEW BLOCKED"
+                    self.image_status_var.set(status)
+                    for item in self.image_candidates:
+                        if item.get("candidate_id") == value.get("candidate_id"):
+                            item["rights_status"] = "reviewed_approved" if passed else "reviewed_rejected"
+                    self._append(f"MEDIA RIGHTS REVIEW: {value.get('decision')} · {'PASS' if passed else 'BLOCKED'} · {value.get('candidate_id')}")
+                    if value.get("problems"):
+                        messagebox.showwarning("Revisión", "; ".join(value["problems"]))
+                elif kind == "media_review_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.image_status_var.set("ROJO · ERROR DE REVISIÓN")
+                    self._append("MEDIA REVIEW ERROR: " + value)
                 elif kind == "image_search_error":
                     self.busy = False
                     self.process_btn.configure(state="normal")
