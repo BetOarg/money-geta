@@ -1693,7 +1693,7 @@ class MoneyGetaApp:
                 narration=self.timeline_narration.get("1.0", "end-1c"),
                 subtitle_text=self.timeline_subtitles.get("1.0", "end-1c"),
                 trim_start_seconds=float(self.timeline_trim_start_var.get() or 0),
-                trim_end_seconds=(float(self.timeline_trim_end_var.get()) if self.timeline_trim_end_var.get().strip() else None)
+                trim_end_seconds=(float(self.timeline_trim_end_var.get()) if self.timeline_trim_end_var.get().strip() else None))
             subtitle_end = self.timeline_subtitle_end_var.get().strip()
             if subtitle_end:
                 from scripts.timeline_plan import update_subtitle_timing
