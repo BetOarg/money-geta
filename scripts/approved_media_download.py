@@ -77,6 +77,20 @@ def download_approved_candidate(project_id,campaign_id,candidate_id,*,allow_netw
     url=_validate_url(candidate.get("image_url"),resolver=resolver)
     assets=_safe_campaign_assets(campaign_file); ledger=campaign_file.parent/"media_download_ledger.jsonl"
     _reject_symlink_components(ledger)
+    current_hash=_candidate_hash(candidate)
+    if ledger.exists():
+        if not ledger.is_file(): raise MediaDownloadError("Download ledger is not a regular file.")
+        try: previous=[json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
+        except (OSError,UnicodeError,json.JSONDecodeError): raise MediaDownloadError("Download ledger is unreadable or malformed.") from None
+        for row in reversed(previous):
+            if row.get("candidate_id")==candidate_id and row.get("candidate_sha256")==current_hash:
+                local=campaign_file.parent/row.get("local_path","")
+                _reject_symlink_components(local)
+                if not local.is_file() or not local.resolve().is_relative_to(assets):
+                    raise MediaDownloadError("Previously downloaded asset is missing or outside the asset directory.")
+                if hashlib.sha256(local.read_bytes()).hexdigest()!=row.get("sha256"):
+                    raise MediaDownloadError("Previously downloaded asset failed integrity verification.")
+                return row
     response=opener(url,resolver=resolver,timeout=TIMEOUT); tmp=None
     try:
         ctype=response.headers.get("Content-Type","").split(";",1)[0].strip().lower()
@@ -108,7 +122,7 @@ def download_approved_candidate(project_id,campaign_id,candidate_id,*,allow_netw
             tmp.unlink(); tmp=None
         else: tmp.replace(final); tmp=None
         record={"schema_version":1,"event_type":"approved_media_download","candidate_id":candidate_id,
-          "candidate_sha256":_candidate_hash(candidate),"source_url":url,"source_page_url":candidate.get("source_page_url"),
+          "candidate_sha256":current_hash,"source_url":url,"source_page_url":candidate.get("source_page_url"),
           "license":candidate.get("license"),"license_url":candidate.get("license_url"),"creator":candidate.get("creator"),
           "attribution":candidate.get("attribution"),"local_path":str(final.relative_to(campaign_file.parent)),
           "sha256":digest.hexdigest(),"size_bytes":total,"downloaded_at":datetime.now(timezone.utc).isoformat()}
