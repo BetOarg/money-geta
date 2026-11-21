@@ -75,6 +75,7 @@ def create_timeline_from_visual_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "human_review_required": True,
         "render_authorized": False,
         "publishing_authorized": False,
+        "audio_tracks": [],
     }
 
 
@@ -151,6 +152,11 @@ def save_timeline(timeline: dict[str, Any], *, root: Path | None = None) -> Path
     rows = timeline.get("scenes")
     if not isinstance(rows, list) or not rows:
         raise ValueError("Timeline must contain scenes.")
+    audio_rows = timeline.get("audio_tracks", [])
+    if not isinstance(audio_rows, list):
+        raise ValueError("Audio tracks must be a list.")
+    from scripts.timeline_audio import validate_audio_track
+    normalized_audio = [validate_audio_track(item) for item in audio_rows]
     seen = set()
     for row in rows:
         if not isinstance(row, dict):
@@ -195,6 +201,7 @@ def save_timeline(timeline: dict[str, Any], *, root: Path | None = None) -> Path
         raise ValueError("Timeline target cannot be a symlink.")
     temp = timeline_dir / f".tmp-{uuid.uuid4().hex}"
     payload = dict(timeline)
+    payload["audio_tracks"] = normalized_audio
     payload["status"] = "draft"
     payload["human_review_required"] = True
     payload["render_authorized"] = False
