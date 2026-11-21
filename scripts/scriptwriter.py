@@ -141,7 +141,7 @@ def validate_script_payload(payload: Any, *, evidence_ids: set[str],
         if len(scene["visual"]) > 1000 or len(scene["narration"]) > 1200:
             raise ValueError("Scene text exceeds configured length limits.")
     source_ids = payload.get("source_ids")
-    if not isinstance(source_ids, list) or not source_ids or any(not isinstance(item, str) or item not in evidence_ids for item in source_ids):
+    if not isinstance(source_ids, list) or not 1 <= len(source_ids) <= MAX_SOURCE_DOCS or any(not isinstance(item, str) or item not in evidence_ids for item in source_ids):
         raise ValueError("Script source_ids must reference captured evidence.")
     if len(source_ids) != len(set(source_ids)):
         raise ValueError("Script source_ids must not contain duplicates.")
