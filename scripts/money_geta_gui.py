@@ -1383,6 +1383,14 @@ class MoneyGetaApp:
         ttk.Label(editor, text="Subtítulos").grid(row=3, column=0, sticky="w")
         self.timeline_subtitles = tk.Text(editor, height=4, wrap="word")
         self.timeline_subtitles.grid(row=4, column=0, columnspan=2, sticky="ew", pady=3)
+        subtitle_timing = ttk.Frame(editor)
+        subtitle_timing.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(2, 4))
+        ttk.Label(subtitle_timing, text="Subtítulo desde (s)").pack(side=LEFT)
+        self.timeline_subtitle_start_var = tk.StringVar(value="0")
+        ttk.Entry(subtitle_timing, textvariable=self.timeline_subtitle_start_var, width=8).pack(side=LEFT, padx=(3, 6))
+        ttk.Label(subtitle_timing, text="hasta (s)").pack(side=LEFT)
+        self.timeline_subtitle_end_var = tk.StringVar(value="")
+        ttk.Entry(subtitle_timing, textvariable=self.timeline_subtitle_end_var, width=8).pack(side=LEFT, padx=3)
         ttk.Button(editor, text="Aplicar a escena", command=self._timeline_apply_ui).grid(row=5, column=0, columnspan=2, sticky="w", pady=(5, 0))
         preview_frame = ttk.LabelFrame(editor, text="Preview del recurso asignado", padding=4)
         preview_frame.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(8, 0))
@@ -1537,6 +1545,8 @@ class MoneyGetaApp:
         scene = self.timeline_plan["scenes"][int(selection[0])]
         self.timeline_duration_var.set(str(scene.get("duration_seconds", 5)))
         self.timeline_trim_start_var.set(str(scene.get("media_trim_start_seconds", 0)))
+        self.timeline_subtitle_start_var.set(str(scene.get("subtitle_start_seconds", 0)))
+        self.timeline_subtitle_end_var.set("" if scene.get("subtitle_end_seconds") is None else str(scene.get("subtitle_end_seconds")))
         self.timeline_trim_end_var.set("" if scene.get("media_trim_end_seconds") is None else str(scene.get("media_trim_end_seconds")))
         for widget, key in ((self.timeline_narration, "narration"), (self.timeline_subtitles, "subtitle_text")):
             widget.delete("1.0", END)
@@ -1683,7 +1693,13 @@ class MoneyGetaApp:
                 narration=self.timeline_narration.get("1.0", "end-1c"),
                 subtitle_text=self.timeline_subtitles.get("1.0", "end-1c"),
                 trim_start_seconds=float(self.timeline_trim_start_var.get() or 0),
-                trim_end_seconds=(float(self.timeline_trim_end_var.get()) if self.timeline_trim_end_var.get().strip() else None))
+                trim_end_seconds=(float(self.timeline_trim_end_var.get()) if self.timeline_trim_end_var.get().strip() else None)
+            subtitle_end = self.timeline_subtitle_end_var.get().strip()
+            if subtitle_end:
+                from scripts.timeline_plan import update_subtitle_timing
+                self.timeline_plan = update_subtitle_timing(self.timeline_plan, index, start_seconds=float(self.timeline_subtitle_start_var.get() or 0), end_seconds=float(subtitle_end))
+            elif float(self.timeline_subtitle_start_var.get() or 0) != 0:
+                raise ValueError("Subtitle end is required when start is non-zero.")
         except (ValueError, TypeError) as exc:
             messagebox.showerror("Datos de escena inválidos", str(exc))
             return
