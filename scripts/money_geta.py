@@ -716,6 +716,12 @@ def main(argv: list[str] | None = None) -> int:
     library_verify = library_actions.add_parser("verify", help="verify file integrity and current rights approvals")
     library_verify.add_argument("--project")
     library_verify.add_argument("--campaign")
+    scene_assets = sub.add_parser("scene-assets", help="suggest approved local assets for scenes of a reviewed script")
+    scene_assets.add_argument("--project", required=True)
+    scene_assets.add_argument("--campaign", required=True)
+    scene_assets.add_argument("--script-id", required=True)
+    scene_assets.add_argument("--sha256", required=True)
+    scene_assets.add_argument("--limit", type=int, choices=range(1, 11), default=5)
     image_search = sub.add_parser("image-search", help="find commercially-filtered stock images via Openverse and save candidates")
     image_search.add_argument("--project", required=True)
     image_search.add_argument("--campaign", required=True)
@@ -866,6 +872,17 @@ def main(argv: list[str] | None = None) -> int:
         for problem in problems:
             print(f"- {problem}")
         return 0 if passed else 2
+    if args.command == "scene-assets":
+        from scripts.scene_asset_matcher import build_scene_asset_plan
+        try:
+            report = build_scene_asset_plan(args.project, args.campaign, args.script_id, args.sha256,
+                                           limit_per_scene=args.limit)
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            print("SCENE_ASSETS: SUGGESTIONS_ONLY · human review required; no render or publishing")
+            return 0
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"FAIL: scene asset matching: {exc}")
+            return 2
     if args.command == "asset-library":
         from scripts.media_library import MediaLibraryError, list_media_assets, search_media_assets, verify_media_library
         try:
