@@ -1391,6 +1391,15 @@ class MoneyGetaApp:
         self.timeline_preview_caption = ttk.Label(preview_frame, text="", anchor="w")
         self.timeline_preview_caption.pack(fill="x", pady=(3, 0))
         self.timeline_preview_image = None
+        audio_frame = ttk.LabelFrame(editor, text="Pistas de audio · borrador local", padding=4)
+        audio_frame.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        self.timeline_audio_list = tk.Listbox(audio_frame, height=3, exportselection=False)
+        self.timeline_audio_list.pack(fill="x")
+        audio_controls = ttk.Frame(audio_frame)
+        audio_controls.pack(fill="x", pady=3)
+        ttk.Button(audio_controls, text="Agregar pista", command=self._timeline_audio_add_ui).pack(side=LEFT)
+        ttk.Button(audio_controls, text="Eliminar pista", command=self._timeline_audio_remove_ui).pack(side=LEFT, padx=4)
+        ttk.Button(audio_controls, text="Editar pista", command=self._timeline_audio_edit_ui).pack(side=LEFT, padx=4)
         trim_frame = ttk.LabelFrame(editor, text="Recorte del video · segundos", padding=4)
         trim_frame.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         ttk.Label(trim_frame, text="Entrada").grid(row=0, column=0, sticky="w")
@@ -1481,6 +1490,7 @@ class MoneyGetaApp:
             self.timeline_status_var.set("ROJO · no se pudo abrir timeline")
             return
         self._timeline_refresh_ui()
+        self._timeline_audio_refresh_ui()
         self.tabs.select(self.timeline)
         self.timeline_status_var.set(f"TIMELINE {'CARGADO' if saved else 'CREADO'} · {len(self.timeline_plan['scenes'])} escenas · render bloqueado")
 
@@ -1532,6 +1542,7 @@ class MoneyGetaApp:
             widget.delete("1.0", END)
             widget.insert("1.0", scene.get(key, ""))
         self._timeline_update_preview_ui(scene)
+        self._timeline_audio_refresh_ui()
 
     def _timeline_update_preview_ui(self, scene):
         from scripts.timeline_preview import resolve_scene_preview_path
@@ -1570,6 +1581,90 @@ class MoneyGetaApp:
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
             self.timeline_preview_label.configure(image="", text=f"Preview no disponible: {exc}")
             self.timeline_preview_caption.configure(text=str(path))
+
+    def _timeline_audio_refresh_ui(self):
+        box = getattr(self, "timeline_audio_list", None)
+        if box is None:
+            return
+        box.delete(0, END)
+        for row in getattr(self, "timeline_plan", {}).get("audio_tracks", []):
+            source = Path(row.get("source_path", "")).name or "sin fuente"
+            box.insert(END, f"{row.get('name','Audio')} · {row.get('start_seconds',0):.2f}s · {row.get('duration_seconds',0):.2f}s · {source}")
+
+    def _timeline_audio_add_ui(self):
+        from scripts.timeline_audio import update_audio_track
+        name = simpledialog.askstring("Agregar pista de audio", "Nombre (música, narración, efectos):", parent=self.root)
+        if not name:
+            return
+        path = filedialog.askopenfilename(parent=self.root, title="Seleccionar archivo de audio local", filetypes=[("Audio", "*.wav *.mp3 *.ogg *.m4a *.aac *.flac"), ("Todos", "*.*")])
+        if not path:
+            path = ""
+        start = simpledialog.askfloat("Pista de audio", "Inicio en segundos:", parent=self.root, minvalue=0)
+        if start is None:
+            return
+        duration = simpledialog.askfloat("Pista de audio", "Duración en segundos:", parent=self.root, minvalue=0.01)
+        if duration is None:
+            return
+        volume = simpledialog.askfloat("Pista de audio", "Volumen (0 a 2; 1 = normal):", parent=self.root, minvalue=0, maxvalue=2)
+        if volume is None:
+            return
+        fade_in = simpledialog.askfloat("Pista de audio", "Fade-in (segundos):", parent=self.root, minvalue=0)
+        if fade_in is None:
+            return
+        fade_out = simpledialog.askfloat("Pista de audio", "Fade-out (segundos):", parent=self.root, minvalue=0)
+        if fade_out is None:
+            return
+        try:
+            project_root = Path(self.timeline_plan.get("project_root", "")) if self.timeline_plan.get("project_root") else None
+            draft = {"name": name, "source_path": path, "start_seconds": start, "duration_seconds": duration,
+                     "volume": volume, "fade_in_seconds": fade_in, "fade_out_seconds": fade_out}
+            self.timeline_plan = update_audio_track(self.timeline_plan, len(self.timeline_plan.get("audio_tracks", [])), draft, project_root=project_root)
+            self._timeline_audio_refresh_ui()
+            self.timeline_status_var.set("PENDIENTE · pista de audio agregada al borrador; aún no se mezcla ni renderiza")
+        except (ValueError, TypeError) as exc:
+            messagebox.showerror("Pista de audio inválida", str(exc))
+
+    def _timeline_audio_remove_ui(self):
+        from scripts.timeline_audio import remove_audio_track
+        selection = self.timeline_audio_list.curselection()
+        if not selection:
+            messagebox.showinfo("Pista de audio", "Seleccioná una pista para eliminar.")
+            return
+        try:
+            self.timeline_plan = remove_audio_track(self.timeline_plan, int(selection[0]))
+            self._timeline_audio_refresh_ui()
+        except ValueError as exc:
+            messagebox.showerror("Pista de audio", str(exc))
+
+    def _timeline_audio_edit_ui(self):
+        selection = self.timeline_audio_list.curselection()
+        if not selection:
+            messagebox.showinfo("Pista de audio", "Seleccioná una pista para editar.")
+            return
+        from scripts.timeline_audio import update_audio_track
+        index = int(selection[0])
+        current = self.timeline_plan.get("audio_tracks", [])[index]
+        try:
+            start = simpledialog.askfloat("Editar audio", "Inicio en segundos:", initialvalue=current.get("start_seconds", 0), minvalue=0, parent=self.root)
+            if start is None:
+                return
+            duration = simpledialog.askfloat("Editar audio", "Duración en segundos:", initialvalue=current.get("duration_seconds", 1), minvalue=0.01, parent=self.root)
+            if duration is None:
+                return
+            volume = simpledialog.askfloat("Editar audio", "Volumen (0 a 2):", initialvalue=current.get("volume", 1), minvalue=0, maxvalue=2, parent=self.root)
+            if volume is None:
+                return
+            fade_in = simpledialog.askfloat("Editar audio", "Fade-in:", initialvalue=current.get("fade_in_seconds", 0), minvalue=0, parent=self.root)
+            if fade_in is None:
+                return
+            fade_out = simpledialog.askfloat("Editar audio", "Fade-out:", initialvalue=current.get("fade_out_seconds", 0), minvalue=0, parent=self.root)
+            if fade_out is None:
+                return
+            updated = dict(current, start_seconds=start, duration_seconds=duration, volume=volume, fade_in_seconds=fade_in, fade_out_seconds=fade_out)
+            self.timeline_plan = update_audio_track(self.timeline_plan, index, updated, project_root=Path(self.timeline_plan["project_root"]) if self.timeline_plan.get("project_root") else None)
+            self._timeline_audio_refresh_ui()
+        except (ValueError, TypeError) as exc:
+            messagebox.showerror("Pista de audio inválida", str(exc))
 
     def _timeline_apply_ui(self):
         selection = self.timeline_tree.selection()
