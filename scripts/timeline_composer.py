@@ -1,13 +1,7 @@
-"""Local FFmpeg preview composer for editable timeline drafts.
-
-This module intentionally renders preview files only. It never mutates timeline drafts,
-authorizes final renders, or publishes/schedules media.
-"""
+"""Local FFmpeg preview composer for editable timeline drafts."""
 from __future__ import annotations
 
 import math
-import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -16,52 +10,55 @@ from typing import Any, Callable
 
 from scripts.timeline_plan import MIN_DURATION, MAX_DURATION
 
-_TEXT_SAFE = re.compile(r"[^\\w\\s.,!?;:'\"()\\-–—%]+")
-
 
 def _finite(value: Any, label: str) -> float:
-    result = float(value)
-    if not math.isfinite(result):
+    number = float(value)
+    if not math.isfinite(number):
         raise ValueError(f"{label} must be finite.")
-    return result
+    return number
 
 
 def _filter_path(path: Path) -> str:
-    # Escape characters used by FFmpeg filter arguments, not shell syntax.
     return str(path.resolve()).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace(",", "\\,")
 
 
-def _subtitle_text(value: Any) -> str:
-    # SRT is text, not executable filter input. Normalize line breaks and remove control chars.
-    return "".join(ch for ch in str(value) if ch in "\\n\\t" or ord(ch) >= 32).strip()
+def _clean_subtitle(value: Any) -> str:
+    text = str(value).replace("\r\n", "\n").replace("\r", "\n")
+    return "".join(ch for ch in text if ch in "\n\t" or ord(ch) >= 32).strip()
 
 
-def _validate_timeline(timeline: dict[str, Any]) -> list[dict[str, Any]]:
+def _srt_timestamp(seconds: float) -> str:
+    millis = round(seconds * 1000)
+    hours, remainder = divmod(millis, 3_600_000)
+    minutes, remainder = divmod(remainder, 60_000)
+    whole_seconds, millis = divmod(remainder, 1000)
+    return f"{hours:02d}:{minutes:02d}:{whole_seconds:02d},{millis:03d}"
+
+
+def _validate(timeline: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(timeline, dict) or timeline.get("plan_type") != "editable_timeline":
         raise ValueError("An editable timeline draft is required.")
-    if timeline.get("render_authorized") is True:
+    if timeline.get("render_authorized") is True or timeline.get("publishing_authorized") is True:
         raise ValueError("Preview composer accepts draft timelines only.")
-    if timeline.get("publishing_authorized") is True:
-        raise ValueError("Preview composer does not accept publishing-authorized timelines.")
-    rows = timeline.get("scenes")
-    if not isinstance(rows, list) or not rows:
+    scenes = timeline.get("scenes")
+    if not isinstance(scenes, list) or not scenes:
         raise ValueError("Timeline must contain at least one scene.")
-    clean = []
-    for index, row in enumerate(rows):
-        if not isinstance(row, dict):
+    validated = []
+    for idx, scene in enumerate(scenes, 1):
+        if not isinstance(scene, dict):
             raise ValueError("Malformed scene record.")
-        duration = _finite(row.get("duration_seconds", 0), "Scene duration")
+        duration = _finite(scene.get("duration_seconds", 0), "Scene duration")
         if not MIN_DURATION <= duration <= MAX_DURATION:
-            raise ValueError(f"Scene {index + 1} duration is outside supported bounds.")
-        transition = str(row.get("transition_in", "cut")).lower()
-        transition_duration = _finite(row.get("transition_duration_seconds", 0), "Transition duration")
+            raise ValueError(f"Scene {idx} duration is outside supported bounds.")
+        transition = str(scene.get("transition_in", "cut")).lower()
+        transition_duration = _finite(scene.get("transition_duration_seconds", 0), "Transition duration")
         if transition != "cut" or transition_duration != 0:
             raise ValueError("Preview composer currently supports cuts only; transition effects are not rendered.")
-        media = Path(str(row.get("visual_path") or "")).expanduser()
+        media = Path(str(scene.get("visual_path") or "")).expanduser()
         if not media.is_file() or media.is_symlink():
-            raise ValueError(f"Scene {index + 1} requires a valid local non-symlink media file.")
-        clean.append(dict(row, duration_seconds=duration, visual_path=str(media.resolve())))
-    return clean
+            raise ValueError(f"Scene {idx} requires a valid local non-symlink media file.")
+        validated.append(dict(scene, duration_seconds=duration, visual_path=str(media.resolve())))
+    return validated
 
 
 def compose_preview(
@@ -75,13 +72,10 @@ def compose_preview(
     fps: int = 30,
     runner: Callable[..., Any] = subprocess.run,
 ) -> Path:
-    """Compose a local MP4 preview from images/videos using cuts and optional subtitles.
-
-    Inputs must be local files. Output must be a new path. No network inputs are accepted.
-    """
+    """Render a local, draft-only preview MP4. No final-render or publish gate is changed."""
     if timeout < 1 or width < 2 or height < 2 or fps < 1:
         raise ValueError("Invalid preview output settings.")
-    scenes = _validate_timeline(timeline)
+    scenes = _validate(timeline)
     executable = ffmpeg or shutil.which("ffmpeg")
     if not executable:
         raise RuntimeError("FFmpeg executable not found; install FFmpeg and add it to PATH.")
@@ -89,53 +83,66 @@ def compose_preview(
     if destination.exists():
         raise ValueError("Preview output already exists; choose a new file to avoid overwriting.")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="money-geta-preview-", dir=str(destination.parent)) as temp_name:
-        temp = Path(temp_name)
-        segments: list[Path] = []
-        for index, scene in enumerate(scenes, start=1):
+    with tempfile.TemporaryDirectory(prefix="money-geta-preview-", dir=str(destination.parent)) as work:
+        temp = Path(work)
+        segments = []
+        for index, scene in enumerate(scenes, 1):
             source = Path(scene["visual_path"])
             segment = temp / f"segment_{index:04d}.mp4"
             duration = scene["duration_seconds"]
-            start = _finite(scene.get("media_trim_start_seconds", 0), "Trim start")
-            end_raw = scene.get("media_trim_end_seconds")
-            end = None if end_raw is None else _finite(end_raw, "Trim end")
-            if start < 0 or (end is not None and end <= start):
+            trim_start = _finite(scene.get("media_trim_start_seconds", 0), "Trim start")
+            trim_end_raw = scene.get("media_trim_end_seconds")
+            trim_end = None if trim_end_raw is None else _finite(trim_end_raw, "Trim end")
+            if trim_start < 0 or (trim_end is not None and trim_end <= trim_start):
                 raise ValueError(f"Scene {index} has invalid video trim values.")
-            suffix = source.suffix.lower()
-            is_image = suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
-            if is_image and (start != 0 or end is not None):
+            image = source.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+            if image and (trim_start != 0 or trim_end is not None):
                 raise ValueError(f"Scene {index}: trim settings apply to video only.")
-            if not is_image and end is not None and end - start < duration:
-                duration = end - start
+            source_duration = None if trim_end is None else trim_end - trim_start
             args = [executable, "-hide_banner", "-loglevel", "error", "-y"]
-            if is_image:
+            if image:
                 args += ["-loop", "1", "-framerate", str(fps), "-i", str(source)]
             else:
-                args += ["-ss", str(start), "-i", str(source)]
-            args += ["-t", f"{duration:.3f}", "-an", "-vf",
-                     f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-                     f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={fps},format=yuv420p"]
-            text = _subtitle_text(scene.get("subtitle_text", ""))
-            subtitle_start = _finite(scene.get("subtitle_start_seconds", 0), "Subtitle start")
-            subtitle_end_raw = scene.get("subtitle_end_seconds")
-            subtitle_end = duration if subtitle_end_raw is None else _finite(subtitle_end_raw, "Subtitle end")
-            if text and subtitle_end > subtitle_start and subtitle_start >= 0 and subtitle_end <= duration:
-                srt = temp / f"subtitle_{index:04d}.srt"
-                srt.write_text(f"1\\n00:00:{subtitle_start:06.3f} --> 00:00:{subtitle_end:06.3f}\\n{text}\\n", encoding="utf-8")
-                args[-2] += f",subtitles='{_filter_path(srt)}':force_style='FontSize=28,Outline=2,Shadow=1,Alignment=2,MarginV=90'"
+                args += ["-ss", str(trim_start), "-i", str(source)]
+            args += ["-t", f"{duration:.3f}", "-an", "-vf"]
+            filters = []
+            if source_duration is not None:
+                filters.extend([f"trim=duration={source_duration:.3f}", "setpts=PTS-STARTPTS"])
+                padding = max(0.0, duration - source_duration)
+                if padding:
+                    filters.append(f"tpad=stop_mode=clone:stop_duration={padding:.3f}")
+            filters.extend([
+                f"scale={width}:{height}:force_original_aspect_ratio=decrease",
+                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2",
+                "setsar=1", f"fps={fps}", "format=yuv420p",
+            ])
+            subtitle = _clean_subtitle(scene.get("subtitle_text", ""))
+            sub_start = _finite(scene.get("subtitle_start_seconds", 0), "Subtitle start")
+            sub_end_raw = scene.get("subtitle_end_seconds")
+            sub_end = duration if sub_end_raw is None else _finite(sub_end_raw, "Subtitle end")
+            if subtitle and 0 <= sub_start < sub_end <= duration:
+                srt_path = temp / f"subtitle_{index:04d}.srt"
+                srt_path.write_text(
+                    "1\n" + _srt_timestamp(sub_start) + " --> " + _srt_timestamp(sub_end) + "\n" + subtitle + "\n",
+                    encoding="utf-8",
+                )
+                filters.append(
+                    f"subtitles='{_filter_path(srt_path)}':force_style='FontSize=28,Outline=2,Shadow=1,Alignment=2,MarginV=90'"
+                )
+            args[-1] = ",".join(filters)
             args += ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-movflags", "+faststart", str(segment)]
             result = runner(args, capture_output=True, text=True, timeout=timeout, check=False)
             if getattr(result, "returncode", 0) != 0:
                 raise RuntimeError(f"FFmpeg preview segment {index} failed: {(getattr(result, 'stderr', '') or '')[-1000:]}")
-            if not segment.is_file():
-                # Test runners may not write a file; production FFmpeg must.
-                if runner is subprocess.run:
-                    raise RuntimeError(f"FFmpeg did not create preview segment {index}.")
+            if runner is subprocess.run and not segment.is_file():
+                raise RuntimeError(f"FFmpeg did not create preview segment {index}.")
             segments.append(segment)
         manifest = temp / "concat.txt"
-        manifest.write_text("".join(f"file '{_filter_path(path)}'\\n" for path in segments), encoding="utf-8")
-        concat_args = [executable, "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
-                       "-i", str(manifest), "-c", "copy", "-movflags", "+faststart", str(destination)]
+        manifest.write_text("".join("file '" + _filter_path(path) + "'\n" for path in segments), encoding="utf-8")
+        concat_args = [
+            executable, "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
+            "-i", str(manifest), "-c", "copy", "-movflags", "+faststart", str(destination),
+        ]
         final = runner(concat_args, capture_output=True, text=True, timeout=timeout, check=False)
         if getattr(final, "returncode", 0) != 0:
             raise RuntimeError(f"FFmpeg preview assembly failed: {(getattr(final, 'stderr', '') or '')[-1000:]}")
