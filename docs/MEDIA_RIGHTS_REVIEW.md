@@ -4,6 +4,9 @@ Openverse candidates are recorded as `unverified`. Before any monetized use, the
 
 ## CLI
 
+La GUI incluye un panel de revisión en la pestaña Imágenes. Selecciona candidato, abre la fuente original, completa licencia/evidencia/atribución, y confirma aprobación o rechazo. La GUI registra la revisión local y muestra el estado del candidato.
+
+
 Review a candidate after independently inspecting its source page and license:
 
 ```powershell
