@@ -136,7 +136,7 @@ def test_central_qc_report_recorded_and_listed(tmp_path: Path) -> None:
     event = record_central_qc(campaign, item["artifact_id"], item["sha256"], report)
     assert event["status"] == "READY_FOR_HUMAN_REVIEW"
     listed = list_artifacts(campaign)[0]
-    assert listed["latest_central_qc"]["sha256"] == item["sha256"
+    assert listed["latest_central_qc"]["sha256"] == item["sha256"]
 
 
 def test_central_qc_rejects_report_with_stale_hash(tmp_path: Path) -> None:
