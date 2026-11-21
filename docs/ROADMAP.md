@@ -49,6 +49,7 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [ ] Validar integridad de audio/video, duración, ratio, resolución, FPS, códec y subtítulos.
 - [ ] Detectar pantalla negra, audio ausente, clipping, silencios y errores de render.
 - [ ] Crear revisión editorial/factual específica por perfil.
+- [x] Crear ledger hash-bound de revisión humana de derechos/atribución para candidatos Openverse (parcial: no cubre todos los assets ni certifica licencias).
 - [ ] Crear ledger de licencias, permisos, atribuciones y procedencia por asset.
 - [ ] Ligar aprobación humana al hash exacto del guion, medios y render.
 - [ ] Bloquear distribución si falta cualquier evidencia o aprobación.
