@@ -31,7 +31,7 @@ def canonical_url(value: str) -> str:
                    if key.lower() not in TRACKING_KEYS and not key.lower().startswith(TRACKING_PREFIXES))
     path = parsed.path or "/"
     if path != "/":
-    path = path.rstrip("/") or "/"
+        path = path.rstrip("/") or "/"
     return urlunsplit((parsed.scheme.lower(), host, path, urlencode(query), ""))
 
 
