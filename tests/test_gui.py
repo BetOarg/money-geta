@@ -32,3 +32,12 @@ def test_settings_round_trip(tmp_path, monkeypatch):
     data = {"mpt_dir": "C:/MPT", "gtavi_dir": "C:/GTAVI", "jobs_dir": "C:/Jobs"}
     save_settings(data)
     assert json.loads(settings_file.read_text(encoding="utf-8")) == data
+
+
+def test_gui_exposes_research_and_script_workflows():
+    import scripts.money_geta_gui as gui
+    assert hasattr(gui.MoneyGetaApp, "_build_research")
+    assert hasattr(gui.MoneyGetaApp, "run_campaign_research_ui")
+    assert hasattr(gui.MoneyGetaApp, "_build_script")
+    assert hasattr(gui.MoneyGetaApp, "generate_script_ui")
+    assert hasattr(gui.MoneyGetaApp, "open_script_draft")
