@@ -193,13 +193,13 @@ def save_image_candidates(project_id: str, campaign_id: str, candidates: list[Im
             raise ValueError("Media candidate ledger is malformed or unreadable.") from None
     ledger.resolve(strict=False)
     appended = 0
-    with ledger.open("a", encoding="utf-8", newline="\\n") as handle:
+    with ledger.open("a", encoding="utf-8", newline="\n") as handle:
         for candidate in candidates:
             record = candidate.to_dict()
             metadata_hash = candidate_metadata_hash(record)
             if existing_hashes.get(record["candidate_id"]) == metadata_hash:
                 continue
-            handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\\n")
+            handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
             existing_hashes[record["candidate_id"]] = metadata_hash
             appended += 1
         handle.flush()
