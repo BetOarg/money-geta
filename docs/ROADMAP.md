@@ -20,16 +20,20 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [ ] Añadir migraciones/versionado de manifests sin romper sesiones anteriores.
 - [ ] Añadir estados de pipeline y recuperación tras fallo.
 - [x] Añadir GUI para crear proyectos, elegir perfil y revisar campañas/estado.
+- [x] Integrar radar de investigación y generación de guiones draft-only en la GUI con opt-in de red y confirmación previa.
+- [x] Registrar drafts y aprobar/rechazar mediante ledger local ligado a SHA-256, desde CLI y GUI.
 
 ## Fase 2 — Servicios de capacidad comunes
 - [ ] Extraer interfaces de research, scriptwriting, claim-check, transcription, moment detection, subtitles, reframing, translation y render.
 - [x] Implementar adaptador LLM intercambiable compatible con Chat Completions (Gemini/OpenAI API/gateways compatibles), con credenciales locales y opt-in explícito de red.
+- [x] Generar guiones estructurados draft-only desde fuentes capturadas y claim ledger; validar citas y claims de News/Education.
 - [x] Separar ChatGPT web de OpenAI API; nunca asumir API incluida en plan ChatGPT.
 - [x] Añadir adaptadores de búsqueda Brave/Tavily con resultados normalizados, URL, extracto, fecha disponible, puntuación e instante de recuperación (separados del LLM).
 - [x] Añadir lectura limitada de fuentes originales HTML/XHTML/texto y ledger JSONL versionado por campaña, con opt-in de red y defensas SSRF.
+- [x] Añadir radar de descubrimiento web por campaña con consultas múltiples, deduplicación, score transparente y guardado local; no representa popularidad ni valida verdad/derechos.
 - [x] Añadir ledger append-only de afirmaciones, referencias a evidencias capturadas y evaluación humana supported/contradicted/unsupported/unverified.
 - [ ] Añadir corroboración asistida con revisión humana, detección de contradicciones y controles de independencia; el modelo no puede adjudicar verdad.
-- [ ] Añadir proveedor de imágenes configurable; Pexels no será requisito.
+- [x] Añadir proveedor de imágenes Openverse con búsqueda opt-in, filtro comercial y ledger local; metadatos de derechos siguen sin verificar.
 - [ ] Añadir TTS configurable, sin acoplarlo a un proveedor.
 - [ ] Benchmarks antes de incorporar ClipsAI, FunClip, WhisperX, Silero VAD, MediaPipe, Auto-Editor o MoviePy.
 
@@ -45,6 +49,7 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [ ] Validar integridad de audio/video, duración, ratio, resolución, FPS, códec y subtítulos.
 - [ ] Detectar pantalla negra, audio ausente, clipping, silencios y errores de render.
 - [ ] Crear revisión editorial/factual específica por perfil.
+- [x] Crear ledger hash-bound de revisión humana de derechos/atribución para candidatos Openverse (parcial: no cubre todos los assets ni certifica licencias).
 - [ ] Crear ledger de licencias, permisos, atribuciones y procedencia por asset.
 - [ ] Ligar aprobación humana al hash exacto del guion, medios y render.
 - [ ] Bloquear distribución si falta cualquier evidencia o aprobación.

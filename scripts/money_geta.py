@@ -569,7 +569,7 @@ def run_mpt(args: argparse.Namespace) -> int:
         print(f"VIDEO: {video.resolve()}")
     registered_artifacts = []
     try:
-        from scripts.artifact_registry import register_artifact
+        from scripts.artifact_registry import register_artifact, run_artifact_qc
         for item in videos:
             video = Path(item)
             if not video.is_absolute():
@@ -584,6 +584,18 @@ def run_mpt(args: argparse.Namespace) -> int:
             registered_artifacts.append(registered)
             print(f"ARTIFACT_ID: {registered['artifact_id']}")
             print(f"ARTIFACT_SHA256: {registered['sha256']}")
+            qc = run_artifact_qc(args.campaign, registered["artifact_id"], registered["sha256"],
+                                 expected_aspect=args.aspect)
+            print("TECHNICAL_QC: PASS" if qc["passed"] else "TECHNICAL_QC: FAIL")
+            for issue in qc["problems"]:
+                print(f"QC ISSUE: {issue}")
+            if not qc["passed"]:
+                write_manifest(session, stage="technical_qc_failed", mpt_task_id=payload.get("task_id"),
+                    artifact_id=registered["artifact_id"], artifact_sha256=registered["sha256"],
+                    qc_problems=qc["problems"])
+                print("BLOCKED: technical QC did not pass; publication-check will remain blocked.")
+                print(f"SESSION: {session}")
+                return 2
     except (OSError, ValueError, RuntimeError) as exc:
         write_manifest(session, stage="artifact_registration_failed", failure=str(exc),
                        output_videos=[str((Path(item) if Path(item).is_absolute() else mpt_runtime_root / item).resolve()) for item in videos])
@@ -644,6 +656,82 @@ def main(argv: list[str] | None = None) -> int:
     session = sub.add_parser("new-session", help="allocate a unique, non-destructive recording workspace")
     session.add_argument("job_id")
     session.add_argument("--root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
+    script_review = sub.add_parser("script-review", help="register, approve, list or check hash-bound script drafts")
+    review_actions = script_review.add_subparsers(dest="review_action", required=True)
+    script_register = review_actions.add_parser("register")
+    script_register.add_argument("--project", required=True)
+    script_register.add_argument("--campaign", required=True)
+    script_register.add_argument("--draft", type=Path, required=True)
+    script_approve = review_actions.add_parser("approve")
+    script_approve.add_argument("--project", required=True)
+    script_approve.add_argument("--campaign", required=True)
+    script_approve.add_argument("--script-id", required=True)
+    script_approve.add_argument("--sha256", required=True)
+    script_approve.add_argument("--reviewer", required=True)
+    script_approve.add_argument("--decision", choices=("approved", "rejected"), required=True)
+    script_approve.add_argument("--notes", default="")
+    script_check = review_actions.add_parser("check")
+    script_check.add_argument("--project", required=True)
+    script_check.add_argument("--campaign", required=True)
+    script_check.add_argument("--script-id", required=True)
+    script_check.add_argument("--sha256", required=True)
+    script_list = review_actions.add_parser("list")
+    script_list.add_argument("--project", required=True)
+    script_list.add_argument("--campaign", required=True)
+    scriptdraft = sub.add_parser("script-draft", help="generate a local unapproved script draft from captured source evidence")
+    scriptdraft.add_argument("--project", required=True)
+    scriptdraft.add_argument("--campaign", required=True)
+    scriptdraft.add_argument("--language", default="es-AR")
+    scriptdraft.add_argument("--max-tokens", type=int, choices=range(250, 4001), default=2000)
+    media_review = sub.add_parser("media-review", help="record an operator rights review of an image candidate")
+    media_review.add_argument("--project", required=True)
+    media_review.add_argument("--campaign", required=True)
+    media_review.add_argument("--candidate-id", required=True)
+    media_review.add_argument("--decision", choices=("approved", "rejected"), required=True)
+    media_review.add_argument("--reviewer", required=True)
+    media_review.add_argument("--rights-evidence", default="")
+    media_review.add_argument("--license", default="")
+    media_review.add_argument("--attribution", default="")
+    media_review.add_argument("--source-reviewed", action="store_true")
+    media_review.add_argument("--notes", default="")
+    media_check = sub.add_parser("media-check", help="check current hash-bound rights review of an image candidate")
+    media_check.add_argument("--project", required=True)
+    media_check.add_argument("--campaign", required=True)
+    media_check.add_argument("--candidate-id", required=True)
+    media_download = sub.add_parser("media-download", help="download one currently approved image candidate (network opt-in required)")
+    media_download.add_argument("--project", required=True)
+    media_download.add_argument("--campaign", required=True)
+    media_download.add_argument("--candidate-id", required=True)
+    media_download.add_argument("--allow-network", action="store_true", help="explicitly permit this image download network request")
+    media_download.add_argument("--confirm-download", action="store_true", help="confirm this exact approved candidate should be downloaded")
+    library = sub.add_parser("asset-library", help="search and verify locally downloaded campaign assets")
+    library_actions = library.add_subparsers(dest="library_action", required=True)
+    library_list = library_actions.add_parser("list", help="list downloaded local media assets")
+    library_list.add_argument("--project")
+    library_list.add_argument("--campaign")
+    library_search = library_actions.add_parser("search", help="search downloaded media metadata")
+    library_search.add_argument("--query", required=True)
+    library_search.add_argument("--project")
+    library_search.add_argument("--campaign")
+    library_verify = library_actions.add_parser("verify", help="verify file integrity and current rights approvals")
+    library_verify.add_argument("--project")
+    library_verify.add_argument("--campaign")
+    scene_assets = sub.add_parser("scene-assets", help="suggest approved local assets for scenes of a reviewed script")
+    scene_assets.add_argument("--project", required=True)
+    scene_assets.add_argument("--campaign", required=True)
+    scene_assets.add_argument("--script-id", required=True)
+    scene_assets.add_argument("--sha256", required=True)
+    scene_assets.add_argument("--limit", type=int, choices=range(1, 11), default=5)
+    image_search = sub.add_parser("image-search", help="find commercially-filtered stock images via Openverse and save candidates")
+    image_search.add_argument("--project", required=True)
+    image_search.add_argument("--campaign", required=True)
+    image_search.add_argument("--query", required=True)
+    image_search.add_argument("--aspect", choices=("tall", "wide", "square"), default="tall")
+    image_search.add_argument("--limit", type=int, choices=range(1, 21), default=12)
+    research = sub.add_parser("research", help="search and rank web-discovery leads for a campaign")
+    research.add_argument("--project", required=True)
+    research.add_argument("--campaign", required=True)
+    research.add_argument("--query", action="append", required=True, help="search query (repeat up to 10 times)")
     campaign = sub.add_parser("campaign-check", help="validate campaign evidence fields (not legal clearance)")
     campaign.add_argument("--campaign", type=Path, required=True)
     acquire = sub.add_parser("download-source", help="download a permitted public source with yt-dlp")
@@ -725,6 +813,136 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         except (KeyError, ValueError) as exc:
             print(f"FAIL: {exc}")
+            return 2
+    if args.command == "script-review":
+        from scripts.script_registry import ScriptReviewError, register_script, approve_script, check_script, list_scripts
+        try:
+            if args.review_action == "register":
+                result = register_script(args.project, args.campaign, args.draft)
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 0
+            if args.review_action == "approve":
+                result = approve_script(args.project, args.campaign, args.script_id, args.sha256,
+                                      reviewer=args.reviewer, decision=args.decision, notes=args.notes)
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 0
+            if args.review_action == "list":
+                result = list_scripts(args.project, args.campaign)
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 0
+            passed, problems = check_script(args.project, args.campaign, args.script_id, args.sha256)
+            print("SCRIPT_APPROVAL: PASS" if passed else "SCRIPT_APPROVAL: BLOCKED")
+            for problem in problems:
+                print(f"- {problem}")
+            return 0 if passed else 2
+        except (OSError, ValueError, RuntimeError, ScriptReviewError) as exc:
+            print(f"FAIL: script review: {exc}")
+            return 2
+    if args.command == "script-draft":
+        from scripts.scriptwriter import draft_campaign_script
+        from scripts.providers.llm import ProviderConfigurationError, ProviderRequestError
+        try:
+            report = draft_campaign_script(args.project, args.campaign, language=args.language, max_tokens=args.max_tokens)
+            print("SCRIPT: DRAFT · HUMAN REVIEW PENDING")
+            print(f"TITLE: {report['script']['title']}")
+            print(f"HOOK: {report['script']['hook']}")
+            print(f"REPORT: {report['report_path']}")
+            print("No approval, rendering, publishing or scheduling was performed.")
+            return 0
+        except (KeyError, ValueError, OSError, ProviderConfigurationError, ProviderRequestError) as exc:
+            print(f"FAIL: script draft: {exc}")
+            return 2
+    if args.command == "media-review":
+        from scripts.media_registry import MediaReviewError, review_media_candidate
+        try:
+            event = review_media_candidate(args.project, args.campaign, args.candidate_id,
+                decision=args.decision, reviewer=args.reviewer, rights_evidence=args.rights_evidence,
+                reviewed_license=args.license, attribution=args.attribution,
+                source_reviewed=args.source_reviewed, notes=args.notes)
+            print(json.dumps(event, ensure_ascii=False, indent=2))
+            print("NOTE: this records an operator attestation; Money-Geta does not certify license accuracy.")
+            return 0
+        except (OSError, ValueError, RuntimeError, MediaReviewError) as exc:
+            print(f"FAIL: media review: {exc}")
+            return 2
+    if args.command == "media-check":
+        from scripts.media_registry import check_media_candidate
+        passed, problems = check_media_candidate(args.project, args.campaign, args.candidate_id)
+        print("MEDIA_RIGHTS_REVIEW: PASS" if passed else "MEDIA_RIGHTS_REVIEW: BLOCKED")
+        for problem in problems:
+            print(f"- {problem}")
+        return 0 if passed else 2
+    if args.command == "scene-assets":
+        from scripts.scene_asset_matcher import build_scene_asset_plan
+        try:
+            report = build_scene_asset_plan(args.project, args.campaign, args.script_id, args.sha256,
+                                           limit_per_scene=args.limit)
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            print("SCENE_ASSETS: SUGGESTIONS_ONLY · human review required; no render or publishing")
+            return 0
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"FAIL: scene asset matching: {exc}")
+            return 2
+    if args.command == "asset-library":
+        from scripts.media_library import MediaLibraryError, list_media_assets, search_media_assets, verify_media_library
+        try:
+            if args.library_action == "list":
+                result = list_media_assets(project_id=args.project, campaign_id=args.campaign)
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 0
+            if args.library_action == "search":
+                result = search_media_assets(args.query, project_id=args.project, campaign_id=args.campaign)
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 0
+            result = verify_media_library(project_id=args.project, campaign_id=args.campaign)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            print("MEDIA_LIBRARY: " + result["status"])
+            return 0 if result["status"] == "PASS" else 2
+        except (OSError, ValueError, RuntimeError, MediaLibraryError) as exc:
+            print(f"FAIL: media library: {exc}")
+            return 2
+    if args.command == "media-download":
+        from scripts.approved_media_download import MediaDownloadError, download_approved_candidate
+        try:
+            result = download_approved_candidate(args.project, args.campaign, args.candidate_id,
+                allow_network=args.allow_network, confirm_download=args.confirm_download)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            print("NOTE: the downloaded file remains untrusted and is not automatically added to a render.")
+            return 0
+        except (OSError, ValueError, RuntimeError, MediaDownloadError) as exc:
+            print(f"FAIL: media download: {exc}")
+            return 2
+    if args.command == "image-search":
+        from scripts.providers.openverse import ImageSearchConfig, ImageSearchConfigurationError, ImageSearchRequestError, search_openverse, save_image_candidates
+        try:
+            config = ImageSearchConfig.from_env()
+            config = ImageSearchConfig(allow_requests=config.allow_requests, timeout_seconds=config.timeout_seconds,
+                                      max_results=args.limit, endpoint=config.endpoint)
+            candidates = search_openverse(args.query, config=config, aspect_ratio=args.aspect)
+            saved = save_image_candidates(args.project, args.campaign, candidates)
+            print(json.dumps({"provider": "openverse", "query": args.query, "aspect": args.aspect,
+                              "count": len(candidates), "rights_status": "unverified",
+                              "ledger": saved, "candidates": [item.to_dict() for item in candidates]},
+                             ensure_ascii=False, indent=2))
+            print("NOTE: license metadata is not independently verified; check the original source page and attribution before use.")
+            return 0
+        except (OSError, ValueError, RuntimeError, ImageSearchConfigurationError, ImageSearchRequestError) as exc:
+            print(f"FAIL: image search: {exc}")
+            return 2
+    if args.command == "research":
+        from scripts.campaign_research import run_campaign_research
+        from scripts.providers.search import SearchConfigurationError
+        try:
+            report = run_campaign_research(args.project, args.campaign, args.query)
+            print(f"RESEARCH: {report['status'].upper()}")
+            print(f"RESULTS: {report['result_count']} · UNIQUE SOURCES: {report['unique_source_count']}")
+            for item in report["ranked_results"][:10]:
+                print(f"#{item['rank']} · score {item['discovery_score']:.3f} · queries {item['query_count']} · {item['title']} · {item['canonical_url']}")
+            print(f"REPORT: {report['report_path']}")
+            print("NOTE: discovery score is not a popularity metric or factual/legal validation.")
+            return 0 if report["status"] == "completed" else (1 if report["status"] == "partial" else 2)
+        except (KeyError, ValueError, OSError, SearchConfigurationError) as exc:
+            print(f"FAIL: campaign research: {exc}")
             return 2
     if args.command == "projects":
         from scripts.project_registry import create_project, get_project, list_projects
