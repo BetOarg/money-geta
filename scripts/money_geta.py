@@ -698,6 +698,12 @@ def main(argv: list[str] | None = None) -> int:
     media_check.add_argument("--project", required=True)
     media_check.add_argument("--campaign", required=True)
     media_check.add_argument("--candidate-id", required=True)
+    media_download = sub.add_parser("media-download", help="download one currently approved image candidate (network opt-in required)")
+    media_download.add_argument("--project", required=True)
+    media_download.add_argument("--campaign", required=True)
+    media_download.add_argument("--candidate-id", required=True)
+    media_download.add_argument("--allow-network", action="store_true", help="explicitly permit this image download network request")
+    media_download.add_argument("--confirm-download", action="store_true", help="confirm this exact approved candidate should be downloaded")
     image_search = sub.add_parser("image-search", help="find commercially-filtered stock images via Openverse and save candidates")
     image_search.add_argument("--project", required=True)
     image_search.add_argument("--campaign", required=True)
@@ -848,6 +854,17 @@ def main(argv: list[str] | None = None) -> int:
         for problem in problems:
             print(f"- {problem}")
         return 0 if passed else 2
+    if args.command == "media-download":
+        from scripts.approved_media_download import MediaDownloadError, download_approved_candidate
+        try:
+            result = download_approved_candidate(args.project, args.campaign, args.candidate_id,
+                allow_network=args.allow_network, confirm_download=args.confirm_download)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            print("NOTE: the downloaded file remains untrusted and is not automatically added to a render.")
+            return 0
+        except (OSError, ValueError, RuntimeError, MediaDownloadError) as exc:
+            print(f"FAIL: media download: {exc}")
+            return 2
     if args.command == "image-search":
         from scripts.providers.openverse import ImageSearchConfig, ImageSearchConfigurationError, ImageSearchRequestError, search_openverse, save_image_candidates
         try:
