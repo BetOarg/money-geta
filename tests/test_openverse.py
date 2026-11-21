@@ -67,7 +67,8 @@ def test_image_search_requires_opt_in_and_valid_settings():
 def test_normalization_rejects_bad_urls_and_incomplete_license_metadata():
     bad = _response_item()
     bad["url"] = "javascript:alert(1)"
-    bad_items = [bad, {**_response_item(), "license": None}, "not a dict"]
+    credentialed = {**_response_item(), "url": "https://cdn.example.org/image?access_token=secret"}
+    bad_items = [bad, credentialed, {**_response_item(), "license": None}, "not a dict"]
     assert _normalize("query", bad_items) == []
     normalized = _normalize("query", [_response_item()])
     assert normalized[0].creator == "Photographer"
