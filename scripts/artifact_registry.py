@@ -263,8 +263,12 @@ def record_central_qc(campaign_path: str | Path, artifact_id: str, sha256: str, 
     except ValueError: raise ArtifactReviewError("Artifact moved outside allowed output directory.") from None
     if not path.is_file() or path.is_symlink() or _sha256(path) != sha256:
         raise ArtifactReviewError("Artifact missing or changed after registration.")
-    report_file = Path(report_path).expanduser().resolve(strict=True)
-    if report_file.is_symlink() or not report_file.is_file():
+    report_supplied = Path(report_path).expanduser()
+    _reject_symlink_components(report_supplied)
+    if report_supplied.is_symlink():
+        raise ArtifactReviewError("QC report symlinks are blocked.")
+    report_file = report_supplied.resolve(strict=True)
+    if not report_file.is_file():
         raise ArtifactReviewError("QC report must be a regular file.")
     try: report = json.loads(report_file.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError): raise ArtifactReviewError("QC report is malformed.") from None
