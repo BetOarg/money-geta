@@ -123,3 +123,13 @@ def test_malformed_candidate_id_in_download_ledger_is_rejected(tmp_path):
         "candidate_id": 123, "candidate_sha256": "a" * 64, "sha256": "b" * 64}) + "\n")
     with pytest.raises(MediaLibraryError, match="unsafe candidate ID"):
         _read_download_ledger(campaign_file)
+
+
+def test_campaign_filter_works_across_projects(tmp_path):
+    root, _, candidate, _, _ = fixture(tmp_path)
+    create_project("Second project", "viral", root=root)
+    create_campaign("second-project", "Campaign", "YouTube Shorts", root=root)
+    found = list_media_assets(campaign_id="campaign", root=root)
+    assert len(found) == 1
+    assert found[0]["project_id"] == "library-project"
+    assert found[0]["candidate_id"] == candidate["candidate_id"]
