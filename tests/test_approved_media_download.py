@@ -72,3 +72,25 @@ def test_repeat_download_returns_verified_existing_record(tmp_path,monkeypatch):
     second=d.download_approved_candidate("p","c","cand_1",allow_network=True,confirm_download=True,resolver=resolver,opener=opener)
     assert first["sha256"]==second["sha256"]
     assert len(calls)==1
+
+
+def test_https_connection_pins_to_validated_ip(monkeypatch):
+    observed = {}
+    class FakeTlsContext:
+        def wrap_socket(self, sock, server_hostname):
+            observed["server_hostname"] = server_hostname
+            return "tls-wrapped-socket"
+    def fake_connect(address, timeout):
+        observed["address"] = address
+        observed["timeout"] = timeout
+        return "raw-socket"
+    monkeypatch.setattr(d.socket, "create_connection", fake_connect)
+    connection = d._PinnedHTTPSConnection("assets.example.org", "8.8.8.8", 5, FakeTlsContext())
+    connection.connect()
+    assert observed == {"address": ("8.8.8.8", 443), "timeout": 5, "server_hostname": "assets.example.org"}
+    assert connection.sock == "tls-wrapped-socket"
+
+
+def test_public_dns_returns_validated_ip_list():
+    records=[(None,None,None,None,("8.8.8.8",443)),(None,None,None,None,("1.1.1.1",443))]
+    assert d._resolve_public("example.org",resolver=lambda *a,**k:records)==["1.1.1.1","8.8.8.8"]
