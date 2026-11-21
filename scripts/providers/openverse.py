@@ -204,4 +204,4 @@ def save_image_candidates(project_id: str, campaign_id: str, candidates: list[Im
             appended += 1
         handle.flush()
         os.fsync(handle.fileno())
-    return {"path": str(ledger), "added": appended, "total": len(existing_ids)}
+    return {"path": str(ledger), "added": appended, "total": len(existing_hashes)}
