@@ -554,7 +554,7 @@ class MoneyGetaApp:
 
     def _build_media_library(self):
         self.library.columnconfigure(0, weight=1)
-        self.library.rowconfigure(2, weight=1)
+        self.library.rowconfigure(3, weight=1)
         ttk.Label(self.library, text="Biblioteca multimedia local · catálogo de solo lectura", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(self.library, text="Filtros: usa el proyecto y campaña seleccionados en la pestaña Imágenes.").grid(row=1, column=0, sticky="w", pady=(3, 6))
         toolbar = ttk.Frame(self.library)
