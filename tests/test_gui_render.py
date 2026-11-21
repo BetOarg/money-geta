@@ -15,7 +15,7 @@ def test_campaign_payload_requires_matching_rights_evidence_and_attestations():
         build_campaign_payload("Campaign", "YouTube Shorts", ["source"], ["rights proof"], [], [], False, True, True)
     with pytest.raises(ValueError, match="credits"):
         build_campaign_payload("Campaign", "YouTube Shorts", ["source"], ["rights proof"], [], [], True, True, False)
-    with pytest.raises(ValueError, match="Cannot"):
+    with pytest.raises(ValueError, match="No puedes"):
         build_campaign_payload("Campaign", "YouTube Shorts", ["source"], ["rights proof"], [], ["credit"], True, True, True)
 
 
