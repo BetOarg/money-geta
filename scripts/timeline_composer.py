@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from scripts.timeline_plan import MIN_DURATION, MAX_DURATION
+from scripts.timeline_plan import TRANSITIONS
 
 
 def _finite(value: Any, label: str) -> float:
@@ -50,15 +51,39 @@ def _validate(timeline: dict[str, Any]) -> list[dict[str, Any]]:
         duration = _finite(scene.get("duration_seconds", 0), "Scene duration")
         if not MIN_DURATION <= duration <= MAX_DURATION:
             raise ValueError(f"Scene {idx} duration is outside supported bounds.")
-        transition = str(scene.get("transition_in", "cut")).lower()
+        transition = str(scene.get("transition_in", "cut")).strip().lower()
         transition_duration = _finite(scene.get("transition_duration_seconds", 0), "Transition duration")
-        if transition != "cut" or transition_duration != 0:
-            raise ValueError("Preview composer currently supports cuts only; transition effects are not rendered.")
+        if transition not in TRANSITIONS:
+            raise ValueError(f"Scene {idx} has an unsupported transition.")
+        if idx == 1 and transition != "cut":
+            raise ValueError("The first scene cannot have an incoming transition.")
+        if transition == "cut" and transition_duration != 0:
+            raise ValueError("Cut transition duration must be zero.")
+        if transition != "cut" and not 0 < transition_duration <= duration:
+            raise ValueError("Transition duration must be positive and fit inside the scene.")
         media = Path(str(scene.get("visual_path") or "")).expanduser()
         if not media.is_file() or media.is_symlink():
             raise ValueError(f"Scene {idx} requires a valid local non-symlink media file.")
-        validated.append(dict(scene, duration_seconds=duration, visual_path=str(media.resolve())))
+        validated.append(dict(scene, duration_seconds=duration, transition_in=transition,
+                             transition_duration_seconds=transition_duration,
+                             visual_path=str(media.resolve())))
     return validated
+
+
+def _groups(scenes: list[dict[str, Any]], segments: list[Path]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for scene, segment in zip(scenes, segments):
+        transition = scene["transition_in"]
+        if transition != "cut" and result:
+            result.append({"segments": [segment], "duration": scene["duration_seconds"],
+                         "incoming": transition, "transition_duration": scene["transition_duration_seconds"]})
+        elif result:
+            result[-1]["segments"].append(segment)
+            result[-1]["duration"] += scene["duration_seconds"]
+        else:
+            result.append({"segments": [segment], "duration": scene["duration_seconds"],
+                         "incoming": "cut", "transition_duration": 0.0})
+    return result
 
 
 def compose_preview(
@@ -72,7 +97,7 @@ def compose_preview(
     fps: int = 30,
     runner: Callable[..., Any] = subprocess.run,
 ) -> Path:
-    """Render a local, draft-only preview MP4. No final-render or publish gate is changed."""
+    """Render a local, draft-only preview MP4 with scene transitions and optional audio."""
     if timeout < 1 or width < 2 or height < 2 or fps < 1:
         raise ValueError("Invalid preview output settings.")
     scenes = _validate(timeline)
@@ -146,16 +171,58 @@ def compose_preview(
             if runner is subprocess.run and not segment.is_file():
                 raise RuntimeError(f"FFmpeg did not create preview segment {index}.")
             segments.append(segment)
-        manifest = temp / "concat.txt"
-        manifest.write_text("".join("file '" + _filter_path(path) + "'\n" for path in segments), encoding="utf-8")
+
+        groups = _groups(scenes, segments)
+        group_files = []
+        for group_index, group in enumerate(groups, 1):
+            if len(group["segments"]) == 1:
+                group_files.append(group["segments"][0])
+                continue
+            group_manifest = temp / f"group_{group_index:04d}.txt"
+            group_manifest.write_text(
+                "".join("file '" + _filter_path(path) + "'\n" for path in group["segments"]),
+                encoding="utf-8",
+            )
+            group_output = temp / f"group_{group_index:04d}.mp4"
+            group_args = [
+                executable, "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
+                "-i", str(group_manifest), "-c", "copy", "-movflags", "+faststart", str(group_output),
+            ]
+            group_result = runner(group_args, capture_output=True, text=True, timeout=timeout, check=False)
+            if getattr(group_result, "returncode", 0) != 0:
+                raise RuntimeError(f"FFmpeg cut-group assembly failed: {(getattr(group_result, 'stderr', '') or '')[-1000:]}")
+            if runner is subprocess.run and not group_output.is_file():
+                raise RuntimeError("FFmpeg did not create a cut-group preview.")
+            group_files.append(group_output)
+
         video_only = temp / "video_only.mp4" if audio_tracks else destination
-        concat_args = [
-            executable, "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
-            "-i", str(manifest), "-c", "copy", "-movflags", "+faststart", str(video_only),
-        ]
-        final = runner(concat_args, capture_output=True, text=True, timeout=timeout, check=False)
-        if getattr(final, "returncode", 0) != 0:
-            raise RuntimeError(f"FFmpeg preview assembly failed: {(getattr(final, 'stderr', '') or '')[-1000:]}")
+        if len(group_files) == 1:
+            final_video_args = [
+                executable, "-hide_banner", "-loglevel", "error", "-y", "-i", str(group_files[0]),
+                "-c", "copy", "-movflags", "+faststart", str(video_only),
+            ]
+        else:
+            final_video_args = [executable, "-hide_banner", "-loglevel", "error", "-y"]
+            final_video_args += [arg for group_file in group_files for arg in ("-i", str(group_file))]
+            graph = []
+            accumulated = groups[0]["duration"]
+            prior = "[0:v]"
+            for group_index in range(1, len(groups)):
+                transition = groups[group_index]["incoming"]
+                duration = groups[group_index]["transition_duration"]
+                transition_filter = {"fade": "fade", "dissolve": "dissolve", "slide": "slideleft"}[transition]
+                offset = max(0.0, accumulated - duration)
+                label = f"v{group_index}"
+                graph.append(f"{prior}[{group_index}:v]xfade=transition={transition_filter}:duration={duration:.3f}:offset={offset:.3f}[{label}]")
+                prior = f"[{label}]"
+                accumulated += groups[group_index]["duration"] - duration
+            final_video_args += [
+                "-filter_complex", ";".join(graph), "-map", prior, "-c:v", "libx264", "-preset", "ultrafast",
+                "-crf", "28", "-movflags", "+faststart", str(video_only),
+            ]
+        final_video = runner(final_video_args, capture_output=True, text=True, timeout=timeout, check=False)
+        if getattr(final_video, "returncode", 0) != 0:
+            raise RuntimeError(f"FFmpeg preview transition assembly failed: {(getattr(final_video, 'stderr', '') or '')[-1000:]}")
         if runner is subprocess.run and (not video_only.is_file() or video_only.stat().st_size == 0):
             raise RuntimeError("FFmpeg did not produce a non-empty preview video.")
         if audio_tracks:
