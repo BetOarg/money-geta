@@ -265,7 +265,7 @@ class MoneyGetaApp:
         ttk.Label(opts, text="Voz (opcional)").pack(side=LEFT)
         ttk.Entry(opts, textvariable=self.voice_var, width=16).pack(side=LEFT, padx=5)
         ttk.Button(self.render, text="Validar campaña y renderizar", command=self.start_render).grid(row=12, column=1, sticky="w")
-        ttk.Label(self.render, text="Salida local; la publicación automática permanece deshabilitada.").grid(row=10, column=1, columnspan=2, sticky="w")
+        ttk.Label(self.render, text="Salida local; la publicación automática permanece deshabilitada.").grid(row=13, column=1, columnspan=2, sticky="w")
 
     def _add_render_materials(self):
         for raw in filedialog.askopenfilenames(filetypes=[("Videos", "*.mp4 *.mkv *.mov *.webm *.avi"), ("Todos", "*.*")]):
