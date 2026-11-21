@@ -41,7 +41,7 @@ def test_preview_composer_builds_segment_and_concat_commands(tmp_path):
 
 def test_preview_rejects_non_cut_transition(tmp_path):
     plan = draft(tmp_path)
-    plan["scenes"][0].update(transition_in="fade", transition_duration_seconds=0.5)
+    plan["scenes"][0].update(transition_in="wipe", transition_duration_seconds=0.5)
     with pytest.raises(ValueError, match="cuts only"):
         compose_preview(plan, tmp_path / "preview.mp4", ffmpeg="fake", runner=success_runner)
 
@@ -128,3 +128,51 @@ def test_preview_rejects_audio_tracks_without_local_source(tmp_path):
     }]
     with pytest.raises(ValueError, match="local source file"):
         compose_preview(plan, tmp_path / "out.mp4", ffmpeg="fake", runner=success_runner)
+
+
+def test_preview_renders_fade_and_dissolve_xfade_filters(tmp_path):
+    plan = draft(tmp_path)
+    second = tmp_path / "still-2.png"
+    second.write_bytes(b"placeholder")
+    plan["scenes"].append({
+        "scene_id": "scene-002", "duration_seconds": 4,
+        "visual_path": str(second), "subtitle_text": "Second",
+        "transition_in": "fade", "transition_duration_seconds": 0.75,
+    })
+    calls = []
+    compose_preview(plan, tmp_path / "transitions.mp4", ffmpeg="fake",
+                   runner=lambda cmd, **kw: (calls.append(cmd) or success_runner(cmd, **kw)))
+    assert len(calls) == 3
+    graph = calls[-1][calls[-1].index("-filter_complex") + 1]
+    assert "xfade=transition=fade:duration=0.750:offset=2.250" in graph
+    assert "-map" in calls[-1] and "[v1]" in calls[-1]
+
+
+def test_preview_cut_groups_concat_and_transition_duration_validation(tmp_path):
+    plan = draft(tmp_path)
+    second = tmp_path / "still-2.png"
+    second.write_bytes(b"placeholder")
+    third = tmp_path / "still-3.png"
+    third.write_bytes(b"placeholder")
+    plan["scenes"].extend([
+        {"scene_id": "scene-002", "duration_seconds": 2, "visual_path": str(second),
+         "subtitle_text": "", "transition_in": "cut", "transition_duration_seconds": 0},
+        {"scene_id": "scene-003", "duration_seconds": 2, "visual_path": str(third),
+         "subtitle_text": "", "transition_in": "dissolve", "transition_duration_seconds": 1},
+    ])
+    calls = []
+    compose_preview(plan, tmp_path / "mixed-cuts.mp4", ffmpeg="fake",
+                   runner=lambda cmd, **kw: (calls.append(cmd) or success_runner(cmd, **kw)))
+    assert any("concat" in cmd and "group_0001.txt" in str(cmd) for cmd in calls)
+    assert any("transition=dissolve" in str(cmd) for cmd in calls)
+    plan["scenes"][2]["transition_duration_seconds"] = 5
+    with pytest.raises(ValueError, match="fit inside"):
+        compose_preview(plan, tmp_path / "invalid-transition.mp4", ffmpeg="fake", runner=success_runner)
+
+
+def test_first_scene_cannot_have_incoming_transition(tmp_path):
+    plan = draft(tmp_path)
+    plan["scenes"][0]["transition_in"] = "fade"
+    plan["scenes"][0]["transition_duration_seconds"] = 0.5
+    with pytest.raises(ValueError, match="first scene"):
+        compose_preview(plan, tmp_path / "first-fade.mp4", ffmpeg="fake", runner=success_runner)
