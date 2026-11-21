@@ -12,6 +12,6 @@ Both flags are mandatory; search, review, render, or GUI actions do not trigger 
 - DNS checked for public addresses; redirects limited to 3 and each destination revalidated.
 - Maximum 20 MB, MIME type must match a supported image signature.
 - Files stored under campaign `media_assets/`; provenance recorded in `media_download_ledger.jsonl`.
-- Existing asset files with differing bytes are never overwritten.
+- Repeated downloads reuse a hash-verified file and do not fetch it again. Existing asset files with differing bytes are never overwritten.
 - Downloaded content remains untrusted; it is not automatically included in rendering or publishing.
 - Rights review is operator attestation, not legal certification.
