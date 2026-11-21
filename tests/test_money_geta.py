@@ -18,7 +18,7 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     import json
     from argparse import Namespace
     from scripts import money_geta
-    from scripts.artifact_registry import approve_artifact, check_artifact, list_artifacts
+    from scripts.artifact_registry import approve_artifact, check_artifact, list_artifacts, main as artifact_review_main
 
     mpt = tmp_path / "mpt"
     mpt.mkdir()
@@ -86,9 +86,15 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     artifact = artifacts[0]
     assert Path(artifact["path"]).is_relative_to((mpt / "storage" / "tasks").resolve())
     assert Path(artifact["allowed_root"]) == (mpt / "storage" / "tasks").resolve()
+    review_args = [
+        "--campaign", str(campaign), "publication-check",
+        "--artifact-id", artifact["artifact_id"], "--sha256", artifact["sha256"],
+    ]
     assert check_artifact(campaign, artifact["artifact_id"], artifact["sha256"])[0] is False
+    assert artifact_review_main(review_args) == 2
     approve_artifact(campaign, artifact["artifact_id"], artifact["sha256"], reviewer="test operator")
     assert check_artifact(campaign, artifact["artifact_id"], artifact["sha256"]) == (True, [])
+    assert artifact_review_main(review_args) == 0
 
 
 def test_analyze_video_uses_isolated_session_and_local_source(tmp_path, monkeypatch):
