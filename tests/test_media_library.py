@@ -22,8 +22,9 @@ def fixture(tmp_path):
         "category": "photograph", "thumbnail": "https://cdn.example/thumb.jpg",
         "width": 1200, "height": 800, "attribution": "Artist A",
     }
-    candidate = _normalize("sunset", [raw])[0].to_dict()
-    save_image_candidates("library-project", "campaign", [candidate], root=root)
+    candidate_obj = _normalize("sunset", [raw])[0]
+    save_image_candidates("library-project", "campaign", [candidate_obj], root=root)
+    candidate = candidate_obj.to_dict()
     review_media_candidate("library-project", "campaign", candidate["candidate_id"], decision="approved",
         reviewer="Tester", rights_evidence="Original source license page checked",
         reviewed_license="CC BY 4.0", attribution="Artist A", source_reviewed=True, root=root)
