@@ -1738,6 +1738,35 @@ class MoneyGetaApp:
         new_index = max(0, min(index + offset, len(self.timeline_plan["scenes"]) - 1))
         self._timeline_refresh_ui(new_index)
 
+    def _timeline_render_preview_ui(self):
+        if self.timeline_preview_busy:
+            messagebox.showinfo("Preview en curso", "Espera a que termine la preview actual.")
+            return
+        timeline = getattr(self, "timeline_plan", None)
+        if not isinstance(timeline, dict) or timeline.get("plan_type") != "editable_timeline":
+            messagebox.showwarning("Timeline requerido", "Primero abre un plan visual y crea/carga su timeline.")
+            return
+        destination = filedialog.asksaveasfilename(
+            title="Guardar preview local",
+            defaultextension=".mp4",
+            filetypes=[("Video MP4", "*.mp4")],
+            initialfile="timeline-preview.mp4",
+        )
+        if not destination:
+            return
+        snapshot = json.loads(json.dumps(timeline))
+        self.timeline_preview_busy = True
+        self.timeline_preview_button.configure(state="disabled")
+        self.timeline_status_var.set("GENERANDO PREVIEW · solo local · no es render final")
+        def worker():
+            try:
+                from scripts.timeline_composer import compose_preview
+                result = compose_preview(snapshot, Path(destination))
+                self.events.put(("timeline_preview_done", str(result)))
+            except Exception as exc:
+                self.events.put(("timeline_preview_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
     def scene_plan_save_timeline_ui(self):
         if not getattr(self, "timeline_plan", None):
             messagebox.showwarning("Timeline inexistente", "Abrí un timeline desde el plan visual.")
@@ -2025,6 +2054,18 @@ class MoneyGetaApp:
                     self.refresh_campaigns()
                     self.refresh_research_options()
                     self.refresh_qc()
+                elif kind == "timeline_preview_done":
+                    self.timeline_preview_busy = False
+                    self.timeline_preview_button.configure(state="normal")
+                    self.timeline_status_var.set("PREVIEW GENERADA · VERDE · no autorizada para publicación")
+                    self._append("TIMELINE PREVIEW: VERDE · " + value)
+                    messagebox.showinfo("Preview completada", "Preview MP4 local generado:\n" + value)
+                elif kind == "timeline_preview_error":
+                    self.timeline_preview_busy = False
+                    self.timeline_preview_button.configure(state="normal")
+                    self.timeline_status_var.set("PREVIEW ROJO · " + value[:160])
+                    self._append("TIMELINE PREVIEW ERROR: " + value)
+                    messagebox.showerror("Preview fallida", value)
                 elif kind == "image_search_done":
                     self.busy = False
                     self.process_btn.configure(state="normal")
