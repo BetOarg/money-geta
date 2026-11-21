@@ -35,7 +35,7 @@ def test_preview_composer_builds_segment_and_concat_commands(tmp_path):
     assert "-loop" in calls[0]
     filter_string = calls[0][calls[0].index("-vf") + 1]
     assert "subtitles=" in filter_string and "scale=1080:1920" in filter_string
-    assert calls[1][calls[1].index("-f") + 1] == "concat"
+    assert "-c" in calls[1] and "copy" in calls[1]
     assert str(result) in calls[1]
 
 
