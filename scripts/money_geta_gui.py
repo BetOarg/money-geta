@@ -359,6 +359,8 @@ class MoneyGetaApp:
         actions.grid(row=4, column=0, columnspan=2, sticky="ew", pady=4)
         ttk.Button(actions, text="Buscar imágenes", command=self.image_search_ui).pack(side=LEFT)
         ttk.Button(actions, text="Abrir fuente seleccionada", command=self.open_image_source).pack(side=LEFT, padx=6)
+        self.image_download_btn = ttk.Button(actions, text="Descargar aprobada", command=self.download_image_candidate_ui, state="disabled")
+        self.image_download_btn.pack(side=LEFT, padx=6)
         self.image_status_var = tk.StringVar(value="PENDIENTE · DERECHOS SIN VERIFICAR")
         ttk.Label(actions, textvariable=self.image_status_var).pack(side=LEFT, padx=8)
         ttk.Label(self.images, text="Resultados · seleccionar para ver metadatos").grid(row=5, column=0, columnspan=2, sticky="w")
