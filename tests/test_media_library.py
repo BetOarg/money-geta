@@ -21,18 +21,18 @@ def fixture(tmp_path):
         "thumbnail":"https://cdn.example/thumb.jpg","width":1200,"height":800,"attribution":"Artist A"}
     cand=_normalize("sunset", [raw])[0]
     save_image_candidates("library-project","campaign",[cand],root=root)
-    review_media_candidate("library-project","campaign",cand.candidate_id,decision="approved",reviewer="Tester",
+    review_media_candidate("library-project","campaign",cand["candidate_id"],decision="approved",reviewer="Tester",
         rights_evidence="Original source license page checked",reviewed_license="CC BY 4.0",attribution="Artist A",
         source_reviewed=True,root=root)
     cf=_campaign_file("library-project","campaign",root)
     asset_dir=cf.parent/"media_assets"
     asset_dir.mkdir()
     data=b"\\x89PNG\\r\\n\\x1a\\nvalid test payload"
-    asset=asset_dir/(cand.candidate_id+".png")
+    asset=asset_dir/(cand["candidate_id"]+".png")
     asset.write_bytes(data)
     record={"schema_version":1,"event_type":"approved_media_download","candidate_id":cand.candidate_id,
-        "candidate_sha256":_candidate_hash(cand),"source_url":cand.image_url,"source_page_url":cand.source_page_url,
-        "license":cand.license,"license_url":cand.license_url,"creator":cand.creator,"attribution":cand.attribution,
+        "candidate_sha256":_candidate_hash(cand),"source_url":cand["image_url"],"source_page_url":cand["source_page_url"],
+        "license":cand["license"],"license_url":cand["license_url"],"creator":cand["creator"],"attribution":cand["attribution"],
         "local_path":"media_assets/"+asset.name,"sha256":hashlib.sha256(data).hexdigest(),"size_bytes":len(data),"downloaded_at":"2026-11-21T12:00:00Z"}
     (cf.parent/"media_download_ledger.jsonl").write_text(json.dumps(record)+"\\n",encoding="utf-8")
     return root,cf,cand,record,asset
