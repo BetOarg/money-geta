@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import uuid
@@ -140,6 +141,18 @@ def save_timeline(timeline: dict[str, Any], *, root: Path | None = None) -> Path
         duration = float(row.get("duration_seconds", 0))
         if not MIN_DURATION <= duration <= MAX_DURATION:
             raise ValueError(f"Duration must be between {MIN_DURATION} and {MAX_DURATION} seconds.")
+        trim_start = float(row.get("media_trim_start_seconds", 0))
+        trim_end_raw = row.get("media_trim_end_seconds")
+        trim_end = None if trim_end_raw is None else float(trim_end_raw)
+        if not math.isfinite(trim_start) or trim_start < 0:
+            raise ValueError("Media trim start must be finite and non-negative.")
+        if trim_end is not None and (not math.isfinite(trim_end) or trim_end <= trim_start):
+            raise ValueError("Media trim end must be finite and greater than start.")
+        if trim_start > 0 or trim_end is not None:
+            from scripts.timeline_preview import resolve_scene_preview_path
+            _, kind = resolve_scene_preview_path(row.get("visual_path", ""))
+            if kind != "video":
+                raise ValueError("Media trim controls require a local video asset.")
         for field in ("narration", "subtitle_text", "visual_description", "visual_path", "candidate_id"):
             if not isinstance(row.get(field, ""), str):
                 raise ValueError(f"{field} must be text.")
