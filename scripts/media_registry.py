@@ -54,8 +54,8 @@ def _read_candidates(campaign_file: Path) -> dict[str, dict[str, Any]]:
 
 
 def _candidate_hash(candidate: dict[str, Any]) -> str:
-    payload = json.dumps(candidate, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    from scripts.providers.openverse import candidate_metadata_hash
+    return candidate_metadata_hash(candidate)
 
 
 def _review_ledger(campaign_file: Path) -> Path:
