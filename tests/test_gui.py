@@ -62,3 +62,10 @@ def test_gui_exposes_openverse_image_search_workflow():
     assert hasattr(gui.MoneyGetaApp, "show_image_candidate")
     assert hasattr(gui.MoneyGetaApp, "open_image_source")
     assert "image_results_list" in gui.MoneyGetaApp._build_image_search.__code__.co_names
+
+
+def test_gui_exposes_image_candidate_rights_review_controls():
+    import scripts.money_geta_gui as gui
+    assert hasattr(gui.MoneyGetaApp, "review_media_ui")
+    assert "media_approve_btn" in gui.MoneyGetaApp._build_image_search.__code__.co_names
+    assert "media_rights_evidence_var" in gui.MoneyGetaApp._build_image_search.__code__.co_names

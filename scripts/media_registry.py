@@ -18,6 +18,27 @@ class MediaReviewError(ValueError):
     """Media review cannot be safely recorded or checked."""
 
 
+def _license_matches(provider_license: str, reviewed_license: str) -> bool:
+    value = reviewed_license.strip().lower()
+    code = provider_license.strip().lower()
+    patterns = {
+        "by": r"\bby\b(?![-\s]*(?:sa|nc|nd))",
+        "by-sa": r"\bby[-\s]*sa\b",
+        "by-nc": r"\bby[-\s]*nc\b",
+        "by-nd": r"\bby[-\s]*nd\b",
+        "by-nc-sa": r"\bby[-\s]*nc[-\s]*sa\b",
+        "by-nc-nd": r"\bby[-\s]*nc[-\s]*nd\b",
+        "cc0": r"\bcc0\b|\bcc\s*zero\b",
+        "pdm": r"\bpublic\s*domain\b|\bpdm\b",
+    }
+    pattern = patterns.get(code)
+    if pattern:
+        return bool(re.search(pattern, value))
+    normalized_code = re.sub(r"[^a-z0-9]+", "", code)
+    normalized_value = re.sub(r"[^a-z0-9]+", "", value)
+    return bool(normalized_code and normalized_code in normalized_value)
+
+
 def _campaign_file(project_id: str, campaign_id: str, root: Path | None = None) -> Path:
     projects_root = (root or default_projects_root()).expanduser().resolve()
     get_project(project_id, projects_root)
@@ -54,8 +75,8 @@ def _read_candidates(campaign_file: Path) -> dict[str, dict[str, Any]]:
 
 
 def _candidate_hash(candidate: dict[str, Any]) -> str:
-    payload = json.dumps(candidate, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    from scripts.providers.openverse import candidate_metadata_hash
+    return candidate_metadata_hash(candidate)
 
 
 def _review_ledger(campaign_file: Path) -> Path:
@@ -111,6 +132,8 @@ def review_media_candidate(project_id: str, campaign_id: str, candidate_id: str,
         raise MediaReviewError("Candidate lacks source or license metadata; cannot record a review.")
     if decision == "approved" and (not source_reviewed or not rights_evidence.strip() or not reviewed_license.strip() or not license_url):
         raise MediaReviewError("Approval requires explicit source-page review, rights evidence, verified license text and license URL.")
+    if decision == "approved" and not _license_matches(license_name, reviewed_license):
+        raise MediaReviewError("Reviewed license does not match the provider license metadata; do not approve until resolved.")
     event = {
         "schema_version": 1, "event_type": "media_review",
         "candidate_id": candidate_id, "candidate_sha256": _candidate_hash(candidate),
@@ -127,6 +150,23 @@ def review_media_candidate(project_id: str, campaign_id: str, candidate_id: str,
         handle.flush()
         os.fsync(handle.fileno())
     return event
+
+
+def media_review_status(project_id: str, campaign_id: str, candidate_id: str, *,
+                         root: Path | None = None) -> str:
+    campaign_file = _campaign_file(project_id, campaign_id, root)
+    candidate = _read_candidates(campaign_file).get(candidate_id)
+    if candidate is None:
+        return "not_found"
+    reviews = [event for event in _read_reviews(campaign_file) if event["candidate_id"] == candidate_id]
+    if not reviews:
+        return "unverified"
+    latest = reviews[-1]
+    if latest.get("candidate_sha256") != _candidate_hash(candidate):
+        return "review_stale"
+    if latest.get("decision") == "approved" and latest.get("source_reviewed") and latest.get("rights_evidence") and latest.get("reviewed_license"):
+        return "reviewed_approved"
+    return "reviewed_rejected"
 
 
 def check_media_candidate(project_id: str, campaign_id: str, candidate_id: str, *,
