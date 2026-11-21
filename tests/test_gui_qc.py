@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from scripts.artifact_registry import register_artifact
 from scripts.gui_qc import discover_registered_artifacts, run_registered_artifact_qc
