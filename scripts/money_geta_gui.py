@@ -754,6 +754,7 @@ class MoneyGetaApp:
                     self.refresh_jobs()
                     self.refresh_projects()
                     self.refresh_campaigns()
+                    self.refresh_qc()
                 elif kind == "qc_done":
                     self.busy = False
                     self.process_btn.configure(state="normal")
