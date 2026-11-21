@@ -41,3 +41,10 @@ def test_gui_exposes_research_and_script_workflows():
     assert hasattr(gui.MoneyGetaApp, "_build_script")
     assert hasattr(gui.MoneyGetaApp, "generate_script_ui")
     assert hasattr(gui.MoneyGetaApp, "open_script_draft")
+
+
+def test_gui_script_review_controls_are_hash_bound():
+    import scripts.money_geta_gui as gui
+    assert hasattr(gui.MoneyGetaApp, "review_script_ui")
+    assert "script_review_id_var" in gui.MoneyGetaApp._build_script.__code__.co_names
+    assert "script_review_sha_var" in gui.MoneyGetaApp._build_script.__code__.co_names
