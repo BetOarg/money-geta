@@ -31,7 +31,7 @@ def test_preview_qc_review_required_and_perceptual_error_is_nonblocking(tmp_path
         perceptual_checker=lambda path, **kwargs: (_ for _ in ()).throw(RuntimeError("filter unavailable")))
     assert result["status"] == "REVIEW_REQUIRED"
     assert result["perceptual_observations"] is None
-    assert "filter unavailable" in result["perceptual_error
+    assert "filter unavailable" in result["perceptual_error"]
 
 
 def test_preview_qc_rejects_bad_duration_and_report_overwrite(tmp_path):
