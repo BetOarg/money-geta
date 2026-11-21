@@ -61,15 +61,22 @@ def _open_checked(url,*,resolver=socket.getaddrinfo,timeout=TIMEOUT):
         parsed=urlsplit(current)
         ips=_resolve_public(parsed.hostname,parsed.port or 443,resolver=resolver)
         context=ssl.create_default_context()
-        connection=_PinnedHTTPSConnection(parsed.hostname,ips[0],timeout,context)
         path=parsed.path or "/"
         if parsed.query: path+="?"+parsed.query
-        try:
-            connection.request("GET",path,headers={"User-Agent":"Money-Geta/0.1","Accept":"image/*"})
-            response=connection.getresponse()
-        except Exception:
-            connection.close()
-            raise
+        last_error=None
+        response=None
+        connection=None
+        for ip in ips:
+            connection=_PinnedHTTPSConnection(parsed.hostname,ip,timeout,context)
+            try:
+                connection.request("GET",path,headers={"User-Agent":"Money-Geta/0.1","Accept":"image/*"})
+                response=connection.getresponse()
+                break
+            except OSError as exc:
+                connection.close()
+                last_error=exc
+        if response is None:
+            raise MediaDownloadError("Could not connect to any validated public address.") from last_error
         if response.status in {301,302,303,307,308}:
             location=response.getheader("Location")
             response.close(); connection.close()
