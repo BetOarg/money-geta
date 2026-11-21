@@ -79,6 +79,19 @@ class ImageCandidate:
         return asdict(self)
 
 
+METADATA_FIELDS = (
+    "candidate_id", "provider", "title", "image_url", "source_page_url",
+    "creator", "creator_url", "license", "license_version", "license_url",
+    "provider_source", "category", "thumbnail_url", "width", "height", "attribution",
+)
+
+
+def candidate_metadata_hash(candidate: dict[str, Any]) -> str:
+    stable = {key: candidate.get(key) for key in METADATA_FIELDS}
+    payload = json.dumps(stable, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def _valid_url(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
@@ -164,7 +177,7 @@ def save_image_candidates(project_id: str, campaign_id: str, candidates: list[Im
         raise ValueError("Campaign manifest must be a regular file inside projects root.")
     ledger = resolved.parent / "media_candidates.jsonl"
     _reject_symlink_components(ledger)
-    existing_ids: set[str] = set()
+    existing_hashes: dict[str, str] = {}
     if ledger.exists():
         if not ledger.is_file():
             raise ValueError("Media candidate ledger is not a regular file.")
@@ -175,18 +188,19 @@ def save_image_candidates(project_id: str, campaign_id: str, candidates: list[Im
                 event = json.loads(line)
                 if not isinstance(event, dict) or not isinstance(event.get("candidate_id"), str):
                     raise ValueError("Media candidate ledger contains malformed records.")
-                existing_ids.add(event["candidate_id"])
+                existing_hashes[event["candidate_id"]] = candidate_metadata_hash(event)
         except (OSError, UnicodeError, json.JSONDecodeError):
             raise ValueError("Media candidate ledger is malformed or unreadable.") from None
     ledger.resolve(strict=False)
     appended = 0
-    with ledger.open("a", encoding="utf-8", newline="\n") as handle:
+    with ledger.open("a", encoding="utf-8", newline="\\n") as handle:
         for candidate in candidates:
             record = candidate.to_dict()
-            if record["candidate_id"] in existing_ids:
+            metadata_hash = candidate_metadata_hash(record)
+            if existing_hashes.get(record["candidate_id"]) == metadata_hash:
                 continue
-            handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
-            existing_ids.add(record["candidate_id"])
+            handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\\n")
+            existing_hashes[record["candidate_id"]] = metadata_hash
             appended += 1
         handle.flush()
         os.fsync(handle.fileno())
