@@ -44,7 +44,7 @@ def test_script_review_cli_register_approve_check(monkeypatch, tmp_path, capsys)
     root, campaign_id, draft = _setup_cli_review(tmp_path, monkeypatch)
     registered = register_script("review-cli", campaign_id, draft, root=root)
     code = main(["script-review", "approve", "--project", "review-cli", "--campaign", campaign_id,
-        "--script-id", registered["script_id"], "--sha256", registered["sha256",],
+        "--script-id", registered["script_id"], "--sha256", registered["sha256"],
         "--reviewer", "Operator", "--decision", "approved", "--notes", "Reviewed"])
     output = capsys.readouterr().out
     assert code == 0
