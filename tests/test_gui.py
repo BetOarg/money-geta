@@ -128,4 +128,5 @@ def test_gui_scene_visual_plan_displays_local_thumbnail_preview():
     preview = inspect.getsource(MoneyGetaApp._scene_plan_preview_asset)
     assert "scene_plan_preview_label" in build
     assert "ImageTk" in preview and "thumbnail" in preview
-    assert "File not available" not in preview
+    assert "local_path" in preview and "Path" in preview
+    assert "https://" not in preview
