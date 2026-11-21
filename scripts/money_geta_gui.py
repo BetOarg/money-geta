@@ -1229,6 +1229,7 @@ class MoneyGetaApp:
                     self.busy = False
                     self.process_btn.configure(state="normal")
                     self.image_candidates = value.get("candidates", [])
+                    self.image_download_btn.configure(state="disabled")
                     self.media_approve_btn.configure(state="normal" if self.image_candidates else "disabled")
                     self.media_reject_btn.configure(state="normal" if self.image_candidates else "disabled")
                     self.image_results_list.delete(0, END)
