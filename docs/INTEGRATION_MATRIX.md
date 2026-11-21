@@ -14,7 +14,7 @@ Estados: **INTEGRADO** = existe implementación verificable en la rama actual; *
 | Reencuadre/seguimiento | cutter GTA VI; OpenCV en vendor | Motor de tracking genérico | PARCIAL |
 | Edición/render | MPT CLI y FFmpeg | Adaptador común de motores | PARCIAL |
 | Guion/LLM | scripts/providers/llm.py: Chat Completions compatible; opt-in de red | Proveedor intercambiable + prompts por perfil | PARCIAL: adaptador sin orquestación de guiones |
-| Búsqueda web | scripts/providers/search.py: Brave/Tavily, fechas explícitas y antigüedad relativa separadas | Consultas multi-fuente y control de cuotas | PARCIAL |
+| Búsqueda web e investigación | Brave/Tavily opt-in; `research` CLI por campaña, deduplicación URL y score de descubrimiento con consultas/domínios/frescura | Trend APIs sociales, ranking con métricas reales y GUI research | PARCIAL |
 | Lectura de fuentes | scripts/providers/source_reader.py: HTML/XHTML/texto, DNS/IP seguro, límites y ledger JSONL por campaña | Extracción documental ampliada y captura de versiones | PARCIAL |
 | Investigación y claims | Búsqueda, captura original y ledger de claims con evaluación humana | Corroboración multi-fuente, contradicciones y gate factual conectado a publicación | PARCIAL |
 | Control de calidad | campaign-check + FFprobe; perceptual QC observacional con FFmpeg; QC de subtítulos; GUI QC tab runs technical/perceptual and optional subtitle checks, writes central report and hash-bound ledger event | QC factual, legal, platform preflight and full production-flow integration | PARCIAL |
