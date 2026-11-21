@@ -19,7 +19,7 @@ def sample_plan():
             "narration": "Opening",
             "suggestions": [{"candidate_id": "asset-1", "title": "Skyline", "usable_for_selection": True}],
             "selected_candidate_id": "asset-1",
-            "selected_asset": {"candidate_id": "asset-1", "title": "Skyline"},
+            "selected_asset": {"candidate_id": "asset-1", "title": "Skyline", "rights_status": "reviewed_approved", "integrity_status": "verified", "metadata_current": True},
             "human_reviewed": True,
         }],
     }
@@ -60,4 +60,14 @@ def test_scene_visual_plan_selection_metadata_must_match_candidate_id(tmp_path):
     plan = sample_plan()
     plan["scenes"][0]["selected_asset"]["candidate_id"] = "mismatch"
     with pytest.raises(ValueError, match="metadata must match"):
+        save_scene_visual_plan(plan, root=tmp_path)
+
+
+
+def test_save_scene_visual_plan_rejects_unverified_asset_rights(tmp_path):
+    campaign = tmp_path / "project-1" / "campaigns" / "campaign-1"
+    campaign.mkdir(parents=True)
+    plan = sample_plan()
+    plan["scenes"][0]["selected_asset"]["rights_status"] = "pending"
+    with pytest.raises(ValueError, match="current approved rights"):
         save_scene_visual_plan(plan, root=tmp_path)
