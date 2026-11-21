@@ -34,8 +34,13 @@ def review_preview(
             raise ValueError("Scene duration must be finite and positive.")
         total += duration
     path = Path(preview_path).expanduser().resolve()
-    technical = technical_checker(path, max_duration=total, expected_aspect="9:16",
-                                 require_audio=bool(timeline.get("audio_tracks")))
+    try:
+        technical = technical_checker(path, max_duration=total, expected_aspect="9:16",
+                                     require_audio=bool(timeline.get("audio_tracks")))
+        technical_error = None
+    except Exception as exc:
+        technical = {"passed": False, "problems": [f"{type(exc).__name__}: {exc}"]}
+        technical_error = f"{type(exc).__name__}: {exc}"
     try:
         perceptual = perceptual_checker(path, timeout=timeout)
         perceptual_error = None
@@ -47,6 +52,7 @@ def review_preview(
         "preview_file": str(path),
         "timeline_duration_seconds": round(total, 3),
         "technical": technical,
+        "technical_error": technical_error,
         "perceptual_observations": perceptual,
         "perceptual_error": perceptual_error,
         "status": "PASS" if technical.get("passed") is True else "REVIEW_REQUIRED",
