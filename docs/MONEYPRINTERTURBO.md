@@ -8,6 +8,10 @@ The current upstream `config.example.toml` supports an OpenAI Codex device-code 
 
 Keep `config.toml`, `storage/auth`, OAuth tokens, API keys and generated files out of Git. The overlay intentionally contains no credentials.
 
+## Runtime data directory
+
+Money-Geta honors the upstream `MPT_HOME` environment variable. When it is set, Money-Geta reads the active `config.toml` from that runtime directory and only registers generated MP4 files from its `storage/tasks` subtree. When it is not set, the source checkout directory is used as the runtime root. Keep the runtime directory outside Git.
+
 ## Text and image generation
 
 - Authenticate the Codex provider through the supported device-code flow in the installed MoneyPrinterTurbo version.
