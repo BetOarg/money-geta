@@ -172,3 +172,18 @@ def test_publication_check_blocks_without_central_qc(tmp_path: Path, monkeypatch
         "--artifact-id", item["artifact_id"], "--sha256", item["sha256"])
     assert result == 2
     assert "central QC has not been recorded" in capsys.readouterr().out
+
+
+def test_central_qc_ready_status_rejects_findings(tmp_path: Path) -> None:
+    from scripts.artifact_registry import record_central_qc
+    campaign, output = setup_campaign(tmp_path)
+    video = output / "final.mp4"
+    video.write_bytes(b"video")
+    item = register_artifact(campaign, video, allowed_root=output)
+    report = output / "central.json"
+    report.write_text(json.dumps({
+        "schema_version": 1, "artifact": str(video.resolve()), "sha256": item["sha256"],
+        "status": "READY_FOR_HUMAN_REVIEW", "blocking": [], "review": ["Freeze observation"], "checks": {}
+    }), encoding="utf-8")
+    with pytest.raises(ArtifactReviewError, match="cannot contain blocking issues or review findings"):
+        record_central_qc(campaign, item["artifact_id"], item["sha256"], report)
