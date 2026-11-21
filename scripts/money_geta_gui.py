@@ -57,14 +57,63 @@ def candidate_rows(job_dir: Path) -> list[dict]:
 
 
 
-def build_campaign_payload(name, platform, sources, disclosures, permissions, credits):
-    payload = {"campaign_name": name.strip(), "platform": platform.strip(),
-        "permissions_confirmed": permissions is True, "credits_confirmed": credits is True,
-        "sources": [x.strip() for x in sources if x.strip()],
-        "required_disclosures": [x.strip() for x in disclosures if x.strip()]}
-    if not payload["campaign_name"] or not payload["platform"] or not payload["sources"] or not permissions or not credits:
-        raise ValueError("Completa nombre, plataforma y fuentes; confirma permisos y créditos.")
+def build_campaign_payload(name, platform, sources, rights_evidence, disclosures, credits,
+                           permissions, credits_confirmed, no_credits_required):
+    clean_sources = [x.strip() for x in sources if x.strip()]
+    evidence = [x.strip() for x in rights_evidence if x.strip()]
+    clean_credits = [x.strip() for x in credits if x.strip()]
+    clean_disclosures = [x.strip() for x in disclosures if x.strip()]
+    if not name.strip() or not platform.strip() or not clean_sources:
+        raise ValueError("Completa nombre, plataforma y al menos una fuente.")
+    if len(clean_sources) != len(evidence):
+        raise ValueError("Debe existir una referencia de evidencia de derechos por cada fuente.")
+    if not permissions or not credits_confirmed:
+        raise ValueError("Confirma permisos y revisión de créditos.")
+    if not clean_credits and not no_credits_required:
+        raise ValueError("Indica créditos o confirma explícitamente que no son requeridos.")
+    if clean_credits and no_credits_required:
+        raise ValueError("No puedes agregar créditos y confirmar que no son requeridos.")
+    now = datetime.now(timezone.utc).isoformat()
+    campaign_id = "render-" + uuid.uuid4().hex
+    project_id = "gui-" + uuid.uuid4().hex
+    payload = {
+        "schema_version": 1, "project_id": project_id, "campaign_id": campaign_id,
+        "profile_id": "viral", "factual_claims_required": False,
+        "campaign_name": name.strip(), "platform": platform.strip(), "status": "draft",
+        "created_at": now, "updated_at": now,
+        "sources": clean_sources,
+        "source_evidence": [{"source": source, "reference": ref} for source, ref in zip(clean_sources, evidence)],
+        "rights_ledger": [{"source": source, "evidence": ref, "status": "operator_attested", "attested_at": now}
+                           for source, ref in zip(clean_sources, evidence)],
+        "required_disclosures": clean_disclosures,
+        "permissions_confirmed": True,
+        "permission_attestation": {"confirmed": True, "actor": "operator", "confirmed_at": now, "source_count": len(clean_sources)},
+        "credit_records": clean_credits,
+        "credits_confirmed": True,
+        "credit_attestation": {"confirmed": True, "actor": "operator", "confirmed_at": now,
+                               "no_credits_required": bool(no_credits_required), "credit_count": len(clean_credits)},
+        "review": {"status": "pending", "approved_artifact_hash": None},
+        "distribution": {"mode": "draft_only", "human_approval_required": True},
+    }
     return payload
+
+
+def save_campaign_manifest(payload, campaigns_root: Path) -> Path:
+    project_id, campaign_id = payload["project_id"], payload["campaign_id"]
+    folder = campaigns_root / project_id / "campaigns" / campaign_id
+    folder.mkdir(parents=True, exist_ok=False)
+    target = folder / "campaign.json"
+    try:
+        with target.open("x", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\\n")
+    except Exception:
+        try:
+            folder.rmdir()
+        except OSError:
+            pass
+        raise
+    return target
 
 
 def session_video_outputs(session_dir):
@@ -183,17 +232,25 @@ class MoneyGetaApp:
         ttk.Button(buttons, text="Agregar…", command=self._add_render_materials).pack(fill=X, pady=2)
         ttk.Button(buttons, text="Quitar", command=self._remove_render_materials).pack(fill=X, pady=2)
         ttk.Label(self.render, text="Fuentes (una por línea)").grid(row=4, column=0, sticky="nw", pady=5)
-        self.sources_text = tk.Text(self.render, height=3)
+        self.sources_text = tk.Text(self.render, height=2)
         self.sources_text.grid(row=4, column=1, columnspan=2, sticky="ew")
-        ttk.Label(self.render, text="Avisos requeridos (uno por línea)").grid(row=5, column=0, sticky="nw", pady=5)
+        ttk.Label(self.render, text="Evidencia de derechos (una referencia por fuente, mismo orden)").grid(row=5, column=0, sticky="nw", pady=5)
+        self.rights_evidence_text = tk.Text(self.render, height=2)
+        self.rights_evidence_text.grid(row=5, column=1, columnspan=2, sticky="ew")
+        ttk.Label(self.render, text="Avisos requeridos (uno por línea)").grid(row=6, column=0, sticky="nw", pady=5)
         self.disclosures_text = tk.Text(self.render, height=2)
-        self.disclosures_text.grid(row=5, column=1, columnspan=2, sticky="ew")
+        self.disclosures_text.grid(row=6, column=1, columnspan=2, sticky="ew")
+        ttk.Label(self.render, text="Créditos/atribuciones (uno por línea)").grid(row=7, column=0, sticky="nw", pady=5)
+        self.credit_records_text = tk.Text(self.render, height=2)
+        self.credit_records_text.grid(row=7, column=1, columnspan=2, sticky="ew")
         self.permissions_var = tk.BooleanVar(value=False)
         self.credits_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(self.render, text="Confirmo permisos de uso de los materiales", variable=self.permissions_var).grid(row=6, column=1, columnspan=2, sticky="w")
-        ttk.Checkbutton(self.render, text="Confirmo que créditos y atribuciones están completos", variable=self.credits_var).grid(row=7, column=1, columnspan=2, sticky="w")
+        self.no_credits_required_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.render, text="Confirmo permisos de uso de los materiales", variable=self.permissions_var).grid(row=8, column=1, columnspan=2, sticky="w")
+        ttk.Checkbutton(self.render, text="Confirmo que créditos y atribuciones están completos", variable=self.credits_var).grid(row=9, column=1, columnspan=2, sticky="w")
+        ttk.Checkbutton(self.render, text="No se requieren créditos", variable=self.no_credits_required_var).grid(row=10, column=1, columnspan=2, sticky="w")
         opts = ttk.Frame(self.render)
-        opts.grid(row=8, column=0, columnspan=3, sticky="ew", pady=8)
+        opts.grid(row=11, column=0, columnspan=3, sticky="ew", pady=8)
         self.aspect_var = tk.StringVar(value="9:16")
         self.count_var = tk.StringVar(value="1")
         self.language_var = tk.StringVar(value="es")
@@ -240,17 +297,17 @@ class MoneyGetaApp:
                 raise ValueError("Cantidad válida: de 1 a 20.")
             campaign = build_campaign_payload(self.campaign_name_var.get(), self.platform_var.get(),
                 self.sources_text.get("1.0", "end").splitlines(),
+                self.rights_evidence_text.get("1.0", "end").splitlines(),
                 self.disclosures_text.get("1.0", "end").splitlines(),
-                self.permissions_var.get(), self.credits_var.get())
+                self.credit_records_text.get("1.0", "end").splitlines(),
+                self.permissions_var.get(), self.credits_var.get(), self.no_credits_required_var.get())
         except ValueError as exc:
             messagebox.showerror("Campaña incompleta", str(exc))
             return
         campaign_dir = APP_DIR / "campaigns"
-        campaign_dir.mkdir(parents=True, exist_ok=True)
-        campaign_path = campaign_dir / ("campaign-" + uuid.uuid4().hex + ".json")
         try:
-            campaign_path.write_text(json.dumps(campaign, ensure_ascii=False, indent=2), encoding="utf-8")
-        except OSError as exc:
+            campaign_path = save_campaign_manifest(campaign, campaign_dir)
+        except (OSError, ValueError) as exc:
             messagebox.showerror("No se pudo guardar la campaña", str(exc))
             return
         args = ["render", "--mpt-dir", self.mpt_var.get(), "--campaign", str(campaign_path),
