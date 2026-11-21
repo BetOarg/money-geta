@@ -1391,6 +1391,14 @@ class MoneyGetaApp:
         self.timeline_preview_caption = ttk.Label(preview_frame, text="", anchor="w")
         self.timeline_preview_caption.pack(fill="x", pady=(3, 0))
         self.timeline_preview_image = None
+        trim_frame = ttk.LabelFrame(editor, text="Recorte del video · segundos", padding=4)
+        trim_frame.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        ttk.Label(trim_frame, text="Entrada").grid(row=0, column=0, sticky="w")
+        self.timeline_trim_start_var = tk.StringVar(value="0")
+        ttk.Entry(trim_frame, textvariable=self.timeline_trim_start_var, width=10).grid(row=0, column=1, sticky="w", padx=(3, 8))
+        ttk.Label(trim_frame, text="Salida (vacío = hasta el final)").grid(row=0, column=2, sticky="w")
+        self.timeline_trim_end_var = tk.StringVar(value="")
+        ttk.Entry(trim_frame, textvariable=self.timeline_trim_end_var, width=10).grid(row=0, column=3, sticky="w", padx=(3, 8))
         controls = ttk.Frame(self.timeline)
         controls.grid(row=3, column=0, sticky="ew", pady=8)
         ttk.Button(controls, text="↑ Subir", command=lambda: self._timeline_move_ui(-1)).pack(side=LEFT)
@@ -1518,6 +1526,8 @@ class MoneyGetaApp:
             return
         scene = self.timeline_plan["scenes"][int(selection[0])]
         self.timeline_duration_var.set(str(scene.get("duration_seconds", 5)))
+        self.timeline_trim_start_var.set(str(scene.get("media_trim_start_seconds", 0)))
+        self.timeline_trim_end_var.set("" if scene.get("media_trim_end_seconds") is None else str(scene.get("media_trim_end_seconds")))
         for widget, key in ((self.timeline_narration, "narration"), (self.timeline_subtitles, "subtitle_text")):
             widget.delete("1.0", END)
             widget.insert("1.0", scene.get(key, ""))
@@ -1543,7 +1553,7 @@ class MoneyGetaApp:
                     self.timeline_preview_caption.configure(text=str(path))
                     return
                 result = subprocess.run(
-                    [ffmpeg, "-hide_banner", "-loglevel", "error", "-ss", "0.5", "-i", str(path),
+                    [ffmpeg, "-hide_banner", "-loglevel", "error", "-ss", str(max(0.0, float(scene.get("media_trim_start_seconds", 0.5)))), "-i", str(path),
                      "-frames:v", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "-"],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5, check=True,
                 )
@@ -1572,7 +1582,9 @@ class MoneyGetaApp:
             self.timeline_plan = update_scene(self.timeline_plan, index,
                 duration_seconds=float(self.timeline_duration_var.get()),
                 narration=self.timeline_narration.get("1.0", "end-1c"),
-                subtitle_text=self.timeline_subtitles.get("1.0", "end-1c"))
+                subtitle_text=self.timeline_subtitles.get("1.0", "end-1c"),
+                trim_start_seconds=float(self.timeline_trim_start_var.get() or 0),
+                trim_end_seconds=(float(self.timeline_trim_end_var.get()) if self.timeline_trim_end_var.get().strip() else None))
         except (ValueError, TypeError) as exc:
             messagebox.showerror("Datos de escena inválidos", str(exc))
             return
