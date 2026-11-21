@@ -174,6 +174,7 @@ class MoneyGetaApp:
         self.images = ttk.Frame(self.tabs, padding=14)
         self.library = ttk.Frame(self.tabs, padding=14)
         self.scene_visual = ttk.Frame(self.tabs, padding=14)
+        self.timeline = ttk.Frame(self.tabs, padding=14)
         self.tabs.add(self.home, text="Analizar y cortar")
         self.tabs.add(self.render, text="Render final · MPT")
         self.tabs.add(self.projects, text="Proyectos")
@@ -185,6 +186,7 @@ class MoneyGetaApp:
         self.tabs.add(self.images, text="Imágenes")
         self.tabs.add(self.library, text="Biblioteca local")
         self.tabs.add(self.scene_visual, text="Plan visual")
+        self.tabs.add(self.timeline, text="Timeline")
         self._build_home()
         self._build_render()
         self._build_projects()
@@ -196,6 +198,7 @@ class MoneyGetaApp:
         self._build_image_search()
         self._build_media_library()
         self._build_scene_visual_plan()
+        self._build_timeline()
         self._set_status("Iniciando diagnóstico automático…")
         self.refresh_projects()
         self.refresh_research_options()
@@ -1345,6 +1348,157 @@ class MoneyGetaApp:
         args = ["cut-video", "--job-dir", str(self.current_job), "--pick", number, "--layout", self.layout_var.get(), "--captions", self.caption_var.get(), "--credit", credit, "--gtavi-dir", self.gtavi_var.get()]
         self._run_async(self._command(*args), f"Creando clip #{number}…")
 
+    def _build_timeline(self):
+        self.timeline.columnconfigure(0, weight=1)
+        self.timeline.rowconfigure(2, weight=1)
+        ttk.Label(self.timeline, text="Timeline editable · borrador local", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(self.timeline, text="Reordená escenas y ajustá duración, narración y subtítulos. No genera ni publica videos.").grid(row=1, column=0, sticky="w", pady=(6, 6))
+        content = ttk.Frame(self.timeline)
+        content.grid(row=2, column=0, sticky="nsew")
+        content.columnconfigure(0, weight=1)
+        content.columnconfigure(1, weight=1)
+        content.rowconfigure(0, weight=1)
+        self.timeline_tree = ttk.Treeview(content, columns=("duration", "visual", "asset"), show="tree headings", height=12)
+        self.timeline_tree.heading("#0", text="Orden")
+        self.timeline_tree.heading("duration", text="Duración (s)")
+        self.timeline_tree.heading("visual", text="Escena")
+        self.timeline_tree.heading("asset", text="Recurso local")
+        self.timeline_tree.column("#0", width=75, stretch=False)
+        self.timeline_tree.column("duration", width=90, stretch=False)
+        self.timeline_tree.column("visual", width=300)
+        self.timeline_tree.column("asset", width=220)
+        self.timeline_tree.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        self.timeline_tree.bind("<<TreeviewSelect>>", self._timeline_selected_ui)
+        editor = ttk.LabelFrame(content, text="Edición de escena", padding=8)
+        editor.grid(row=0, column=1, sticky="nsew")
+        ttk.Label(editor, text="Duración (segundos)").grid(row=0, column=0, sticky="w")
+        self.timeline_duration_var = tk.StringVar(value="5")
+        ttk.Entry(editor, textvariable=self.timeline_duration_var, width=12).grid(row=0, column=1, sticky="w", pady=3)
+        ttk.Label(editor, text="Narración").grid(row=1, column=0, sticky="w")
+        self.timeline_narration = tk.Text(editor, height=5, wrap="word")
+        self.timeline_narration.grid(row=2, column=0, columnspan=2, sticky="ew", pady=3)
+        ttk.Label(editor, text="Subtítulos").grid(row=3, column=0, sticky="w")
+        self.timeline_subtitles = tk.Text(editor, height=4, wrap="word")
+        self.timeline_subtitles.grid(row=4, column=0, columnspan=2, sticky="ew", pady=3)
+        ttk.Button(editor, text="Aplicar a escena", command=self._timeline_apply_ui).grid(row=5, column=0, columnspan=2, sticky="w", pady=(5, 0))
+        controls = ttk.Frame(self.timeline)
+        controls.grid(row=3, column=0, sticky="ew", pady=8)
+        ttk.Button(controls, text="↑ Subir", command=lambda: self._timeline_move_ui(-1)).pack(side=LEFT)
+        ttk.Button(controls, text="↓ Bajar", command=lambda: self._timeline_move_ui(1)).pack(side=LEFT, padx=4)
+        ttk.Button(controls, text="Cargar guardado", command=self.scene_plan_load_timeline_ui).pack(side=LEFT, padx=4)
+        ttk.Button(controls, text="Guardar timeline", command=self.scene_plan_save_timeline_ui).pack(side=LEFT, padx=4)
+        self.timeline_status_var = tk.StringVar(value="PENDIENTE · abrí el editor desde un plan visual generado")
+        ttk.Label(self.timeline, textvariable=self.timeline_status_var).grid(row=4, column=0, sticky="w")
+
+    def scene_plan_open_timeline_ui(self):
+        plan = getattr(self, "scene_visual_plan", None)
+        if not plan:
+            messagebox.showwarning("Plan visual requerido", "Genera primero un plan visual de escenas.")
+            return
+        try:
+            from scripts.timeline_plan import create_timeline_from_visual_plan, load_timeline
+            saved = load_timeline(plan["project_id"], plan["campaign_id"], plan["script_id"], plan["script_sha256"])
+            self.timeline_plan = saved if saved is not None else create_timeline_from_visual_plan(plan)
+        except (OSError, ValueError, RuntimeError, KeyError) as exc:
+            messagebox.showerror("Timeline", str(exc))
+            self.timeline_status_var.set("ROJO · no se pudo abrir timeline")
+            return
+        self._timeline_refresh_ui()
+        self.tabs.select(self.timeline)
+        self.timeline_status_var.set(f"TIMELINE {'CARGADO' if saved else 'CREADO'} · {len(self.timeline_plan['scenes'])} escenas · render bloqueado")
+
+    def scene_plan_load_timeline_ui(self):
+        plan = getattr(self, "scene_visual_plan", None)
+        if not plan:
+            messagebox.showwarning("Plan visual requerido", "Genera o selecciona un plan visual primero.")
+            return
+        try:
+            from scripts.timeline_plan import load_timeline
+            saved = load_timeline(plan["project_id"], plan["campaign_id"], plan["script_id"], plan["script_sha256"])
+            if saved is None:
+                messagebox.showinfo("Sin guardado", "No hay un timeline guardado para este guion y hash.")
+                return
+            self.timeline_plan = saved
+            self._timeline_refresh_ui()
+            self.timeline_status_var.set("TIMELINE CARGADO · borrador · render bloqueado")
+        except (OSError, ValueError, RuntimeError, KeyError) as exc:
+            messagebox.showerror("Timeline", str(exc))
+            self.timeline_status_var.set("ROJO · no se pudo cargar")
+
+    def _timeline_refresh_ui(self, select_index=0):
+        if not getattr(self, "timeline_plan", None):
+            return
+        tree = self.timeline_tree
+        for item in tree.get_children():
+            tree.delete(item)
+        for index, scene in enumerate(self.timeline_plan.get("scenes", [])):
+            asset = Path(scene.get("visual_path") or "").name if scene.get("visual_path") else "—"
+            tree.insert("", END, iid=str(index), text=f"{index + 1}", values=(
+                f"{float(scene.get('duration_seconds', 5)):.2f}",
+                scene.get("visual_description", "")[:110], asset))
+        if self.timeline_plan.get("scenes"):
+            select_index = max(0, min(select_index, len(self.timeline_plan["scenes"]) - 1))
+            tree.selection_set(str(select_index))
+            tree.focus(str(select_index))
+            self._timeline_selected_ui()
+
+    def _timeline_selected_ui(self, _event=None):
+        selection = self.timeline_tree.selection()
+        if not selection or not getattr(self, "timeline_plan", None):
+            return
+        scene = self.timeline_plan["scenes"][int(selection[0])]
+        self.timeline_duration_var.set(str(scene.get("duration_seconds", 5)))
+        for widget, key in ((self.timeline_narration, "narration"), (self.timeline_subtitles, "subtitle_text")):
+            widget.delete("1.0", END)
+            widget.insert("1.0", scene.get(key, ""))
+
+    def _timeline_apply_ui(self):
+        selection = self.timeline_tree.selection()
+        if not selection or not getattr(self, "timeline_plan", None):
+            messagebox.showwarning("Escena requerida", "Selecciona una escena.")
+            return
+        index = int(selection[0])
+        try:
+            from scripts.timeline_plan import update_scene
+            self.timeline_plan = update_scene(self.timeline_plan, index,
+                duration_seconds=float(self.timeline_duration_var.get()),
+                narration=self.timeline_narration.get("1.0", "end-1c"),
+                subtitle_text=self.timeline_subtitles.get("1.0", "end-1c"))
+        except (ValueError, TypeError) as exc:
+            messagebox.showerror("Datos de escena inválidos", str(exc))
+            return
+        self._timeline_refresh_ui(index)
+        self.timeline_status_var.set("CAMBIOS APLICADOS · guardá el borrador cuando termines")
+
+    def _timeline_move_ui(self, offset):
+        selection = self.timeline_tree.selection()
+        if not selection or not getattr(self, "timeline_plan", None):
+            messagebox.showwarning("Escena requerida", "Selecciona una escena para mover.")
+            return
+        index = int(selection[0])
+        try:
+            from scripts.timeline_plan import move_scene
+            self.timeline_plan = move_scene(self.timeline_plan, index, offset)
+        except ValueError as exc:
+            messagebox.showerror("Orden de escenas", str(exc))
+            return
+        new_index = max(0, min(index + offset, len(self.timeline_plan["scenes"]) - 1))
+        self._timeline_refresh_ui(new_index)
+
+    def scene_plan_save_timeline_ui(self):
+        if not getattr(self, "timeline_plan", None):
+            messagebox.showwarning("Timeline inexistente", "Abrí un timeline desde el plan visual.")
+            return
+        try:
+            from scripts.timeline_plan import save_timeline
+            path = save_timeline(self.timeline_plan)
+        except (OSError, ValueError, RuntimeError) as exc:
+            messagebox.showerror("No se pudo guardar timeline", str(exc))
+            self.timeline_status_var.set("ROJO · NO GUARDADO")
+            return
+        self.timeline_status_var.set("TIMELINE GUARDADO · draft · render y publicación bloqueados")
+        self._append(f"TIMELINE SAVED: {path}")
+
     def _build_scene_visual_plan(self):
         self.scene_visual.columnconfigure(0, weight=1)
         self.scene_visual.rowconfigure(4, weight=1)
@@ -1362,6 +1516,7 @@ class MoneyGetaApp:
         actions.grid(row=2, column=0, sticky="ew", pady=(0, 6))
         ttk.Button(actions, text="Actualizar guiones aprobados", command=self.scene_plan_refresh_scripts_ui).pack(side=LEFT)
         ttk.Button(actions, text="Generar plan de escenas", command=self.scene_plan_build_ui).pack(side=LEFT, padx=5)
+        ttk.Button(actions, text="Abrir editor de timeline", command=self.scene_plan_open_timeline_ui).pack(side=LEFT, padx=5)
         self.scene_plan_status_var = tk.StringVar(value="PENDIENTE · selecciona proyecto/campaña y actualiza guiones")
         ttk.Label(actions, textvariable=self.scene_plan_status_var).pack(side=LEFT, padx=8)
         script_frame = ttk.LabelFrame(self.scene_visual, text="Guiones con aprobación vigente (hash verificado)", padding=6)
