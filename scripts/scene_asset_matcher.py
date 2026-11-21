@@ -57,7 +57,7 @@ def match_scene(scene: dict[str, Any], assets: list[dict[str, Any]], *, limit: i
             "score": round(score, 4),
             "matched_visual_terms": matched_visual,
             "matched_context_terms": matched_context,
-            "rationale": ("Coincidencias visuales: " + ", ".join(matched_visual) if matched_visual else "Solo coincidencias contextuales: " + ", ".join(matched_context),
+            "rationale": "Coincidencias visuales: " + ", ".join(matched_visual) if matched_visual else "Solo coincidencias contextuales: " + ", ".join(matched_context),
         })
     return sorted(scored, key=lambda item: (-item["score"], item["candidate_id"] or ""))[:max(1, min(int(limit), 10))]
 
