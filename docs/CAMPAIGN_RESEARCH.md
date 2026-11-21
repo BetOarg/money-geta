@@ -16,7 +16,6 @@ Se aceptan 1–10 consultas únicas de hasta 600 caracteres. Cada consulta gener
 
 El score transparente combina:
 - cobertura de consultas: 2 puntos por consulta distinta que encontró la URL;
-- diversidad de dominios: 1,5 puntos por dominio;
 - puntuación del proveedor: limitada al rango 0–1;
 - bonus de frescura: hasta 2 puntos, calculado solo con fecha explícita y dentro de 60 días.
 
