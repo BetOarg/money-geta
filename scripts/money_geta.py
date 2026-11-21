@@ -574,7 +574,7 @@ def run_mpt(args: argparse.Namespace) -> int:
             if not video.is_absolute():
                 video = mpt_dir / video
             registered = register_artifact(
-                args.campaign, video, allowed_root=mpt_dir,
+                args.campaign, video, allowed_root=mpt_dir / "storage" / "tasks",
                 metadata={"engine": "MoneyPrinterTurbo", "format": args.aspect,
                           "subject": args.subject, "language": args.language,
                           "count": args.count, "voice": args.voice,
