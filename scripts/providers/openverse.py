@@ -9,11 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from scripts.campaign_registry import get_campaign
 from scripts.project_registry import default_projects_root, get_project
+from scripts.providers.source_reader import SECRET_QUERY
 
 
 class ImageSearchConfigurationError(ValueError):
@@ -83,6 +84,8 @@ def _valid_url(value: Any) -> str | None:
         return None
     parsed = urlsplit(value)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        return None
+    if any(SECRET_QUERY.search(key) for key, _ in parse_qsl(parsed.query, keep_blank_values=True)):
         return None
     return value
 
