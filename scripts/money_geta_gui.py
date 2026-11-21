@@ -1351,6 +1351,7 @@ class MoneyGetaApp:
     def _build_timeline(self):
         self.timeline.columnconfigure(0, weight=1)
         self.timeline.rowconfigure(2, weight=1)
+        self.timeline.rowconfigure(5, weight=0)
         ttk.Label(self.timeline, text="Timeline editable · borrador local", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(self.timeline, text="Reordená escenas y ajustá duración, narración y subtítulos. No genera ni publica videos.").grid(row=1, column=0, sticky="w", pady=(6, 6))
         content = ttk.Frame(self.timeline)
@@ -1389,6 +1390,65 @@ class MoneyGetaApp:
         ttk.Button(controls, text="Guardar timeline", command=self.scene_plan_save_timeline_ui).pack(side=LEFT, padx=4)
         self.timeline_status_var = tk.StringVar(value="PENDIENTE · abrí el editor desde un plan visual generado")
         ttk.Label(self.timeline, textvariable=self.timeline_status_var).grid(row=4, column=0, sticky="w")
+        strip_frame = ttk.LabelFrame(self.timeline, text="Vista proporcional de escenas", padding=4)
+        strip_frame.grid(row=5, column=0, sticky="ew", pady=(4, 8))
+        strip_frame.columnconfigure(0, weight=1)
+        self.timeline_canvas = tk.Canvas(strip_frame, height=94, background="#20242b", highlightthickness=0)
+        self.timeline_scrollbar = ttk.Scrollbar(strip_frame, orient="horizontal", command=self.timeline_canvas.xview)
+        self.timeline_canvas.configure(xscrollcommand=self.timeline_scrollbar.set)
+        self.timeline_canvas.grid(row=0, column=0, sticky="ew")
+        self.timeline_scrollbar.grid(row=1, column=0, sticky="ew")
+        self.timeline_canvas.bind("<Button-1>", self._timeline_canvas_click)
+
+    def _timeline_draw_strip_ui(self):
+        canvas = getattr(self, "timeline_canvas", None)
+        timeline = getattr(self, "timeline_plan", None)
+        if canvas is None:
+            return
+        canvas.delete("all")
+        if not timeline or not timeline.get("scenes"):
+            canvas.configure(scrollregion=(0, 0, 600, 94))
+            canvas.create_text(12, 45, text="Abrí un timeline para ver sus bloques", anchor="w", fill="#c8cbd0")
+            return
+        from scripts.timeline_plan import timeline_visual_blocks
+        blocks = timeline_visual_blocks(timeline["scenes"])
+        selected = self.timeline_tree.selection()
+        selected_index = int(selected[0]) if selected else -1
+        total = sum(float(item.get("duration_seconds", 0)) for item in timeline["scenes"])
+        canvas.create_text(12, 10, text=f"Duración total: {total:.2f} s", anchor="nw", fill="#c8cbd0")
+        for block in blocks:
+            index = int(block["index"])
+            x = float(block["x"])
+            width = float(block["width"])
+            color = "#557aa5" if index != selected_index else "#d18a35"
+            canvas.create_rectangle(x, 26, x + width, 78, fill=color, outline="#ffffff" if index == selected_index else color, width=2 if index == selected_index else 1, tags=(f"scene-{index}",))
+            label = timeline["scenes"][index].get("visual_description", "").strip()[:22] or f"Escena {index + 1}"
+            canvas.create_text(x + 8, 36, text=f"{index + 1}. {label}", anchor="nw", fill="white", tags=(f"scene-{index}",))
+            canvas.create_text(x + 8, 64, text=f"{float(block['duration']):.2f}s", anchor="nw", fill="white", tags=(f"scene-{index}",))
+            canvas.tag_bind(f"scene-{index}", "<Button-1>", lambda _event, i=index: self._timeline_select_scene_ui(i))
+        end = max((float(item["x"]) + float(item["width"]) for item in blocks), default=600) + 12
+        canvas.configure(scrollregion=(0, 0, max(end, canvas.winfo_width()), 94))
+
+    def _timeline_canvas_click(self, event):
+        canvas = self.timeline_canvas
+        x = canvas.canvasx(event.x)
+        timeline = getattr(self, "timeline_plan", None)
+        if not timeline:
+            return
+        from scripts.timeline_plan import timeline_visual_blocks
+        for block in timeline_visual_blocks(timeline.get("scenes", [])):
+            if float(block["x"]) <= x <= float(block["x"]) + float(block["width"]):
+                self._timeline_select_scene_ui(int(block["index"]))
+                return
+
+    def _timeline_select_scene_ui(self, index):
+        item = str(index)
+        if item in self.timeline_tree.get_children():
+            self.timeline_tree.selection_set(item)
+            self.timeline_tree.focus(item)
+            self.timeline_tree.see(item)
+            self._timeline_selected_ui()
+            self._timeline_draw_strip_ui()
 
     def scene_plan_open_timeline_ui(self):
         plan = getattr(self, "scene_visual_plan", None)
@@ -1441,6 +1501,7 @@ class MoneyGetaApp:
             tree.selection_set(str(select_index))
             tree.focus(str(select_index))
             self._timeline_selected_ui()
+        self._timeline_draw_strip_ui()
 
     def _timeline_selected_ui(self, _event=None):
         selection = self.timeline_tree.selection()
