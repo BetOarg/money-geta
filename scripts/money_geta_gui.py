@@ -170,6 +170,7 @@ class MoneyGetaApp:
         self.history = ttk.Frame(self.tabs, padding=14)
         self.qc = ttk.Frame(self.tabs, padding=14)
         self.research = ttk.Frame(self.tabs, padding=14)
+        self.script = ttk.Frame(self.tabs, padding=14)
         self.tabs.add(self.home, text="Analizar y cortar")
         self.tabs.add(self.render, text="Render final · MPT")
         self.tabs.add(self.projects, text="Proyectos")
@@ -177,6 +178,7 @@ class MoneyGetaApp:
         self.tabs.add(self.history, text="Clips y sesiones")
         self.tabs.add(self.qc, text="QC y revisión")
         self.tabs.add(self.research, text="Investigación")
+        self.tabs.add(self.script, text="Guion")
         self._build_home()
         self._build_render()
         self._build_projects()
@@ -184,6 +186,7 @@ class MoneyGetaApp:
         self._build_history()
         self._build_qc()
         self._build_research()
+        self._build_script()
         self._set_status("Iniciando diagnóstico automático…")
         self.refresh_projects()
         self.refresh_research_options()
@@ -330,6 +333,95 @@ class MoneyGetaApp:
         self._run_async(self._command(*args), "Renderizando con MoneyPrinterTurbo…")
 
 
+    def _build_script(self):
+        self.script.columnconfigure(1, weight=1)
+        self.script.rowconfigure(5, weight=1)
+        ttk.Label(self.script, text="Guion draft-only desde fuentes capturadas", style="Section.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(self.script, text="Proyecto (ID)").grid(row=1, column=0, sticky="w", pady=5)
+        self.script_project_combo = ttk.Combobox(self.script, textvariable=self.research_project_var, state="readonly")
+        self.script_project_combo.grid(row=1, column=1, sticky="ew", pady=5)
+        self.script_project_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_research_campaigns())
+        ttk.Label(self.script, text="Campaña (ID)").grid(row=2, column=0, sticky="w", pady=5)
+        self.script_campaign_combo = ttk.Combobox(self.script, textvariable=self.research_campaign_var, state="readonly")
+        self.script_campaign_combo.grid(row=2, column=1, sticky="ew", pady=5)
+        settings = ttk.Frame(self.script)
+        settings.grid(row=3, column=1, sticky="ew", pady=5)
+        ttk.Label(self.script, text="Idioma").grid(row=3, column=0, sticky="w", pady=5)
+        self.script_language_var = tk.StringVar(value="es-AR")
+        ttk.Combobox(settings, textvariable=self.script_language_var, values=("es-AR", "en-US", "pt-BR"), state="readonly", width=10).pack(side=LEFT)
+        ttk.Label(settings, text="Tokens").pack(side=LEFT, padx=(12, 4))
+        self.script_tokens_var = tk.StringVar(value="2000")
+        ttk.Combobox(settings, textvariable=self.script_tokens_var, values=("1000", "1500", "2000", "2500", "3000", "4000"), state="readonly", width=8).pack(side=LEFT)
+        actions = ttk.Frame(self.script)
+        actions.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 8))
+        ttk.Button(actions, text="Actualizar proyectos/campañas", command=self.refresh_research_options).pack(side=LEFT)
+        ttk.Button(actions, text="Generar guion", command=self.generate_script_ui).pack(side=LEFT, padx=8)
+        ttk.Button(actions, text="Abrir draft", command=self.open_script_draft).pack(side=LEFT)
+        self.script_status_var = tk.StringVar(value="PENDIENTE")
+        ttk.Label(actions, textvariable=self.script_status_var).pack(side=LEFT, padx=8)
+        ttk.Label(self.script, text="Guion y referencias · requiere revisión humana").grid(row=5, column=0, columnspan=2, sticky="w")
+        self.script_report = tk.Text(self.script, height=12, wrap="word", font=("Consolas", 9), state="disabled")
+        self.script_report.grid(row=6, column=0, columnspan=2, sticky="nsew", pady=(4, 4))
+        self.script.rowconfigure(6, weight=1)
+
+    def generate_script_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        if os.environ.get("MONEY_GETA_LLM_ALLOW_REQUESTS", "").lower() != "true":
+            messagebox.showwarning("LLM desactivado", "No hay permiso de red. Revisa proveedor, modelo, cuota y costos antes de activar MONEY_GETA_LLM_ALLOW_REQUESTS=true.")
+            return
+        if not os.environ.get("MONEY_GETA_LLM_BASE_URL") or not os.environ.get("MONEY_GETA_LLM_MODEL"):
+            messagebox.showwarning("Configuración incompleta", "Configura MONEY_GETA_LLM_BASE_URL y MONEY_GETA_LLM_MODEL en el entorno local.")
+            return
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        language = self.script_language_var.get().strip()
+        try:
+            max_tokens = int(self.script_tokens_var.get())
+        except ValueError:
+            messagebox.showerror("Tokens inválidos", "Selecciona un límite de tokens válido.")
+            return
+        if not project_id or not campaign_id:
+            messagebox.showwarning("Selecciona campaña", "Selecciona proyecto y campaña.")
+            return
+        from scripts.providers.llm import LLMConfig, ProviderConfigurationError
+        try:
+            config = LLMConfig.from_env()
+            config.validate()
+            if not config.allow_requests:
+                raise ProviderConfigurationError("LLM requests are disabled.")
+        except ValueError as exc:
+            messagebox.showerror("Configuración LLM", str(exc))
+            return
+        if not messagebox.askyesno("Confirmar generación", f"Se enviarán fuentes capturadas y claims al modelo {config.model}. Puede consumir cuota o generar cargos. ¿Generar el guion?"):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.script_status_var.set("GENERANDO…")
+        self.script_report.configure(state="normal")
+        self.script_report.delete("1.0", END)
+        self.script_report.insert(END, "Generando draft. No se aprobará ni publicará automáticamente.\\n")
+        self.script_report.configure(state="disabled")
+        def worker():
+            try:
+                from scripts.scriptwriter import draft_campaign_script
+                result = draft_campaign_script(project_id, campaign_id, language=language, config=config, max_tokens=max_tokens)
+                self.events.put(("script_done", result))
+            except Exception as exc:
+                self.events.put(("script_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def open_script_draft(self):
+        if not getattr(self, "script_last_report_path", None):
+            messagebox.showinfo("Draft", "Genera primero un guion.")
+            return
+        path = Path(self.script_last_report_path)
+        if path.is_file():
+            os.startfile(str(path))
+        else:
+            messagebox.showerror("Draft no encontrado", str(path))
+
     def _build_research(self):
         self.research.columnconfigure(1, weight=1)
         ttk.Label(self.research, text="Radar de descubrimiento por campaña", style="Section.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
@@ -372,6 +464,7 @@ class MoneyGetaApp:
                 except (OSError, ValueError):
                     continue
         self.research_project_combo["values"] = projects
+        self.script_project_combo["values"] = projects
         if self.research_project_var.get() not in projects:
             self.research_project_var.set(projects[0] if projects else "")
         self.refresh_research_campaigns()
@@ -394,6 +487,7 @@ class MoneyGetaApp:
                 except (OSError, ValueError):
                     continue
         self.research_campaign_combo["values"] = campaigns
+        self.script_campaign_combo["values"] = campaigns
         if self.research_campaign_var.get() not in campaigns:
             self.research_campaign_var.set(campaigns[0] if campaigns else "")
 
@@ -874,6 +968,33 @@ class MoneyGetaApp:
                     self.refresh_campaigns()
                     self.refresh_research_options()
                     self.refresh_qc()
+                elif kind == "script_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.refresh_qc()
+                    self.script_status_var.set("DRAFT · REVISIÓN PENDIENTE")
+                    self.script_last_report_path = value.get("report_path")
+                    self.script_report.configure(state="normal")
+                    self.script_report.delete("1.0", END)
+                    display = {
+                        "status": value.get("status"), "title": value.get("script", {}).get("title"),
+                        "hook": value.get("script", {}).get("hook"), "narration": value.get("script", {}).get("narration"),
+                        "scenes": value.get("script", {}).get("scenes"), "cta": value.get("script", {}).get("cta"),
+                        "source_ids": value.get("source_ids"), "supported_claim_ids": value.get("supported_claim_ids"),
+                        "report_path": value.get("report_path"), "approval": value.get("approval"),
+                    }
+                    self.script_report.insert(END, json.dumps(display, ensure_ascii=False, indent=2, default=str))
+                    self.script_report.configure(state="disabled")
+                    self._append(f"SCRIPT DRAFT: {value.get('script', {}).get('title', '')} · {value.get('report_path', '')}")
+                elif kind == "script_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.script_status_var.set("ROJO")
+                    self.script_report.configure(state="normal")
+                    self.script_report.delete("1.0", END)
+                    self.script_report.insert(END, value)
+                    self.script_report.configure(state="disabled")
+                    self._append("SCRIPT ERROR: " + value)
                 elif kind == "research_done":
                     self.busy = False
                     self.process_btn.configure(state="normal")
