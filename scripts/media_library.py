@@ -97,7 +97,9 @@ def list_media_assets(*, project_id: str|None=None, campaign_id: str|None=None, 
     output=[]
     for project in projects:
         pid=project["project_id"]
-        campaigns=[get_campaign(pid,campaign_id,projects_root)] if campaign_id else list_campaigns(pid,projects_root)
+        campaigns=list_campaigns(pid,projects_root)
+        if campaign_id:
+            campaigns=[item for item in campaigns if item["campaign_id"]==campaign_id]
         for campaign in campaigns:
             if campaign.get("project_id")!=pid: raise MediaLibraryError("Campaign/project identity mismatch.")
             cf=_campaign_file(pid,campaign["campaign_id"],projects_root)
