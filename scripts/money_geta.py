@@ -656,6 +656,11 @@ def main(argv: list[str] | None = None) -> int:
     session = sub.add_parser("new-session", help="allocate a unique, non-destructive recording workspace")
     session.add_argument("job_id")
     session.add_argument("--root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
+    scriptdraft = sub.add_parser("script-draft", help="generate a local unapproved script draft from captured source evidence")
+    scriptdraft.add_argument("--project", required=True)
+    scriptdraft.add_argument("--campaign", required=True)
+    scriptdraft.add_argument("--language", default="es-AR")
+    scriptdraft.add_argument("--max-tokens", type=int, choices=range(250, 4001), default=2000)
     research = sub.add_parser("research", help="search and rank web-discovery leads for a campaign")
     research.add_argument("--project", required=True)
     research.add_argument("--campaign", required=True)
@@ -741,6 +746,20 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         except (KeyError, ValueError) as exc:
             print(f"FAIL: {exc}")
+            return 2
+    if args.command == "script-draft":
+        from scripts.scriptwriter import draft_campaign_script
+        from scripts.providers.llm import ProviderConfigurationError, ProviderRequestError
+        try:
+            report = draft_campaign_script(args.project, args.campaign, language=args.language, max_tokens=args.max_tokens)
+            print("SCRIPT: DRAFT · HUMAN REVIEW PENDING")
+            print(f"TITLE: {report['script']['title']}")
+            print(f"HOOK: {report['script']['hook']}")
+            print(f"REPORT: {report['report_path']}")
+            print("No approval, rendering, publishing or scheduling was performed.")
+            return 0
+        except (KeyError, ValueError, OSError, ProviderConfigurationError, ProviderRequestError) as exc:
+            print(f"FAIL: script draft: {exc}")
             return 2
     if args.command == "research":
         from scripts.campaign_research import run_campaign_research
