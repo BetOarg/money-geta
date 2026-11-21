@@ -100,3 +100,22 @@ def test_desktop_local_media_library_tab_has_search_and_integrity_controls():
     assert "verify_media_library" in verify_source
     assert "media_library_verify_done" in poll_source and "media_library_done" in poll_source
     assert "media_library_items" in build_source and "usable_for_selection" in poll_source
+
+
+def test_gui_exposes_scene_visual_plan_review_workflow():
+    import inspect
+    from scripts.money_geta_gui import MoneyGetaApp
+    build = inspect.getsource(MoneyGetaApp._build_scene_visual_plan)
+    refresh = inspect.getsource(MoneyGetaApp.scene_plan_refresh_scripts_ui)
+    generate = inspect.getsource(MoneyGetaApp.scene_plan_build_ui)
+    assign = inspect.getsource(MoneyGetaApp.scene_plan_assign_asset_ui)
+    save = inspect.getsource(MoneyGetaApp.scene_plan_save_ui)
+    poll = inspect.getsource(MoneyGetaApp._poll_events)
+    assert "Plan visual" in inspect.getsource(MoneyGetaApp.__init__)
+    assert "scene_plan_refresh_scripts_ui" in build
+    assert "check_script" in refresh
+    assert "build_scene_asset_plan" in generate
+    assert "selected_candidate_id" in assign
+    assert "save_scene_visual_plan" in save
+    assert "scene_plan_done" in poll and "scene_plan_error" in poll
+    assert "render_authorized" in save or "render_authorized" in inspect.getsource(MoneyGetaApp.scene_plan_build_ui)
