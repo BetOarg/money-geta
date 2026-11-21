@@ -428,12 +428,15 @@ class MoneyGetaApp:
                 config = ImageSearchConfig.from_env()
                 candidates = search_openverse(query, config=config, aspect_ratio=aspect)
                 saved = save_image_candidates(project_id, campaign_id, candidates)
+                candidate_records = []
                 for item in candidates:
+                    record = item.to_dict()
                     try:
-                        item.rights_status = media_review_status(project_id, campaign_id, item.candidate_id)
+                        record["rights_status"] = media_review_status(project_id, campaign_id, item.candidate_id)
                     except Exception:
-                        item.rights_status = "review_unavailable"
-                self.events.put(("image_search_done", {"candidates": [item.to_dict() for item in candidates], "saved": saved}))
+                        record["rights_status"] = "review_unavailable"
+                    candidate_records.append(record)
+                self.events.put(("image_search_done", {"candidates": candidate_records, "saved": saved}))
             except Exception as exc:
                 self.events.put(("image_search_error", f"{type(exc).__name__}: {exc}"))
         threading.Thread(target=worker, daemon=True).start()
