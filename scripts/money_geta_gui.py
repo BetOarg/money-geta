@@ -173,6 +173,7 @@ class MoneyGetaApp:
         self.script = ttk.Frame(self.tabs, padding=14)
         self.images = ttk.Frame(self.tabs, padding=14)
         self.library = ttk.Frame(self.tabs, padding=14)
+        self.scene_visual = ttk.Frame(self.tabs, padding=14)
         self.tabs.add(self.home, text="Analizar y cortar")
         self.tabs.add(self.render, text="Render final · MPT")
         self.tabs.add(self.projects, text="Proyectos")
@@ -183,6 +184,7 @@ class MoneyGetaApp:
         self.tabs.add(self.script, text="Guion")
         self.tabs.add(self.images, text="Imágenes")
         self.tabs.add(self.library, text="Biblioteca local")
+        self.tabs.add(self.scene_visual, text="Plan visual")
         self._build_home()
         self._build_render()
         self._build_projects()
@@ -193,6 +195,7 @@ class MoneyGetaApp:
         self._build_script()
         self._build_image_search()
         self._build_media_library()
+        self._build_scene_visual_plan()
         self._set_status("Iniciando diagnóstico automático…")
         self.refresh_projects()
         self.refresh_research_options()
@@ -1342,6 +1345,238 @@ class MoneyGetaApp:
         args = ["cut-video", "--job-dir", str(self.current_job), "--pick", number, "--layout", self.layout_var.get(), "--captions", self.caption_var.get(), "--credit", credit, "--gtavi-dir", self.gtavi_var.get()]
         self._run_async(self._command(*args), f"Creando clip #{number}…")
 
+    def _build_scene_visual_plan(self):
+        self.scene_visual.columnconfigure(0, weight=1)
+        self.scene_visual.rowconfigure(4, weight=1)
+        ttk.Label(self.scene_visual, text="Plan visual · asignación manual de recursos a escenas", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        selectors = ttk.Frame(self.scene_visual)
+        selectors.grid(row=1, column=0, sticky="ew", pady=(6, 8))
+        ttk.Label(selectors, text="Proyecto").pack(side=LEFT)
+        self.scene_plan_project_combo = ttk.Combobox(selectors, textvariable=self.research_project_var, state="readonly", width=24)
+        self.scene_plan_project_combo.pack(side=LEFT, padx=(5, 10))
+        self.scene_plan_project_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_research_campaigns())
+        ttk.Label(selectors, text="Campaña").pack(side=LEFT)
+        self.scene_plan_campaign_combo = ttk.Combobox(selectors, textvariable=self.research_campaign_var, state="readonly", width=24)
+        self.scene_plan_campaign_combo.pack(side=LEFT, padx=5)
+        actions = ttk.Frame(self.scene_visual)
+        actions.grid(row=2, column=0, sticky="ew", pady=(0, 6))
+        ttk.Button(actions, text="Actualizar guiones aprobados", command=self.scene_plan_refresh_scripts_ui).pack(side=LEFT)
+        ttk.Button(actions, text="Generar plan de escenas", command=self.scene_plan_build_ui).pack(side=LEFT, padx=5)
+        self.scene_plan_status_var = tk.StringVar(value="PENDIENTE · selecciona proyecto/campaña y actualiza guiones")
+        ttk.Label(actions, textvariable=self.scene_plan_status_var).pack(side=LEFT, padx=8)
+        script_frame = ttk.LabelFrame(self.scene_visual, text="Guiones con aprobación vigente (hash verificado)", padding=6)
+        script_frame.grid(row=3, column=0, sticky="ew", pady=(0, 6))
+        self.scene_plan_script_list = tk.Listbox(script_frame, height=3, exportselection=False)
+        self.scene_plan_script_list.pack(fill=X)
+        content = ttk.Frame(self.scene_visual)
+        content.grid(row=4, column=0, sticky="nsew")
+        content.columnconfigure(0, weight=2)
+        content.columnconfigure(1, weight=1)
+        content.rowconfigure(0, weight=1)
+        scene_frame = ttk.LabelFrame(content, text="Escenas", padding=5)
+        scene_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+        scene_frame.rowconfigure(0, weight=1)
+        scene_frame.columnconfigure(0, weight=1)
+        self.scene_plan_scene_tree = ttk.Treeview(scene_frame, columns=("visual", "selected", "review"), show="tree headings", height=9)
+        self.scene_plan_scene_tree.heading("#0", text="Escena")
+        self.scene_plan_scene_tree.heading("visual", text="Descripción visual")
+        self.scene_plan_scene_tree.heading("selected", text="Recurso elegido")
+        self.scene_plan_scene_tree.heading("review", text="Revisión")
+        self.scene_plan_scene_tree.column("#0", width=80, stretch=False)
+        self.scene_plan_scene_tree.column("visual", width=330)
+        self.scene_plan_scene_tree.column("selected", width=180)
+        self.scene_plan_scene_tree.column("review", width=95, stretch=False)
+        self.scene_plan_scene_tree.grid(row=0, column=0, sticky="nsew")
+        scene_scroll = ttk.Scrollbar(scene_frame, orient="vertical", command=self.scene_plan_scene_tree.yview)
+        scene_scroll.grid(row=0, column=1, sticky="ns")
+        self.scene_plan_scene_tree.configure(yscrollcommand=scene_scroll.set)
+        self.scene_plan_scene_tree.bind("<<TreeviewSelect>>", self._scene_plan_scene_selected)
+        right = ttk.LabelFrame(content, text="Recursos sugeridos para la escena", padding=5)
+        right.grid(row=0, column=1, sticky="nsew")
+        right.rowconfigure(0, weight=1)
+        right.columnconfigure(0, weight=1)
+        self.scene_plan_recommendations_list = tk.Listbox(right, height=9, exportselection=False)
+        self.scene_plan_recommendations_list.grid(row=0, column=0, sticky="nsew")
+        suggestion_scroll = ttk.Scrollbar(right, orient="vertical", command=self.scene_plan_recommendations_list.yview)
+        suggestion_scroll.grid(row=0, column=1, sticky="ns")
+        self.scene_plan_recommendations_list.configure(yscrollcommand=suggestion_scroll.set)
+        self.scene_plan_recommendations_list.bind("<<ListboxSelect>>", self._scene_plan_suggestion_selected)
+        buttons = ttk.Frame(right)
+        buttons.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        ttk.Button(buttons, text="Asignar", command=self.scene_plan_assign_asset_ui).pack(side=LEFT)
+        ttk.Button(buttons, text="Quitar asignación", command=self.scene_plan_clear_asset_ui).pack(side=LEFT, padx=4)
+        ttk.Button(buttons, text="Marcar / desmarcar revisada", command=self.scene_plan_toggle_review_ui).pack(side=LEFT)
+        self.scene_plan_details = tk.Text(right, height=6, wrap="word", state="disabled")
+        self.scene_plan_details.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        bottom = ttk.Frame(self.scene_visual)
+        bottom.grid(row=5, column=0, sticky="ew", pady=(8, 0))
+        ttk.Button(bottom, text="Guardar plan visual local", command=self.scene_plan_save_ui).pack(side=LEFT)
+        ttk.Label(bottom, text="Guardar no habilita render ni publicación. Cada escena requiere revisión humana.").pack(side=LEFT, padx=10)
+
+    def scene_plan_refresh_scripts_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        project = self.research_project_var.get().strip()
+        campaign = self.research_campaign_var.get().strip()
+        if not project or not campaign:
+            messagebox.showwarning("Selección incompleta", "Selecciona proyecto y campaña.")
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.scene_plan_status_var.set("BUSCANDO APROBACIONES VIGENTES…")
+        def worker():
+            try:
+                from scripts.script_registry import check_script, list_scripts
+                registrations = list_scripts(project, campaign)
+                approved = []
+                for row in registrations:
+                    script_id, sha = row.get("script_id"), row.get("sha256")
+                    if script_id and sha:
+                        passed, _problems = check_script(project, campaign, script_id, sha)
+                        if passed:
+                            approved.append(row)
+                self.events.put(("scene_plan_scripts_done", approved))
+            except Exception as exc:
+                self.events.put(("scene_plan_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def scene_plan_build_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        selected = self.scene_plan_script_list.curselection()
+        if not selected or selected[0] >= len(getattr(self, "scene_plan_scripts", [])):
+            messagebox.showwarning("Guion requerido", "Selecciona un guion aprobado de la lista.")
+            return
+        if getattr(self, "scene_visual_plan", None) and any(scene.get("selected_candidate_id") or scene.get("human_reviewed") for scene in self.scene_visual_plan.get("scenes", [])):
+            if not messagebox.askyesno("Reemplazar plan", "Generar otro plan descartará las asignaciones y revisiones aún no guardadas. ¿Continuar?"):
+                return
+        row = self.scene_plan_scripts[selected[0]]
+        project, campaign = self.research_project_var.get().strip(), self.research_campaign_var.get().strip()
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.scene_plan_status_var.set("GENERANDO SUGERENCIAS…")
+        def worker():
+            try:
+                from scripts.scene_asset_matcher import build_scene_asset_plan
+                result = build_scene_asset_plan(project, campaign, row["script_id"], row["sha256"], limit_per_scene=5)
+                self.events.put(("scene_plan_done", result))
+            except Exception as exc:
+                self.events.put(("scene_plan_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _scene_plan_scene_selected(self, _event=None):
+        if not getattr(self, "scene_visual_plan", None):
+            return
+        selection = self.scene_plan_scene_tree.selection()
+        if not selection:
+            return
+        index = int(selection[0])
+        scenes = self.scene_visual_plan.get("scenes", [])
+        if not 0 <= index < len(scenes):
+            scene = scenes[index]
+            suggestions = scene.get("suggestions", [])
+            self.scene_plan_recommendations_list.delete(0, END)
+            for item in suggestions:
+                self.scene_plan_recommendations_list.insert(END, f"{item.get('title') or item.get('candidate_id')} · score {item.get('score', 0):.3f}")
+            self.scene_plan_details.configure(state="normal")
+            self.scene_plan_details.delete("1.0", END)
+            current = scene.get("selected_asset") or {}
+            details = {
+                "scene": scene.get("scene_index"),
+                "selected_candidate_id": scene.get("selected_candidate_id") or None,
+                "selected_asset": current,
+                "human_reviewed": scene.get("human_reviewed", False),
+                "suggestions": suggestions,
+            }
+            self.scene_plan_details.insert(END, json.dumps(details, ensure_ascii=False, indent=2))
+            self.scene_plan_details.configure(state="disabled")
+
+    def _scene_plan_suggestion_selected(self, _event=None):
+        if not getattr(self, "scene_visual_plan", None):
+            return
+        scene_sel = self.scene_plan_scene_tree.selection()
+        item_sel = self.scene_plan_recommendations_list.curselection()
+        if not scene_sel or not item_sel:
+            return
+        scene = self.scene_visual_plan["scenes"][int(scene_sel[0])]
+        suggestions = scene.get("suggestions", [])
+        if item_sel[0] >= len(suggestions):
+            return
+        item = suggestions[item_sel[0]]
+        self.scene_plan_details.configure(state="normal")
+        self.scene_plan_details.delete("1.0", END)
+        self.scene_plan_details.insert(END, json.dumps(item, ensure_ascii=False, indent=2))
+        self.scene_plan_details.configure(state="disabled")
+
+    def scene_plan_assign_asset_ui(self):
+        scene_sel = self.scene_plan_scene_tree.selection()
+        item_sel = self.scene_plan_recommendations_list.curselection()
+        if not scene_sel or not item_sel:
+            messagebox.showwarning("Selección requerida", "Selecciona una escena y un recurso sugerido.")
+            return
+        scene_index, item_index = int(scene_sel[0]), item_sel[0]
+        scene = self.scene_visual_plan["scenes"][scene_index]
+        suggestions = scene.get("suggestions", [])
+        if item_index >= len(suggestions):
+            return
+        asset = suggestions[item_index]
+        scene["selected_candidate_id"] = asset.get("candidate_id", "")
+        scene["selected_asset"] = dict(asset)
+        scene["human_reviewed"] = False
+        self.scene_plan_scene_tree.set(str(scene_index), "selected", asset.get("title") or asset.get("candidate_id") or "Recurso")
+        self.scene_plan_scene_tree.set(str(scene_index), "review", "PENDIENTE")
+        self._scene_plan_scene_selected()
+
+    def scene_plan_clear_asset_ui(self):
+        scene_sel = self.scene_plan_scene_tree.selection()
+        if not scene_sel:
+            return
+        index = int(scene_sel[0])
+        scene = self.scene_visual_plan["scenes"][index]
+        scene["selected_candidate_id"] = ""
+        scene["selected_asset"] = None
+        scene["human_reviewed"] = False
+        self.scene_plan_scene_tree.set(str(index), "selected", "—")
+        self.scene_plan_scene_tree.set(str(index), "review", "PENDIENTE")
+        self._scene_plan_scene_selected()
+
+    def scene_plan_toggle_review_ui(self):
+        scene_sel = self.scene_plan_scene_tree.selection()
+        if not scene_sel:
+            messagebox.showwarning("Escena requerida", "Selecciona la escena que vas a revisar.")
+            return
+        index = int(scene_sel[0])
+        scene = self.scene_visual_plan["scenes"][index]
+        scene["human_reviewed"] = not scene.get("human_reviewed", False)
+        self.scene_plan_scene_tree.set(str(index), "review", "REVISADA" if scene["human_reviewed"] else "PENDIENTE")
+        self.scene_plan_status_var.set(f"Revisión humana: {sum(s.get('human_reviewed', False) for s in self.scene_visual_plan['scenes'])}/{len(self.scene_visual_plan['scenes'])} escenas")
+        self._scene_plan_scene_selected()
+
+    def scene_plan_save_ui(self):
+        if not getattr(self, "scene_visual_plan", None):
+            messagebox.showwarning("Plan inexistente", "Genera primero las sugerencias de escenas.")
+            return
+        plan = dict(self.scene_visual_plan)
+        plan["scenes"] = []
+        for scene in self.scene_visual_plan.get("scenes", []):
+            item = dict(scene)
+            item["selected_candidate_id"] = scene.get("selected_candidate_id", "")
+            item["selected_asset"] = scene.get("selected_asset")
+            item["human_reviewed"] = bool(scene.get("human_reviewed", False))
+            plan["scenes"].append(item)
+        try:
+            from scripts.scene_visual_plan_store import save_scene_visual_plan
+            path = save_scene_visual_plan(plan)
+        except (OSError, ValueError, RuntimeError) as exc:
+            messagebox.showerror("No se pudo guardar el plan visual", str(exc))
+            self.scene_plan_status_var.set("ROJO · NO GUARDADO")
+            return
+        reviewed = sum(scene.get("human_reviewed", False) for scene in plan["scenes"])
+        self.scene_plan_status_var.set(f"PLAN GUARDADO · {reviewed}/{len(plan['scenes'])} revisadas · render bloqueado")
+        self._append(f"SCENE VISUAL PLAN SAVED: {path}")
+
     def _poll_events(self):
         try:
             while True:
@@ -1411,6 +1646,39 @@ class MoneyGetaApp:
                     usable = sum(item.get("usable_for_selection") is True for item in value)
                     self.library_status_var.set(f"{len(value)} recursos · {usable} utilizables")
                     self._append(f"MEDIA LIBRARY: {len(value)} local assets · {usable} current approved and integrity-verified")
+                elif kind == "scene_plan_scripts_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.scene_plan_scripts = value
+                    self.scene_plan_script_list.delete(0, END)
+                    for row in value:
+                        self.scene_plan_script_list.insert(END, f"{row.get('script_id')} · {row.get('sha256', '')[:12]} · {row.get('registered_at', '')}")
+                    self.scene_plan_status_var.set(f"{len(value)} guiones aprobados disponibles")
+                elif kind == "scene_plan_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.scene_visual_plan = value
+                    for row in self.scene_plan_scene_tree.get_children():
+                        self.scene_plan_scene_tree.delete(row)
+                    for index, scene in enumerate(value.get("scenes", [])):
+                        scene["selected_candidate_id"] = ""
+                        scene["selected_asset"] = None
+                        scene["human_reviewed"] = False
+                        visual = str(scene.get("visual", "")).replace("\\n", " ")[:140]
+                        self.scene_plan_scene_tree.insert("", "end", iid=str(index), text=f"Escena {index + 1}", values=(visual, "—", "PENDIENTE"))
+                    count = value.get("scene_count", 0)
+                    self.scene_plan_status_var.set(f"PLAN GENERADO · {count} escenas · sugerencias sin aprobar")
+                    if value.get("scenes"):
+                        first = str(0)
+                        self.scene_plan_scene_tree.selection_set(first)
+                        self.scene_plan_scene_tree.focus(first)
+                        self._scene_plan_scene_selected()
+                    self._append(f"SCENE VISUAL PLAN: {count} scenes · suggestions only · render/publishing disabled")
+                elif kind == "scene_plan_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.scene_plan_status_var.set("ROJO · NO SE PUDO GENERAR EL PLAN")
+                    messagebox.showerror("Plan visual", value)
                 elif kind == "media_library_verify_done":
                     self.busy = False
                     self.process_btn.configure(state="normal")
