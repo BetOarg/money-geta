@@ -85,3 +85,46 @@ def test_video_trim_and_padding_filters_are_applied(tmp_path):
     filters = calls[0][calls[0].index("-vf") + 1]
     assert "trim=duration=1.500" in filters
     assert "tpad=stop_mode=clone:stop_duration=1.500" in filters
+
+
+def test_preview_mixes_local_audio_with_volume_delay_and_fades(tmp_path):
+    plan = draft(tmp_path)
+    soundtrack = tmp_path / "music.wav"
+    soundtrack.write_bytes(b"placeholder")
+    plan["audio_tracks"] = [{
+        "name": "Background",
+        "source_path": str(soundtrack),
+        "start_seconds": 1.5,
+        "duration_seconds": 2.5,
+        "volume": 0.3,
+        "fade_in_seconds": 0.5,
+        "fade_out_seconds": 0.4,
+    }]
+    calls = []
+    compose_preview(plan, tmp_path / "mixed-preview.mp4", ffmpeg="fake",
+                   runner=lambda cmd, **kw: (calls.append(cmd) or success_runner(cmd, **kw)))
+    assert len(calls) == 3
+    assert calls[1][-1].endswith("video_only.mp4")
+    mix = calls[2]
+    filter_graph = mix[mix.index("-filter_complex") + 1]
+    assert "volume=0.300" in filter_graph
+    assert "afade=t=in:st=0:d=0.500" in filter_graph
+    assert "afade=t=out:st=2.100:d=0.400" in filter_graph
+    assert "adelay=delays=1500:all=1" in filter_graph
+    assert "[mixed]" in mix
+    assert str(tmp_path / "mixed-preview.mp4") in mix
+
+
+def test_preview_rejects_audio_tracks_without_local_source(tmp_path):
+    plan = draft(tmp_path)
+    plan["audio_tracks"] = [{
+        "name": "Unresolved",
+        "source_path": "",
+        "start_seconds": 0,
+        "duration_seconds": 1,
+        "volume": 1,
+        "fade_in_seconds": 0,
+        "fade_out_seconds": 0,
+    }]
+    with pytest.raises(ValueError, match="local source file"):
+        compose_preview(plan, tmp_path / "out.mp4", ffmpeg="fake", runner=success_runner)

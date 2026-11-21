@@ -17,4 +17,4 @@ from scripts.timeline_composer import compose_preview
 compose_preview(timeline_draft, Path("preview.mp4"))
 ```
 
-No habilita ni inicia render final, publicación o programación. El composer no mezcla pistas de audio ni aplica transiciones visuales; esos componentes quedan para etapas posteriores.
+No habilita ni inicia render final, publicación o programación. El composer no aplica transiciones visuales (solo corte); fade/dissolve/slide quedan para etapas posteriores.

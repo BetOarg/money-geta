@@ -76,6 +76,13 @@ def compose_preview(
     if timeout < 1 or width < 2 or height < 2 or fps < 1:
         raise ValueError("Invalid preview output settings.")
     scenes = _validate(timeline)
+    raw_audio_tracks = timeline.get("audio_tracks", [])
+    if not isinstance(raw_audio_tracks, list):
+        raise ValueError("Audio tracks must be a list.")
+    from scripts.timeline_audio import validate_audio_track
+    audio_tracks = [validate_audio_track(track) for track in raw_audio_tracks]
+    if any(not track["source_path"] for track in audio_tracks):
+        raise ValueError("Audio preview tracks require a local source file.")
     executable = ffmpeg or shutil.which("ffmpeg")
     if not executable:
         raise RuntimeError("FFmpeg executable not found; install FFmpeg and add it to PATH.")
@@ -141,13 +148,39 @@ def compose_preview(
             segments.append(segment)
         manifest = temp / "concat.txt"
         manifest.write_text("".join("file '" + _filter_path(path) + "'\n" for path in segments), encoding="utf-8")
+        video_only = temp / "video_only.mp4" if audio_tracks else destination
         concat_args = [
             executable, "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
-            "-i", str(manifest), "-c", "copy", "-movflags", "+faststart", str(destination),
+            "-i", str(manifest), "-c", "copy", "-movflags", "+faststart", str(video_only),
         ]
         final = runner(concat_args, capture_output=True, text=True, timeout=timeout, check=False)
         if getattr(final, "returncode", 0) != 0:
             raise RuntimeError(f"FFmpeg preview assembly failed: {(getattr(final, 'stderr', '') or '')[-1000:]}")
-        if runner is subprocess.run and (not destination.is_file() or destination.stat().st_size == 0):
-            raise RuntimeError("FFmpeg did not produce a non-empty preview.")
+        if runner is subprocess.run and (not video_only.is_file() or video_only.stat().st_size == 0):
+            raise RuntimeError("FFmpeg did not produce a non-empty preview video.")
+        if audio_tracks:
+            audio_args = [executable, "-hide_banner", "-loglevel", "error", "-y", "-i", str(video_only)]
+            audio_filters = []
+            for input_index, track in enumerate(audio_tracks, start=1):
+                audio_args += ["-i", track["source_path"]]
+                duration = track["duration_seconds"]
+                chain = [f"atrim=duration={duration:.3f}", "asetpts=PTS-STARTPTS", f"volume={track['volume']:.3f}"]
+                if track["fade_in_seconds"]:
+                    chain.append(f"afade=t=in:st=0:d={track['fade_in_seconds']:.3f}")
+                if track["fade_out_seconds"]:
+                    fade_start = duration - track["fade_out_seconds"]
+                    chain.append(f"afade=t=out:st={fade_start:.3f}:d={track['fade_out_seconds']:.3f}")
+                chain.append(f"adelay=delays={round(track['start_seconds'] * 1000)}:all=1")
+                audio_filters.append(f"[{input_index}:a]" + ",".join(chain) + f"[a{input_index}]")
+            audio_labels = "".join(f"[a{i}]" for i in range(1, len(audio_tracks) + 1))
+            audio_filters.append(audio_labels + f"amix=inputs={len(audio_tracks)}:duration=longest:dropout_transition=0[mixed]")
+            audio_args += [
+                "-filter_complex", ";".join(audio_filters), "-map", "0:v:0", "-map", "[mixed]",
+                "-c:v", "copy", "-c:a", "aac", "-shortest", "-movflags", "+faststart", str(destination),
+            ]
+            mixed = runner(audio_args, capture_output=True, text=True, timeout=timeout, check=False)
+            if getattr(mixed, "returncode", 0) != 0:
+                raise RuntimeError(f"FFmpeg audio mixing failed: {(getattr(mixed, 'stderr', '') or '')[-1000:]}")
+            if runner is subprocess.run and (not destination.is_file() or destination.stat().st_size == 0):
+                raise RuntimeError("FFmpeg did not produce a non-empty audio preview.")
     return destination
