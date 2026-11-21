@@ -49,7 +49,7 @@ def _write_report(directory: Path, name: str, payload: dict[str, Any]) -> Path:
     temporary = target.with_suffix(target.suffix + f".{uuid.uuid4().hex}.tmp")
     serialized = json.dumps(payload, ensure_ascii=False, indent=2)
     with temporary.open("x", encoding="utf-8") as handle:
-        handle.write(serialized + "\\n")
+        handle.write(serialized + "\n")
     temporary.replace(target)
     return target
 
