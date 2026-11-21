@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -45,7 +46,7 @@ def _write_report(directory: Path, name: str, payload: dict[str, Any]) -> Path:
         raise ValueError("QC report directory symlinks are blocked.")
     target = directory / name
     _reject_symlink_components(target)
-    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary = target.with_suffix(target.suffix + f".{uuid.uuid4().hex}.tmp")
     serialized = json.dumps(payload, ensure_ascii=False, indent=2)
     with temporary.open("x", encoding="utf-8") as handle:
         handle.write(serialized + "\\n")
@@ -59,7 +60,6 @@ def run_registered_artifact_qc(campaign_path: Path, artifact_id: str, sha256: st
     from scripts.artifact_registry import list_artifacts, record_central_qc, run_artifact_qc
     from scripts.perceptual_qc import analyze
     from scripts.qc_orchestrator import evaluate
-    from scripts.quality_control import inspect_media
     from scripts.subtitle_quality import inspect_subtitles
 
     campaign = campaign_path.expanduser().resolve(strict=True)
@@ -77,11 +77,14 @@ def run_registered_artifact_qc(campaign_path: Path, artifact_id: str, sha256: st
     subtitle_report_path = None
     central_path = report_dir / f"{artifact_id}-{token}-central.json"
 
-    technical = inspect_media(video, expected_aspect=item.get("format"))
-    technical["file"] = str(video)
-    technical["sha256"] = sha256
+    expected_aspect = item.get("format") if item.get("format") in {"9:16", "16:9", "1:1"} else None
+    technical_event = run_artifact_qc(campaign, artifact_id, sha256, expected_aspect=expected_aspect)
+    technical = {
+        "schema_version": 1, "file": str(video), "sha256": sha256,
+        "passed": technical_event["passed"], "problems": technical_event["problems"],
+        "probe": technical_event.get("probe", {}),
+    }
     technical_path = _write_report(report_dir, technical_path.name, technical)
-    technical_event = run_artifact_qc(campaign, artifact_id, sha256, expected_aspect=item.get("format"))
 
     perceptual_error = None
     try:
