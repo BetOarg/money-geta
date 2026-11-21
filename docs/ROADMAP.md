@@ -33,7 +33,7 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [x] Añadir radar de descubrimiento web por campaña con consultas múltiples, deduplicación, score transparente y guardado local; no representa popularidad ni valida verdad/derechos.
 - [x] Añadir ledger append-only de afirmaciones, referencias a evidencias capturadas y evaluación humana supported/contradicted/unsupported/unverified.
 - [ ] Añadir corroboración asistida con revisión humana, detección de contradicciones y controles de independencia; el modelo no puede adjudicar verdad.
-- [ ] Añadir proveedor de imágenes configurable; Pexels no será requisito.
+- [x] Añadir proveedor de imágenes Openverse con búsqueda opt-in, filtro comercial y ledger local; metadatos de derechos siguen sin verificar.
 - [ ] Añadir TTS configurable, sin acoplarlo a un proveedor.
 - [ ] Benchmarks antes de incorporar ClipsAI, FunClip, WhisperX, Silero VAD, MediaPipe, Auto-Editor o MoviePy.
 

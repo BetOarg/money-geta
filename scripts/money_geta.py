@@ -683,6 +683,12 @@ def main(argv: list[str] | None = None) -> int:
     scriptdraft.add_argument("--campaign", required=True)
     scriptdraft.add_argument("--language", default="es-AR")
     scriptdraft.add_argument("--max-tokens", type=int, choices=range(250, 4001), default=2000)
+    image_search = sub.add_parser("image-search", help="find commercially-filtered stock images via Openverse and save candidates")
+    image_search.add_argument("--project", required=True)
+    image_search.add_argument("--campaign", required=True)
+    image_search.add_argument("--query", required=True)
+    image_search.add_argument("--aspect", choices=("tall", "wide", "square"), default="tall")
+    image_search.add_argument("--limit", type=int, choices=range(1, 21), default=12)
     research = sub.add_parser("research", help="search and rank web-discovery leads for a campaign")
     research.add_argument("--project", required=True)
     research.add_argument("--campaign", required=True)
@@ -806,6 +812,23 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         except (KeyError, ValueError, OSError, ProviderConfigurationError, ProviderRequestError) as exc:
             print(f"FAIL: script draft: {exc}")
+            return 2
+    if args.command == "image-search":
+        from scripts.providers.openverse import ImageSearchConfig, ImageSearchConfigurationError, ImageSearchRequestError, search_openverse, save_image_candidates
+        try:
+            config = ImageSearchConfig.from_env()
+            config = ImageSearchConfig(allow_requests=config.allow_requests, timeout_seconds=config.timeout_seconds,
+                                      max_results=args.limit, endpoint=config.endpoint)
+            candidates = search_openverse(args.query, config=config, aspect_ratio=args.aspect)
+            saved = save_image_candidates(args.project, args.campaign, candidates)
+            print(json.dumps({"provider": "openverse", "query": args.query, "aspect": args.aspect,
+                              "count": len(candidates), "rights_status": "unverified",
+                              "ledger": saved, "candidates": [item.to_dict() for item in candidates]},
+                             ensure_ascii=False, indent=2))
+            print("NOTE: license metadata is not independently verified; check the original source page and attribution before use.")
+            return 0
+        except (OSError, ValueError, RuntimeError, ImageSearchConfigurationError, ImageSearchRequestError) as exc:
+            print(f"FAIL: image search: {exc}")
             return 2
     if args.command == "research":
         from scripts.campaign_research import run_campaign_research
