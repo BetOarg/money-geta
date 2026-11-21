@@ -10,7 +10,7 @@ from scripts.providers.source_reader import SourceDocument, record_source_docume
 from scripts.scriptwriter import draft_campaign_script, validate_script_payload
 
 
-def _setup_campaign(tmp_path, *, profile="viral", add_source=True):
+def _setup_campaign(tmp_path, *, profile="viral", add_source=True, capture_source=True):
     root = tmp_path / "projects"
     create_project("Script project", profile, topic="Sample topic", root=root)
     create_campaign("script-project", "Shorts campaign", "YouTube Shorts", root=root)
@@ -26,7 +26,8 @@ def _setup_campaign(tmp_path, *, profile="viral", add_source=True):
             content_sha256="sha256-source", byte_count=44, redirect_count=0,
             retrieved_at="2026-11-21T00:00:00+00:00",
         )
-        record_source_document("script-project", campaign_id, doc, root=root)
+        if capture_source:
+            record_source_document("script-project", campaign_id, doc, root=root)
     return root, campaign_id, source_url
 
 
@@ -50,7 +51,7 @@ def test_validate_script_requires_source_citations_and_scene_structure():
         "title": "Title", "hook": "Hook", "narration": "Narration",
         "scenes": [{"visual": "Visual", "narration": "Scene narration"}],
         "cta": "CTA", "source_ids": ["source-1"],
-        "claims": [{"claim_id": None, "text": "Claim text", "evidence_ids": ["source-1"}],
+        "claims": [{"claim_id": None, "text": "Claim text", "evidence_ids": ["source-1"]}],
     }
     assert validate_script_payload(valid, evidence_ids={"source-1"}, supported_claims=[], factual_required=False)
     invalid = dict(valid, source_ids=["not-known"])
@@ -64,7 +65,7 @@ def test_news_script_claim_must_exactly_match_supported_claim_and_evidence():
         "title": "Title", "hook": "Hook", "narration": "Narration",
         "scenes": [{"visual": "Visual", "narration": "Scene narration"}], "cta": "CTA",
         "source_ids": ["source-1", "source-2"],
-        "claims": [{"claim_id": "claim-1", "text": "Exact fact", "evidence_ids": ["source-1", "source-2"}],
+        "claims": [{"claim_id": "claim-1", "text": "Exact fact", "evidence_ids": ["source-1", "source-2"]}],
     }
     assert validate_script_payload(payload, evidence_ids={"source-1", "source-2"}, supported_claims=supported, factual_required=True)
     changed = json.loads(json.dumps(payload))
@@ -102,7 +103,7 @@ def test_draft_script_blocks_llm_when_opt_in_disabled(monkeypatch, tmp_path):
 
 def test_draft_script_requires_captured_source_docs(monkeypatch, tmp_path):
     import scripts.scriptwriter as writer
-    root, campaign_id, _ = _setup_campaign(tmp_path, add_source=False)
+    root, campaign_id, _ = _setup_campaign(tmp_path, add_source=True, capture_source=False)
     monkeypatch.setattr(writer, "chat_completion", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("LLM called")))
     with pytest.raises(ValueError, match="source_ledger"):
         draft_campaign_script("script-project", campaign_id, root=root, config=_llm_config())
