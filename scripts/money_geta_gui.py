@@ -524,6 +524,7 @@ class MoneyGetaApp:
         if not selection or selection[0] >= len(self.image_candidates):
             return
         item = self.image_candidates[selection[0]]
+        self.image_download_btn.configure(state="normal" if item.get("rights_status") == "reviewed_approved" else "disabled")
         details = {
             "title": item.get("title"), "creator": item.get("creator"),
             "license": item.get("license"), "license_version": item.get("license_version"),
