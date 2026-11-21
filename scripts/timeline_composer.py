@@ -129,7 +129,7 @@ def compose_preview(
                 filters.append(
                     f"subtitles='{_filter_path(srt_path)}':force_style='FontSize=28,Outline=2,Shadow=1,Alignment=2,MarginV=90'"
                 )
-            args[-1] = ",".join(filters)
+            args.append(",".join(filters))
             args += ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-movflags", "+faststart", str(segment)]
             result = runner(args, capture_output=True, text=True, timeout=timeout, check=False)
             if getattr(result, "returncode", 0) != 0:
