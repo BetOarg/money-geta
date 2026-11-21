@@ -7,13 +7,13 @@ from scripts.money_geta_gui import build_campaign_payload, save_campaign_manifes
 
 
 def test_campaign_payload_requires_matching_rights_evidence_and_attestations():
-    with pytest.raises(ValueError, match="at least one source"):
+    with pytest.raises(ValueError, match="al menos una fuente"):
         build_campaign_payload("Campaign", "YouTube Shorts", [], [], [], [], True, True, True)
-    with pytest.raises(ValueError, match="one reference"):
+    with pytest.raises(ValueError, match="referencia"):
         build_campaign_payload("Campaign", "YouTube Shorts", ["source"], [], [], [], True, True, True)
     with pytest.raises(ValueError, match="Confirm"):
         build_campaign_payload("Campaign", "YouTube Shorts", ["source"], ["rights proof"], [], [], False, True, True)
-    with pytest.raises(ValueError, match="credits"):
+    with pytest.raises(ValueError, match="no son requeridos"):
         build_campaign_payload("Campaign", "YouTube Shorts", ["source"], ["rights proof"], [], [], True, True, False)
     with pytest.raises(ValueError, match="No puedes"):
         build_campaign_payload("Campaign", "YouTube Shorts", ["source"], ["rights proof"], [], ["credit"], True, True, True)
