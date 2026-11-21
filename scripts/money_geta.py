@@ -704,6 +704,18 @@ def main(argv: list[str] | None = None) -> int:
     media_download.add_argument("--candidate-id", required=True)
     media_download.add_argument("--allow-network", action="store_true", help="explicitly permit this image download network request")
     media_download.add_argument("--confirm-download", action="store_true", help="confirm this exact approved candidate should be downloaded")
+    library = sub.add_parser("asset-library", help="search and verify locally downloaded campaign assets")
+    library_actions = library.add_subparsers(dest="library_action", required=True)
+    library_list = library_actions.add_parser("list", help="list downloaded local media assets")
+    library_list.add_argument("--project")
+    library_list.add_argument("--campaign")
+    library_search = library_actions.add_parser("search", help="search downloaded media metadata")
+    library_search.add_argument("--query", required=True)
+    library_search.add_argument("--project")
+    library_search.add_argument("--campaign")
+    library_verify = library_actions.add_parser("verify", help="verify file integrity and current rights approvals")
+    library_verify.add_argument("--project")
+    library_verify.add_argument("--campaign")
     image_search = sub.add_parser("image-search", help="find commercially-filtered stock images via Openverse and save candidates")
     image_search.add_argument("--project", required=True)
     image_search.add_argument("--campaign", required=True)
@@ -854,6 +866,24 @@ def main(argv: list[str] | None = None) -> int:
         for problem in problems:
             print(f"- {problem}")
         return 0 if passed else 2
+    if args.command == "asset-library":
+        from scripts.media_library import MediaLibraryError, list_media_assets, search_media_assets, verify_media_library
+        try:
+            if args.library_action == "list":
+                result = list_media_assets(project_id=args.project, campaign_id=args.campaign)
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 0
+            if args.library_action == "search":
+                result = search_media_assets(args.query, project_id=args.project, campaign_id=args.campaign)
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 0
+            result = verify_media_library(project_id=args.project, campaign_id=args.campaign)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            print("MEDIA_LIBRARY: " + result["status"])
+            return 0 if result["status"] == "PASS" else 2
+        except (OSError, ValueError, RuntimeError, MediaLibraryError) as exc:
+            print(f"FAIL: media library: {exc}")
+            return 2
     if args.command == "media-download":
         from scripts.approved_media_download import MediaDownloadError, download_approved_candidate
         try:
