@@ -19,6 +19,7 @@ def sample_plan():
             "narration": "Opening",
             "suggestions": [{"candidate_id": "asset-1", "title": "Skyline", "usable_for_selection": True}],
             "selected_candidate_id": "asset-1",
+            "selected_asset": {"candidate_id": "asset-1", "title": "Skyline"},
             "human_reviewed": True,
         }],
     }
