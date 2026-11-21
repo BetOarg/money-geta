@@ -656,6 +656,10 @@ def main(argv: list[str] | None = None) -> int:
     session = sub.add_parser("new-session", help="allocate a unique, non-destructive recording workspace")
     session.add_argument("job_id")
     session.add_argument("--root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
+    research = sub.add_parser("research", help="search and rank web-discovery leads for a campaign")
+    research.add_argument("--project", required=True)
+    research.add_argument("--campaign", required=True)
+    research.add_argument("--query", action="append", required=True, help="search query (repeat up to 10 times)")
     campaign = sub.add_parser("campaign-check", help="validate campaign evidence fields (not legal clearance)")
     campaign.add_argument("--campaign", type=Path, required=True)
     acquire = sub.add_parser("download-source", help="download a permitted public source with yt-dlp")
@@ -737,6 +741,21 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         except (KeyError, ValueError) as exc:
             print(f"FAIL: {exc}")
+            return 2
+    if args.command == "research":
+        from scripts.campaign_research import run_campaign_research
+        from scripts.providers.search import SearchConfigurationError
+        try:
+            report = run_campaign_research(args.project, args.campaign, args.query)
+            print(f"RESEARCH: {report['status'].upper()}")
+            print(f"RESULTS: {report['result_count']} · UNIQUE SOURCES: {report['unique_source_count']}")
+            for item in report["ranked_results"][:10]:
+                print(f"#{item['rank']} · score {item['discovery_score']:.3f} · queries {item['query_count']} · {item['title']} · {item['canonical_url']}")
+            print(f"REPORT: {report['report_path']}")
+            print("NOTE: discovery score is not a popularity metric or factual/legal validation.")
+            return 0 if report["status"] == "completed" else (1 if report["status"] == "partial" else 2)
+        except (KeyError, ValueError, OSError, SearchConfigurationError) as exc:
+            print(f"FAIL: campaign research: {exc}")
             return 2
     if args.command == "projects":
         from scripts.project_registry import create_project, get_project, list_projects
