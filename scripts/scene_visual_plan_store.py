@@ -43,20 +43,24 @@ def save_scene_visual_plan(plan: dict[str, Any], *, root: Path | None = None) ->
         selected = scene.get("selected_candidate_id")
         if selected and selected not in valid_ids:
             raise ValueError("Selected asset must belong to the scene's suggestions.")
+        selected_asset = scene.get("selected_asset")
+        if selected and (not isinstance(selected_asset, dict) or selected_asset.get("candidate_id") != selected):
+            raise ValueError("Selected asset metadata must match the selected candidate ID.")
+        if not selected and selected_asset is not None:
+            raise ValueError("Selected asset metadata cannot exist without a candidate ID.")
         if not isinstance(scene.get("human_reviewed", False), bool):
             raise ValueError("Scene review status must be boolean.")
 
     projects_root = (root or default_projects_root()).expanduser().resolve()
     project_dir = projects_root / project_id
     campaign_dir = project_dir / "campaigns" / campaign_id
-    if project_dir.is_symlink() or campaign_dir.is_symlink():
-        raise ValueError("Project or campaign path cannot be a symlink.")
+    from scripts.artifact_registry import _reject_symlink_components
+    _reject_symlink_components(campaign_dir)
     if not campaign_dir.is_dir():
         raise ValueError("Campaign folder does not exist.")
     plan_dir = campaign_dir / "visual_plans"
     plan_dir.mkdir(exist_ok=True)
-    if plan_dir.is_symlink():
-        raise ValueError("Visual plan folder cannot be a symlink.")
+    _reject_symlink_components(plan_dir)
     resolved_campaign = campaign_dir.resolve(strict=True)
     resolved_plan_dir = plan_dir.resolve(strict=True)
     if not resolved_plan_dir.is_relative_to(resolved_campaign):
