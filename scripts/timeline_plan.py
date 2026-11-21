@@ -132,6 +132,7 @@ def save_timeline(timeline: dict[str, Any], *, root: Path | None = None) -> Path
     seen = set()
     for row in rows:
         if not isinstance(row, dict):
+            raise ValueError("Malformed timeline scene record.")
         scene_id = row.get("scene_id")
         if not isinstance(scene_id, str) or not _ID.fullmatch(scene_id) or scene_id in seen:
             raise ValueError("Scene IDs must be unique and valid.")
