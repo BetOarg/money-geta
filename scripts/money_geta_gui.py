@@ -482,7 +482,7 @@ class MoneyGetaApp:
             "license": item.get("license"), "license_version": item.get("license_version"),
             "license_url": item.get("license_url"), "creator_url": item.get("creator_url"),
             "source_page_url": item.get("source_page_url"), "attribution": item.get("attribution"),
-            "dimensions": f"{item.get('width')}x{item.get('height')}", "rights_status": "UNVERIFIED",
+            "dimensions": f"{item.get('width')}x{item.get('height')}", "rights_status": item.get("rights_status", "unverified").upper(),
         }
         self.image_details.configure(state="normal")
         self.image_details.delete("1.0", END)
@@ -1238,9 +1238,13 @@ class MoneyGetaApp:
                     passed = value.get("passed")
                     status = "RIGHTS REVIEW PASS · OPERATOR ATTESTATION" if passed else "RIGHTS REVIEW BLOCKED"
                     self.image_status_var.set(status)
-                    for item in self.image_candidates:
+                    for index, item in enumerate(self.image_candidates):
                         if item.get("candidate_id") == value.get("candidate_id"):
-                            item["rights_status"] = "reviewed_approved" if passed else "reviewed_rejected"
+                            item["rights_status"] = "reviewed_approved" if passed else ("reviewed_rejected" if value.get("decision") == "rejected" else "review_blocked")
+                            base_title = item.get("title", "Untitled")
+                            creator = item.get("creator", "Unknown creator")
+                            self.image_results_list.delete(index)
+                            self.image_results_list.insert(index, f"{index + 1}. {base_title} · {creator} · {item.get('license', \"unknown\")} · {item['rights_status'].upper()})
                     self._append(f"MEDIA RIGHTS REVIEW: {value.get('decision')} · {'PASS' if passed else 'BLOCKED'} · {value.get('candidate_id')}")
                     if value.get("problems"):
                         messagebox.showwarning("Revisión", "; ".join(value["problems"]))
