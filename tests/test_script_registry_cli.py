@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from scripts.campaign_registry import create_campaign, update_campaign
+from scripts.money_geta import main
 from scripts.project_registry import create_project
 from scripts.providers.source_reader import SourceDocument, record_source_document
 from scripts.script_registry import register_script
