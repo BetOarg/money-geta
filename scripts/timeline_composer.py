@@ -106,9 +106,11 @@ def compose_preview(
                 args += ["-ss", str(trim_start), "-i", str(source)]
             args += ["-t", f"{duration:.3f}", "-an", "-vf"]
             filters = []
-            if source_duration is not None:
-                filters.extend([f"trim=duration={source_duration:.3f}", "setpts=PTS-STARTPTS"])
-                padding = max(0.0, duration - source_duration)
+            if not image:
+                filters.append("setpts=PTS-STARTPTS")
+                if source_duration is not None:
+                    filters.append(f"trim=duration={source_duration:.3f}")
+                padding = duration if source_duration is None else max(0.0, duration - source_duration)
                 if padding:
                     filters.append(f"tpad=stop_mode=clone:stop_duration={padding:.3f}")
             filters.extend([
