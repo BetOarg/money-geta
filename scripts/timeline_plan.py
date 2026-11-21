@@ -97,6 +97,26 @@ def move_scene(timeline: dict[str, Any], scene_index: int, offset: int) -> dict[
     return result
 
 
+def update_subtitle_timing(timeline: dict[str, Any], scene_index: int, *, start_seconds: float, end_seconds: float) -> dict[str, Any]:
+    rows = list(timeline.get("scenes", []))
+    if not 0 <= scene_index < len(rows):
+        raise ValueError("Scene index out of range.")
+    row = dict(rows[scene_index])
+    start = float(start_seconds)
+    end = float(end_seconds)
+    duration = float(row.get("duration_seconds", 0))
+    if not all(math.isfinite(value) for value in (start, end)):
+        raise ValueError("Subtitle timing must be finite.")
+    if start < 0 or end <= start or end > duration:
+        raise ValueError("Subtitle timing must fit inside the scene duration.")
+    row["subtitle_start_seconds"] = round(start, 3)
+    row["subtitle_end_seconds"] = round(end, 3)
+    rows[scene_index] = row
+    result = dict(timeline)
+    result["scenes"] = rows
+    return result
+
+
 def update_scene(timeline: dict[str, Any], scene_index: int, *, duration_seconds: float | None = None,
                 narration: str | None = None, subtitle_text: str | None = None,
                 trim_start_seconds: float | None = None, trim_end_seconds: float | None = None) -> dict[str, Any]:
@@ -180,6 +200,15 @@ def save_timeline(timeline: dict[str, Any], *, root: Path | None = None) -> Path
             _, kind = resolve_scene_preview_path(row.get("visual_path", ""))
             if kind != "video":
                 raise ValueError("Media trim controls require a local video asset.")
+        subtitle_start = float(row.get("subtitle_start_seconds", 0))
+        subtitle_end_raw = row.get("subtitle_end_seconds")
+        subtitle_end = None if subtitle_end_raw is None else float(subtitle_end_raw)
+        if not math.isfinite(subtitle_start) or subtitle_start < 0:
+            raise ValueError("Subtitle start must be finite and non-negative.")
+        if subtitle_end is not None and (not math.isfinite(subtitle_end) or subtitle_end <= subtitle_start or subtitle_end > duration):
+            raise ValueError("Subtitle timing must fit inside the scene duration.")
+        if subtitle_end is not None and not str(row.get("subtitle_text", "")).strip():
+            raise ValueError("Subtitle timing requires subtitle text.")
         for field in ("narration", "subtitle_text", "visual_description", "visual_path", "candidate_id"):
             if not isinstance(row.get(field, ""), str):
                 raise ValueError(f"{field} must be text.")
