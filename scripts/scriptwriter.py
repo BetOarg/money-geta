@@ -55,7 +55,7 @@ def _select_source_documents(documents: list[dict[str, Any]], campaign_sources: 
     remaining = [item for item in eligible if item not in required]
     selected = required + sorted(remaining, key=lambda item: str(item.get("retrieved_at", "")), reverse=True)
     if len(required) > MAX_SOURCE_DOCS:
-        raise Value ValueError("Supported claims reference more source documents than the prompt limit.")
+        raise ValueError("Supported claims reference more source documents than the prompt limit.")
     chosen = selected[:MAX_SOURCE_DOCS]
     selected_ids = {item["evidence_id"] for item in chosen}
     missing_claim_refs = claim_evidence_ids - selected_ids
@@ -178,7 +178,7 @@ def draft_campaign_script(project_id: str, campaign_id: str, *, language: str = 
     campaign_path = projects_root / project_id / "campaigns" / campaign_id / "campaign.json"
     passed, problems = check_file(campaign_path)
     if not passed:
-        raise Value ValueError("Campaign gate blocked script draft: " + "; ".join(problems))
+        raise ValueError("Campaign gate blocked script draft: " + "; ".join(problems))
     cfg = config or LLMConfig.from_env()
     cfg.validate()
     if not cfg.allow_requests:
@@ -187,7 +187,7 @@ def draft_campaign_script(project_id: str, campaign_id: str, *, language: str = 
     claims = list_claims(project_id, campaign_id, root=projects_root)
     unsupported = [item for item in claims if item.get("status") != "supported"]
     if unsupported:
-        raise Value ValueError("Unresolved factual claims block script draft.")
+        raise ValueError("Unresolved factual claims block script draft.")
     required_claim_ids = set()
     for item in claims:
         required_claim_ids.update(item.get("evidence_ids", []))
@@ -195,7 +195,7 @@ def draft_campaign_script(project_id: str, campaign_id: str, *, language: str = 
     available_ids = {item["evidence_id"] for item in selected_documents}
     supported_claims = [item for item in claims if item.get("status") == "supported"]
     if any(set(item.get("evidence_ids", [])) - available_ids for item in supported_claims):
-        raise Value ValueError("Supported claims reference source documents excluded from prompt.")
+        raise ValueError("Supported claims reference source documents excluded from prompt.")
     profile = get_profile(project["profile_id"])
     messages = build_script_prompt(campaign, profile, selected_documents, supported_claims, language)
     input_payload = {"campaign": campaign, "profile": profile, "sources": selected_documents, "claims": supported_claims}
@@ -227,6 +227,6 @@ def draft_campaign_script(project_id: str, campaign_id: str, *, language: str = 
     target = draft_dir / f"script-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{digest}.json"
     with target.open("x", encoding="utf-8") as handle:
         json.dump(report, handle, ensure_ascii=False, indent=2)
-        handle.write("\\n")
+        handle.write("\n")
     report["report_path"] = str(target)
     return report
