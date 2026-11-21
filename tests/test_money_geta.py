@@ -84,8 +84,8 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     artifacts = list_artifacts(campaign)
     assert len(artifacts) == 1
     artifact = artifacts[0]
-    assert Path(artifact["path"]).is_relative_to(mpt.resolve())
-    assert Path(artifact["allowed_root"]) == mpt.resolve()
+    assert Path(artifact["path"]).is_relative_to((mpt / "storage" / "tasks").resolve())
+    assert Path(artifact["allowed_root"]) == (mpt / "storage" / "tasks").resolve()
     assert check_artifact(campaign, artifact["artifact_id"], artifact["sha256"])[0] is False
     approve_artifact(campaign, artifact["artifact_id"], artifact["sha256"], reviewer="test operator")
     assert check_artifact(campaign, artifact["artifact_id"], artifact["sha256"]) == (True, [])
