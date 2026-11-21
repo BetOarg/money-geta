@@ -23,6 +23,13 @@ def test_canonical_url_removes_tracking_and_fragment_but_keeps_content_params():
     assert canonical_url("HTTPS://Example.org/path/?page=2&utm_source=feed#top") == "https://example.org/path?page=2"
 
 
+def test_canonical_url_rejects_credentialed_links():
+    with pytest.raises(ValueError):
+        canonical_url("https://user:pass@example.org/path")
+    with pytest.raises(ValueError):
+        canonical_url("https://example.org/path?access_token=secret")
+
+
 def test_rank_deduplicates_results_and_uses_query_coverage_and_freshness():
     now = datetime(2026, 11, 21, tzinfo=timezone.utc)
     results = [
