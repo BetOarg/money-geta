@@ -64,3 +64,11 @@ def test_unsafe_filename_id_rejected(tmp_path,monkeypatch):
     setup(tmp_path,monkeypatch)
     with pytest.raises(d.MediaDownloadError,match="filename"):
         d.download_approved_candidate("p","c","../escape",allow_network=True,confirm_download=True,resolver=resolver)
+
+def test_repeat_download_returns_verified_existing_record(tmp_path,monkeypatch):
+    cf,c=setup(tmp_path,monkeypatch); png=b"\x89PNG\r\n\x1a\n"+b"stable-image"; calls=[]
+    def opener(*args,**kwargs): calls.append(1); return Response(png)
+    first=d.download_approved_candidate("p","c","cand_1",allow_network=True,confirm_download=True,resolver=resolver,opener=opener)
+    second=d.download_approved_candidate("p","c","cand_1",allow_network=True,confirm_download=True,resolver=resolver,opener=opener)
+    assert first["sha256"]==second["sha256"]
+    assert len(calls)==1
