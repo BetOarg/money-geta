@@ -22,7 +22,7 @@ El comando devuelve 0 cuando pasa y 2 cuando falla. La ausencia de FFprobe, arch
 
 Comprueba existencia y tamaño, lectura de contenedor, presencia de video, dimensiones, códec, duración, relación de aspecto opcional y audio opcional. No reproduce el video ni evalúa sincronización perceptual, legibilidad de subtítulos, calidad visual, exactitud factual, derechos, licencias, música, políticas de plataforma ni calidad editorial.
 
-**No es todavía un gate conectado a `publication-check`.** El operador debe revisar el informe y el video. La integración automática con el registro de artefactos es una fase posterior; nunca se interpreta un QC técnico como autorización de publicación.
+**No es todavía un gate conectado a `publication-check`.** El operador debe revisar el video y el estado QC. La integración automática con el registro de artefactos es una fase posterior; nunca se interpreta un QC técnico como autorización de publicación.
 
 
 ## QC vinculado al artefacto (gate de distribución)
@@ -32,3 +32,16 @@ La rama de integración agrega el subcomando `money-geta-artifact-review --campa
 `publication-check` ahora exige un QC registrado y exitoso para el hash exacto del MP4. Si falta, falla, o el archivo cambia y su hash no coincide, el gate bloquea. Un QC fallido posterior también bloquea porque se usa la última evaluación.
 
 El QC es técnico solamente; no acredita derechos, legalidad, exactitud, calidad editorial, políticas de plataforma ni reemplaza la aprobación humana. Este cambio se propone en un PR separado apilado sobre el PR #5 pendiente de merge.
+
+## QC automático tras render MPT
+
+El flujo `money-geta render` registra cada MP4 y ejecuta QC técnico automáticamente usando la relación de aspecto solicitada. Si FFprobe no está disponible o el archivo no cumple los controles, el comando devuelve código 2 y la sesión queda marcada como `technical_qc_failed`; no se considera listo para publicación. Para repetir una evaluación manual, usa la acción `qc` del registro de artefactos.
+
+Ejemplo manual:
+
+```powershell
+money-geta-artifact-review --campaign .\campaign.json qc --artifact-id ID --sha256 HASH --aspect 9:16 --require-audio
+money-geta-artifact-review --campaign .\campaign.json publication-check --artifact-id ID --sha256 HASH
+``
+
+El gate combina validación de campaña, aprobación humana del artefacto, integridad/hash y QC técnico exitoso para el mismo hash.
