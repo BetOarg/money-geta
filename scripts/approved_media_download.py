@@ -84,8 +84,11 @@ def download_approved_candidate(project_id,campaign_id,candidate_id,*,allow_netw
         clen=response.headers.get("Content-Length")
         if clen:
             try:
-                if int(clen)>MAX_BYTES: raise MediaDownloadError("Image exceeds 20 MB limit.")
-            except ValueError: raise MediaDownloadError("Invalid Content-Length header.") from None
+                declared_size = int(clen)
+            except ValueError:
+                raise MediaDownloadError("Invalid Content-Length header.") from None
+            if declared_size > MAX_BYTES:
+                raise MediaDownloadError("Image exceeds 20 MB limit.")
         digest=hashlib.sha256(); total=0
         with tempfile.NamedTemporaryFile(prefix=".asset-",suffix=".part",dir=assets,delete=False) as f:
             tmp=Path(f.name)
