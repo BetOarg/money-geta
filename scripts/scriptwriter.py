@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 from scripts.campaign_check import check_file
 from scripts.campaign_registry import get_campaign
@@ -14,6 +14,7 @@ from scripts.claim_registry import list_claims
 from scripts.project_registry import default_projects_root, get_project
 from scripts.profile_registry import get_profile
 from scripts.providers.llm import LLMConfig, ProviderConfigurationError, ProviderRequestError, chat_completion, extract_text
+from scripts.providers.source_reader import SECRET_QUERY
 
 MAX_SOURCE_DOCS = 8
 MAX_SOURCE_TEXT = 4000
@@ -40,6 +41,8 @@ def _read_source_ledger(path: Path) -> list[dict[str, Any]]:
             parsed_url = urlsplit(final_url)
             if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname or parsed_url.username or parsed_url.password:
                 raise ValueError("Source ledger contains an unsafe source URL.")
+            if any(SECRET_QUERY.search(key) for key, _ in parse_qsl(parsed_url.query, keep_blank_values=True)):
+                raise ValueError("Source ledger contains credential-like URL parameters.")
             seen.add(evidence_id)
             rows.append(item)
     except (OSError, UnicodeError, json.JSONDecodeError):
@@ -152,7 +155,7 @@ def validate_script_payload(payload: Any, *, evidence_ids: set[str],
         raise ValueError("News and education drafts require explicit claims linked to the supported claim ledger.")
     supported = {item["claim_id"]: item for item in supported_claims if item.get("status") == "supported"}
     for claim in claims:
-        if not isinstance(claim, dict) or not isinstance(claim.get("text"), str) or not claim["text"].strip():
+        if not isinstance(claim, dict) or not isinstance(claim.get("text"), str) or not claim["text"].strip() or len(claim["text"]) > 1000:
             raise ValueError("Every script claim must contain text.")
         refs = claim.get("evidence_ids")
         if not isinstance(refs, list) or not refs or any(not isinstance(ref, str) or ref not in evidence_ids for ref in refs):
