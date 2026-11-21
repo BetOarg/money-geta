@@ -332,7 +332,6 @@ class MoneyGetaApp:
 
     def _build_research(self):
         self.research.columnconfigure(1, weight=1)
-        self.research.rowconfigure(4, weight=1)
         ttk.Label(self.research, text="Radar de descubrimiento por campaña", style="Section.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
         ttk.Label(self.research, text="Proyecto (ID)").grid(row=1, column=0, sticky="w", pady=5)
         self.research_project_var = tk.StringVar()
