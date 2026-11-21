@@ -3,7 +3,7 @@ import json
 import pytest
 
 from scripts.timeline_plan import (
-    create_timeline_from_visual_plan, move_scene, update_scene, save_timeline, load_timeline,
+    create_timeline_from_visual_plan, move_scene, update_scene, save_timeline, load_timeline, timeline_visual_blocks,
 )
 
 
@@ -95,3 +95,20 @@ def test_load_saved_timeline_matches_script_hash(tmp_path):
     loaded = load_timeline("proj-1", "campaign-1", "script-1", "a" * 64, root=tmp_path)
     assert loaded["scenes"][0]["narration"] == "Welcome"
     assert load_timeline("proj-1", "campaign-1", "script-1", "b" * 64, root=tmp_path) is None
+
+
+def test_timeline_visual_blocks_are_proportional_and_selectable_by_index():
+    scenes = [{"duration_seconds": 5}, {"duration_seconds": 10}, {"duration_seconds": 2}]
+    blocks = timeline_visual_blocks(scenes, pixels_per_second=20, minimum_width=40, gap=5)
+    assert [b["index"] for b in blocks] == [0, 1, 2]
+    assert blocks[0]["width"] == 100
+    assert blocks[1]["width"] == 200
+    assert blocks[2]["width"] == 40
+    assert blocks[1]["x"] == blocks[0]["x"] + blocks[0]["width"] + 5
+
+
+def test_timeline_visual_blocks_validate_dimensions_and_duration():
+    with pytest.raises(ValueError):
+        timeline_visual_blocks([{"duration_seconds": 181}])
+    with pytest.raises(ValueError):
+        timeline_visual_blocks([{"duration_seconds": 5}], pixels_per_second=0)
