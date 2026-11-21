@@ -152,3 +152,23 @@ def test_central_qc_rejects_report_with_stale_hash(tmp_path: Path) -> None:
     }), encoding="utf-8")
     with pytest.raises(ArtifactReviewError, match="hash does not match"):
         record_central_qc(campaign, item["artifact_id"], item["sha256"], report)
+
+
+def test_publication_check_blocks_without_central_qc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    from scripts.artifact_registry import main, run_artifact_qc
+    campaign, output = setup_campaign(tmp_path)
+    video = output / "final.mp4"
+    video.write_bytes(b"video")
+    item = register_artifact(campaign, video, allowed_root=output)
+    import scripts.quality_control as qc
+    monkeypatch.setattr(qc, "inspect_media", lambda *a, **k: {
+        "passed": True, "problems": [], "probe": {}
+    })
+    run_artifact_qc(campaign, item["artifact_id"], item["sha256"])
+    approve_artifact(campaign, item["artifact_id"], item["sha256"], reviewer="test reviewer")
+    import scripts.campaign_check as campaign_check
+    monkeypatch.setattr(campaign_check, "check_file", lambda *a, **k: (True, []))
+    result = main(["--campaign", str(campaign), "publication-check",
+        "--artifact-id", item["artifact_id], "--sha256", item["sha256"])
+    assert result == 2
+    assert "central QC has not been recorded" in capsys.readouterr().out
