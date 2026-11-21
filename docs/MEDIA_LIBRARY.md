@@ -32,4 +32,4 @@ money-geta asset-library verify --project gta-vi --campaign launch
 - `metadata_current`: candidate metadata hash matches the download record.
 - `usable_for_selection`: true only when local file integrity, current candidate metadata, and current approved rights review all pass.
 
-A PASS verifies catalog integrity and review-record consistency; it is not a legal opinion, nor does it certify the license or the content. A rights approval is an operator attestation. Review the original source and retain required attribution. The library does not yet feed assets automatically into rendering.
+An empty catalog reports `EMPTY` rather than a misleading PASS. A PASS verifies catalog integrity and review-record consistency; it is not a legal opinion, nor does it certify the license or the content. A rights approval is an operator attestation. Review the original source and retain required attribution. The library does not yet feed assets automatically into rendering.
