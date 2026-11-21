@@ -12,10 +12,11 @@ money-geta-claims = "scripts.claims_cli:main"
 money-geta-artifact-review = "scripts.artifact_registry:main"
 money-geta-qc = "scripts.quality_control:main"
 money-geta-subtitle-qc = "scripts.subtitle_quality:main"
+money-geta-perceptual-qc = "scripts.perceptual_qc:main"
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]
-media = ["faster-whisper>=1.1,<2", "scenedetect[opencv]>=0.6,<1"]
+media = ["faster-whisper>=1.1,<2", "scenedetect[opencv]>=0.6,<1]
 capture = ["yt-dlp>=2025.1.15"]
 gtavi = ["numpy>=1.26,<3", "requests>=2.31,<3", "yt-dlp[default]>=2026.10.26", "deep-translator>=1.11,<2", "edge-tts>=6.1,<8", "opencv-python-headless>=4.9,<5"]
 
