@@ -1301,6 +1301,20 @@ class MoneyGetaApp:
                     self._append(f"MEDIA RIGHTS REVIEW: {value.get('decision')} · {'PASS' if passed else 'BLOCKED'} · {value.get('candidate_id')}")
                     if value.get("problems"):
                         messagebox.showwarning("Revisión", "; ".join(value["problems"]))
+                elif kind == "media_download_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.image_status_var.set("DESCARGA VERIFICADA · VERDE")
+                    self.image_details.configure(state="normal")
+                    self.image_details.insert(END, "\\n\\nLocal: " + value.get("local_path", "") + "\\nSHA-256: " + value.get("sha256", ""))
+                    self.image_details.configure(state="disabled")
+                    self._append(f"APPROVED IMAGE SAVED: {value.get('local_path')} · SHA256 {value.get('sha256')}")
+                elif kind == "media_download_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.image_status_var.set("ROJO · DESCARGA FALLIDA")
+                    self._append("MEDIA DOWNLOAD ERROR: " + value)
+                    messagebox.showerror("Descarga fallida", value)
                 elif kind == "media_review_error":
                     self.busy = False
                     self.process_btn.configure(state="normal")
