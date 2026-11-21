@@ -425,12 +425,14 @@ class MoneyGetaApp:
         except ValueError as exc:
             messagebox.showerror("Configuración de búsqueda", str(exc))
             return
+        if not messagebox.askyesno("Confirmar búsqueda externa", f"Se realizarán {len(queries)} consultas a {config.provider}. Puede consumir cuota o generar cargos. ¿Continuar?"):
+            return
         self.busy = True
         self.process_btn.configure(state="disabled")
         self.research_status_var.set("BUSCANDO…")
         self.research_output.configure(state="normal")
         self.research_output.delete("1.0", END)
-        self.research_output.insert(END, "Consulta en curso; los leads no son métricas de popularidad ni validación factual/legal.\\n")
+        self.research_output.insert(END, "Consulta en curso; los leads no son métricas de popularidad ni validación factual/legal.\n")
         self.research_output.configure(state="disabled")
         def worker():
             try:
