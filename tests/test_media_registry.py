@@ -63,3 +63,26 @@ def test_latest_rejection_revokes_approved_candidate(tmp_path):
     passed, problems = check_media_candidate("media-review", "campaign", candidate.candidate_id, root=root)
     assert passed is False
     assert "rejected" in problems[0]
+
+
+def test_new_license_metadata_version_invalidates_old_review(tmp_path):
+    root, candidate = _fixture(tmp_path)
+    review_media_candidate("media-review", "campaign", candidate.candidate_id,
+        decision="approved", reviewer="Operator", rights_evidence="Original license page reviewed.",
+        reviewed_license="CC BY 4.0", source_reviewed=True, root=root)
+    updated_item = {
+        "title": "Photo", "url": "https://cdn.example.org/photo.jpg",
+        "foreign_landing_url": "https://example.org/photo", "creator": "Creator",
+        "creator_url": "https://example.org/creator", "license": "by-sa",
+        "license_version": "4.0", "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "source": "Example", "category": "photograph",
+        "thumbnail": "https://cdn.example.org/thumb.jpg", "width": 1280, "height": 720,
+        "attribution": "Photo by Creator",
+    }
+    refreshed = _normalize("new query", [updated_item])[0]
+    assert refreshed.candidate_id == candidate.candidate_id
+    saved = save_image_candidates("media-review", "campaign", [refreshed], root=root)
+    assert saved["added"] == 1
+    passed, problems = check_media_candidate("media-review", "campaign", candidate.candidate_id, root=root)
+    assert passed is False
+    assert "stale" in problems[0]
