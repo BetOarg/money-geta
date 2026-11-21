@@ -1,3 +1,4 @@
+import pytest
 
 def test_update_scene_supports_valid_video_trim_and_preview_start(tmp_path):
     from scripts.timeline_plan import update_scene
