@@ -569,7 +569,7 @@ def run_mpt(args: argparse.Namespace) -> int:
         print(f"VIDEO: {video.resolve()}")
     registered_artifacts = []
     try:
-        from scripts.artifact_registry import register_artifact
+        from scripts.artifact_registry import register_artifact, run_artifact_qc
         for item in videos:
             video = Path(item)
             if not video.is_absolute():
@@ -584,6 +584,18 @@ def run_mpt(args: argparse.Namespace) -> int:
             registered_artifacts.append(registered)
             print(f"ARTIFACT_ID: {registered['artifact_id']}")
             print(f"ARTIFACT_SHA256: {registered['sha256']}")
+            qc = run_artifact_qc(args.campaign, registered["artifact_id"], registered["sha256"],
+                                 expected_aspect=args.aspect)
+            print("TECHNICAL_QC: PASS" if qc["passed"] else "TECHNICAL_QC: FAIL")
+            for issue in qc["problems"]:
+                print(f"QC ISSUE: {issue}")
+            if not qc["passed"]:
+                write_manifest(session, stage="technical_qc_failed", mpt_task_id=payload.get("task_id"),
+                    artifact_id=registered["artifact_id"], artifact_sha256=registered["sha256"],
+                    qc_problems=qc["problems"])
+                print("BLOCKED: technical QC did not pass; publication-check will remain blocked.")
+                print(f"SESSION: {session}")
+                return 2
     except (OSError, ValueError, RuntimeError) as exc:
         write_manifest(session, stage="artifact_registration_failed", failure=str(exc),
                        output_videos=[str((Path(item) if Path(item).is_absolute() else mpt_runtime_root / item).resolve()) for item in videos])
