@@ -281,6 +281,17 @@ def record_central_qc(campaign_path: str | Path, artifact_id: str, sha256: str, 
     status = report.get("status")
     if status not in {"FAILED", "REVIEW_REQUIRED", "READY_FOR_HUMAN_REVIEW"}:
         raise ArtifactReviewError("Central QC status invalid.")
+    blocking = report.get("blocking")
+    review = report.get("review")
+    if (not isinstance(blocking, list) or any(not isinstance(x, str) for x in blocking)
+            or not isinstance(review, list) or any(not isinstance(x, str) for x in review)):
+        raise ArtifactReviewError("Central QC blocking/review lists are malformed.")
+    if status == "READY_FOR_HUMAN_REVIEW" and (blocking or review):
+        raise ArtifactReviewError("READY central QC cannot contain blocking issues or review findings.")
+    if status == "FAILED" and not blocking:
+        raise ArtifactReviewError("FAILED central QC must include blocking issues.")
+    if status == "REVIEW_REQUIRED" and not review:
+        raise ArtifactReviewError("REVIEW_REQUIRED central QC must include review findings.")
     event = {"schema_version": 1, "event_type": "artifact_central_qc", "artifact_id": artifact_id,
               "sha256": sha256, "status": status, "report": report, "qc_at": _now()}
     _append(ledger, event)
