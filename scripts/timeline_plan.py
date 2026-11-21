@@ -200,3 +200,26 @@ def load_timeline(project_id: str, campaign_id: str, script_id: str, sha: str, *
     if payload.get("plan_type") != "editable_timeline" or payload.get("script_sha256") != sha:
         raise ValueError("Saved timeline does not match the approved script hash.")
     return payload
+
+
+def timeline_visual_blocks(scenes: list[dict[str, Any]], *, pixels_per_second: float = 24.0, minimum_width: float = 40.0, gap: float = 6.0) -> list[dict[str, float | int]:
+    """Calculate proportional scene block positions for a scrollable visual timeline."""
+    if not isinstance(scenes, list) or not scenes:
+        return []
+    scale = float(pixels_per_second)
+    min_width = float(minimum_width)
+    spacing = float(gap)
+    if not (0.1 <= scale <= 200 and 10 <= min_width <= 500 and 0 <= spacing <= 50):
+        raise ValueError("Invalid timeline display dimensions.")
+    blocks = []
+    x = 12.0
+    for index, scene in enumerate(scenes):
+        if not isinstance(scene, dict):
+            raise ValueError("Malformed scene record.")
+        duration = float(scene.get("duration_seconds", 0))
+        if not MIN_DURATION <= duration <= MAX_DURATION:
+            raise ValueError("Scene duration out of range.")
+        width = max(min_width, duration * scale)
+        blocks.append({"index": index, "x": x, "width": width, "duration": duration})
+        x += width + spacing
+    return blocks
