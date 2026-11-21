@@ -48,7 +48,7 @@ def _publication_age(published_at: str | None, now: datetime) -> float | None:
 
 
 def rank_discovery_results(results: list[Any], *, now: datetime | None = None) -> list[dict[str, Any]]:
-    """Rank results by query coverage, domain diversity, provider score and explicit freshness."""
+    """Rank results by query coverage, bounded provider score and explicit freshness."""
     current = now or datetime.now(timezone.utc)
     grouped: dict[str, dict[str, Any]] = {}
     for evidence in results:
@@ -90,7 +90,7 @@ def rank_discovery_results(results: list[Any], *, now: datetime | None = None) -
         best_age = min((item["age_days"] for item in dates if item["age_days"] is not None), default=None)
         freshness = max(0.0, 2.0 - best_age / 30.0) if best_age is not None and best_age <= 60 else 0.0
         provider_score = min(1.0, max(0.0, max(scores, default=0.0)))
-        score = round(len(query_hits) * 2.0 + len(domains) * 1.5 + provider_score + freshness, 3)
+        score = round(len(query_hits) * 2.0 + provider_score + freshness, 3)
         record.update({
             "query_count": len(query_hits), "source_domain_count": len(domains),
             "source_domains": domains, "provider_score": round(provider_score, 3),
@@ -134,7 +134,7 @@ def run_campaign_research(project_id: str, campaign_id: str, queries: list[str],
         "status": status, "result_count": len(evidence), "unique_source_count": len(ranked),
         "provider_errors": errors, "ranked_results": ranked,
         "limits": {"max_queries": 10, "provider_results_per_query": cfg.max_results},
-        "interpretation": "Discovery score reflects query coverage, source-domain diversity, provider score and explicit publication freshness. It is not a popularity metric or truth/rights verification.",
+        "interpretation": "Discovery score reflects query coverage, bounded provider score and explicit publication freshness. It is not a popularity metric or truth/rights verification.",
     }
     from scripts.artifact_registry import _reject_symlink_components
     _reject_symlink_components(campaign_path)
