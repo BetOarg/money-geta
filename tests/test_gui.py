@@ -118,4 +118,5 @@ def test_gui_exposes_scene_visual_plan_review_workflow():
     assert "selected_candidate_id" in assign
     assert "save_scene_visual_plan" in save
     assert "scene_plan_done" in poll and "scene_plan_error" in poll
-    assert "render_authorized" in save or "render_authorized" in inspect.getsource(MoneyGetaApp.scene_plan_build_ui)
+    from scripts.scene_visual_plan_store import save_scene_visual_plan
+    assert "render_authorized" in inspect.getsource(save_scene_visual_plan)
