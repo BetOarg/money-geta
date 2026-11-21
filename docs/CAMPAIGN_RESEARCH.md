@@ -4,6 +4,9 @@ El comando `research` consulta los proveedores web configurados y guarda leads d
 
 ## Uso
 
+También existe una pestaña **Investigación** en la GUI. Selecciona proyecto y campaña, escribe consultas (una por línea) y usa **Buscar señales**. La GUI solo permite ejecutar cuando el proveedor, API key y opt-in de red están configurados en el entorno; no busca al abrirse.
+
+
 Desde la carpeta del repositorio:
 
 ```powershell
