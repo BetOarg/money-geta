@@ -69,3 +69,19 @@ def test_srt_timestamp_supports_minutes_and_hours():
     from scripts.timeline_composer import _srt_timestamp
     assert _srt_timestamp(65.25) == "00:01:05,250"
     assert _srt_timestamp(3661.005) == "01:01:01,005"
+
+
+def test_video_trim_and_padding_filters_are_applied(tmp_path):
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"placeholder")
+    plan = draft(tmp_path)
+    plan["scenes"][0]["visual_path"] = str(clip)
+    plan["scenes"][0]["media_trim_start_seconds"] = 1.0
+    plan["scenes"][0]["media_trim_end_seconds"] = 2.5
+    plan["scenes"][0]["duration_seconds"] = 3.0
+    calls = []
+    compose_preview(plan, tmp_path / "video-preview.mp4", ffmpeg="fake",
+                   runner=lambda cmd, **kw: (calls.append(cmd) or success_runner(cmd, **kw)))
+    filters = calls[0][calls[0].index("-vf") + 1]
+    assert "trim=duration=1.500" in filters
+    assert "tpad=stop_mode=clone:stop_duration=1.500" in filters
