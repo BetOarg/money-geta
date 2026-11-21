@@ -683,6 +683,21 @@ def main(argv: list[str] | None = None) -> int:
     scriptdraft.add_argument("--campaign", required=True)
     scriptdraft.add_argument("--language", default="es-AR")
     scriptdraft.add_argument("--max-tokens", type=int, choices=range(250, 4001), default=2000)
+    media_review = sub.add_parser("media-review", help="record an operator rights review of an image candidate")
+    media_review.add_argument("--project", required=True)
+    media_review.add_argument("--campaign", required=True)
+    media_review.add_argument("--candidate-id", required=True)
+    media_review.add_argument("--decision", choices=("approved", "rejected"), required=True)
+    media_review.add_argument("--reviewer", required=True)
+    media_review.add_argument("--rights-evidence", default="")
+    media_review.add_argument("--license", default="")
+    media_review.add_argument("--attribution", default="")
+    media_review.add_argument("--source-reviewed", action="store_true")
+    media_review.add_argument("--notes", default="")
+    media_check = sub.add_parser("media-check", help="check current hash-bound rights review of an image candidate")
+    media_check.add_argument("--project", required=True)
+    media_check.add_argument("--campaign", required=True)
+    media_check.add_argument("--candidate-id", required=True)
     image_search = sub.add_parser("image-search", help="find commercially-filtered stock images via Openverse and save candidates")
     image_search.add_argument("--project", required=True)
     image_search.add_argument("--campaign", required=True)
@@ -813,6 +828,26 @@ def main(argv: list[str] | None = None) -> int:
         except (KeyError, ValueError, OSError, ProviderConfigurationError, ProviderRequestError) as exc:
             print(f"FAIL: script draft: {exc}")
             return 2
+    if args.command == "media-review":
+        from scripts.media_registry import MediaReviewError, review_media_candidate
+        try:
+            event = review_media_candidate(args.project, args.campaign, args.candidate_id,
+                decision=args.decision, reviewer=args.reviewer, rights_evidence=args.rights_evidence,
+                reviewed_license=args.license, attribution=args.attribution,
+                source_reviewed=args.source_reviewed, notes=args.notes)
+            print(json.dumps(event, ensure_ascii=False, indent=2))
+            print("NOTE: this records an operator attestation; Money-Geta does not certify license accuracy.")
+            return 0
+        except (OSError, ValueError, RuntimeError, MediaReviewError) as exc:
+            print(f"FAIL: media review: {exc}")
+            return 2
+    if args.command == "media-check":
+        from scripts.media_registry import check_media_candidate
+        passed, problems = check_media_candidate(args.project, args.campaign, args.candidate_id)
+        print("MEDIA_RIGHTS_REVIEW: PASS" if passed else "MEDIA_RIGHTS_REVIEW: BLOCKED")
+        for problem in problems:
+            print(f"- {problem}")
+        return 0 if passed else 2
     if args.command == "image-search":
         from scripts.providers.openverse import ImageSearchConfig, ImageSearchConfigurationError, ImageSearchRequestError, search_openverse, save_image_candidates
         try:
