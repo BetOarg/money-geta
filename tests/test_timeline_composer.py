@@ -42,7 +42,7 @@ def test_preview_composer_builds_segment_and_concat_commands(tmp_path):
 def test_preview_rejects_non_cut_transition(tmp_path):
     plan = draft(tmp_path)
     plan["scenes"][0].update(transition_in="wipe", transition_duration_seconds=0.5)
-    with pytest.raises(ValueError, match="cuts only"):
+    with pytest.raises(ValueError, match="unsupported transition"):
         compose_preview(plan, tmp_path / "preview.mp4", ffmpeg="fake", runner=success_runner)
 
 
