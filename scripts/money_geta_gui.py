@@ -1474,7 +1474,7 @@ class MoneyGetaApp:
             return
         index = int(selection[0])
         scenes = self.scene_visual_plan.get("scenes", [])
-        if 0 <= index < len(scenes:
+        if 0 <= index < len(scenes):
             scene = scenes[index]
             suggestions = scene.get("suggestions", [])
             self.scene_plan_recommendations_list.delete(0, END)
