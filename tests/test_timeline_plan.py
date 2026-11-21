@@ -3,7 +3,7 @@ import json
 import pytest
 
 from scripts.timeline_plan import (
-    create_timeline_from_visual_plan, move_scene, update_scene, save_timeline,
+    create_timeline_from_visual_plan, move_scene, update_scene, save_timeline, load_timeline,
 )
 
 
@@ -85,3 +85,13 @@ def test_save_timeline_rejects_duplicate_scene_ids_and_path_traversal(tmp_path):
     timeline["project_id"] = "../outside"
     with pytest.raises(ValueError, match="Invalid project ID"):
         save_timeline(timeline, root=tmp_path)
+
+
+def test_load_saved_timeline_matches_script_hash(tmp_path):
+    campaign = tmp_path / "proj-1" / "campaigns" / "campaign-1"
+    campaign.mkdir(parents=True)
+    timeline = create_timeline_from_visual_plan(plan())
+    save_timeline(timeline, root=tmp_path)
+    loaded = load_timeline("proj-1", "campaign-1", "script-1", "a" * 64, root=tmp_path)
+    assert loaded["scenes"][0]["narration"] == "Welcome"
+    assert load_timeline("proj-1", "campaign-1", "script-1", "b" * 64, root=tmp_path) is None
