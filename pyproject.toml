@@ -11,6 +11,7 @@ money-geta-read-source = "scripts.read_source:main"
 money-geta-claims = "scripts.claims_cli:main"
 money-geta-artifact-review = "scripts.artifact_registry:main"
 money-geta-qc = "scripts.quality_control:main"
+money-geta-subtitle-qc = "scripts.subtitle_quality:main"
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]
