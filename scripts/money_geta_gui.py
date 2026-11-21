@@ -172,6 +172,7 @@ class MoneyGetaApp:
         self.research = ttk.Frame(self.tabs, padding=14)
         self.script = ttk.Frame(self.tabs, padding=14)
         self.images = ttk.Frame(self.tabs, padding=14)
+        self.library = ttk.Frame(self.tabs, padding=14)
         self.tabs.add(self.home, text="Analizar y cortar")
         self.tabs.add(self.render, text="Render final · MPT")
         self.tabs.add(self.projects, text="Proyectos")
@@ -181,6 +182,7 @@ class MoneyGetaApp:
         self.tabs.add(self.research, text="Investigación")
         self.tabs.add(self.script, text="Guion")
         self.tabs.add(self.images, text="Imágenes")
+        self.tabs.add(self.library, text="Biblioteca local")
         self._build_home()
         self._build_render()
         self._build_projects()
@@ -190,6 +192,7 @@ class MoneyGetaApp:
         self._build_research()
         self._build_script()
         self._build_image_search()
+        self._build_media_library()
         self._set_status("Iniciando diagnóstico automático…")
         self.refresh_projects()
         self.refresh_research_options()
@@ -548,6 +551,99 @@ class MoneyGetaApp:
             webbrowser.open(source_url)
         else:
             messagebox.showerror("Fuente inválida", "No se puede abrir esta URL.")
+
+    def _build_media_library(self):
+        self.library.columnconfigure(0, weight=1)
+        self.library.rowconfigure(3, weight=1)
+        ttk.Label(self.library, text="Biblioteca multimedia local · catálogo de solo lectura", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(self.library, text="Filtros: usa el proyecto y campaña seleccionados en la pestaña Imágenes.").grid(row=1, column=0, sticky="w", pady=(3, 6))
+        toolbar = ttk.Frame(self.library)
+        toolbar.grid(row=2, column=0, sticky="ew", pady=(0, 6))
+        self.library_query_var = tk.StringVar()
+        ttk.Entry(toolbar, textvariable=self.library_query_var, width=32).pack(side=LEFT, padx=(0, 5))
+        ttk.Button(toolbar, text="Buscar", command=lambda: self.media_library_load_ui(search=True)).pack(side=LEFT)
+        ttk.Button(toolbar, text="Actualizar catálogo", command=self.media_library_load_ui).pack(side=LEFT, padx=5)
+        ttk.Button(toolbar, text="Verificar integridad y derechos", command=self.media_library_verify_ui).pack(side=LEFT, padx=5)
+        self.library_status_var = tk.StringVar(value="PENDIENTE · catálogo sin cargar")
+        ttk.Label(toolbar, textvariable=self.library_status_var).pack(side=LEFT, padx=8)
+        table_frame = ttk.Frame(self.library)
+        table_frame.grid(row=3, column=0, sticky="nsew")
+        table_frame.columnconfigure(0, weight=1)
+        table_frame.rowconfigure(0, weight=1)
+        self.library_tree = ttk.Treeview(table_frame, columns=("creator", "campaign", "license", "rights", "integrity"), show="tree headings", height=9)
+        self.library_tree.heading("#0", text="Recurso")
+        self.library_tree.heading("creator", text="Autor")
+        self.library_tree.heading("campaign", text="Campaña")
+        self.library_tree.heading("license", text="Licencia")
+        self.library_tree.heading("rights", text="Derechos")
+        self.library_tree.heading("integrity", text="SHA")
+        self.library_tree.column("#0", width=240)
+        self.library_tree.column("creator", width=150)
+        self.library_tree.column("campaign", width=130)
+        self.library_tree.column("license", width=100)
+        self.library_tree.column("rights", width=140)
+        self.library_tree.column("integrity", width=120)
+        self.library_tree.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.library_tree.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.library_tree.configure(yscrollcommand=scroll.set)
+        self.library_tree.bind("<<TreeviewSelect>>", self.show_media_library_asset)
+        self.library_details = tk.Text(self.library, height=6, wrap="word", font=("Consolas", 9), state="disabled")
+        self.library_details.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        self.media_library_items = []
+
+    def media_library_load_ui(self, search=False):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        project = self.research_project_var.get().strip() or None
+        campaign = self.research_campaign_var.get().strip() or None
+        query = self.library_query_var.get().strip()
+        if search and not query:
+            messagebox.showwarning("Búsqueda vacía", "Introduce términos para buscar en el catálogo.")
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.library_status_var.set("BUSCANDO…" if search else "ACTUALIZANDO…")
+        def worker():
+            try:
+                from scripts.media_library import list_media_assets, search_media_assets
+                items = search_media_assets(query, project_id=project, campaign_id=campaign) if search else list_media_assets(project_id=project, campaign_id=campaign)
+                self.events.put(("media_library_done", items))
+            except Exception as exc:
+                self.events.put(("media_library_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def media_library_verify_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        project = self.research_project_var.get().strip() or None
+        campaign = self.research_campaign_var.get().strip() or None
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.library_status_var.set("VERIFICANDO…")
+        def worker():
+            try:
+                from scripts.media_library import verify_media_library
+                report = verify_media_library(project_id=project, campaign_id=campaign)
+                self.events.put(("media_library_verify_done", report))
+            except Exception as exc:
+                self.events.put(("media_library_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def show_media_library_asset(self, _event=None):
+        selection = self.library_tree.selection()
+        if not selection:
+            return
+        index = int(selection[0])
+        if index < 0 or index >= len(self.media_library_items):
+            return
+        item = self.media_library_items[index]
+        self.library_details.configure(state="normal")
+        self.library_details.delete("1.0", END)
+        self.library_details.insert(END, json.dumps(item, ensure_ascii=False, indent=2))
+        self.library_details.configure(state="disabled")
 
     def _build_script(self):
         self.script.columnconfigure(1, weight=1)
@@ -1302,6 +1398,35 @@ class MoneyGetaApp:
                     self._append(f"MEDIA RIGHTS REVIEW: {value.get('decision')} · {'PASS' if passed else 'BLOCKED'} · {value.get('candidate_id')}")
                     if value.get("problems"):
                         messagebox.showwarning("Revisión", "; ".join(value["problems"]))
+                elif kind == "media_library_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.media_library_items = value
+                    for row in self.library_tree.get_children():
+                        self.library_tree.delete(row)
+                    for index, item in enumerate(value):
+                        self.library_tree.insert("", "end", iid=str(index), text=item.get("title") or item.get("candidate_id"),
+                            values=(item.get("creator", ""), item.get("campaign_id", ""), item.get("license", ""),
+                            item.get("rights_status", ""), item.get("integrity_status", "")))
+                    usable = sum(item.get("usable_for_selection") is True for item in value)
+                    self.library_status_var.set(f"{len(value)} recursos · {usable} utilizables")
+                    self._append(f"MEDIA LIBRARY: {len(value)} local assets · {usable} current approved and integrity-verified")
+                elif kind == "media_library_verify_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    report = value
+                    self.library_status_var.set(f"LIBRARY {report.get('status')} · {report.get('usable_count', 0)} utilizables · {report.get('blocked_count', 0)} bloqueados")
+                    self.library_details.configure(state="normal")
+                    self.library_details.delete("1.0", END)
+                    self.library_details.insert(END, json.dumps(report, ensure_ascii=False, indent=2))
+                    self.library_details.configure(state="disabled")
+                    self._append(f"MEDIA LIBRARY VERIFY: {report.get('status')} · {report.get('asset_count', 0)} assets · {report.get('usable_count', 0)} usable")
+                elif kind == "media_library_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.library_status_var.set("ROJO · ERROR DE CATÁLOGO")
+                    self._append("MEDIA LIBRARY ERROR: " + value)
+                    messagebox.showerror("Biblioteca local", value)
                 elif kind == "media_download_done":
                     self.busy = False
                     self.process_btn.configure(state="normal")
