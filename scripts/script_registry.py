@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +34,8 @@ def _paths(project_id: str, campaign_id: str, root: Path | None = None) -> tuple
     if not campaign_path.is_file() or not campaign_path.is_relative_to(projects_root):
         raise ScriptReviewError("Campaign manifest must be inside the local projects root.")
     passed, problems = check_file(campaign_path)
+    if not passed:
+        raise ScriptReviewError("Campaign gate blocked script review: " + "; ".join(problems))
     if not passed:
         raise ScriptReviewError("Campaign gate blocked script review: " + "; ".join(problems))
     return campaign_path, projects_root
@@ -85,8 +88,14 @@ def _read_events(campaign_path: Path) -> list[dict[str, Any]]:
             event = json.loads(line)
             if not isinstance(event, dict) or event.get("schema_version") != 1 or event.get("event_type") not in {"script_registered", "script_decision"}:
                 raise ScriptReviewError("Script review ledger contains an invalid event.")
-            if not isinstance(event.get("script_id"), str) or not event["script_id"] or not isinstance(event.get("sha256"), str):
-                raise ScriptReviewError("Script review ledger event lacks identity/hash.")
+            if not isinstance(event.get("script_id"), str) or not event["script_id"] or not isinstance(event.get("sha256"), str) or not re.fullmatch(r"[a-f0-9]{64}", event["sha256"]):
+                raise ScriptReviewError("Script review ledger event lacks a valid identity/hash.")
+            if event["event_type"] == "script_registered":
+                if not isinstance(event.get("path"), str) or not isinstance(event.get("registered_at"), str):
+                    raise ScriptReviewError("Script registration event lacks path or timestamp.")
+            else:
+                if event.get("decision") not in {"approved", "rejected"} or not isinstance(event.get("reviewer"), str) or not event.get("reviewer").strip() or not isinstance(event.get("decided_at"), str):
+                    raise ScriptReviewError("Script decision event is invalid.")
             events.append(event)
     except (OSError, UnicodeError, json.JSONDecodeError):
         raise ScriptReviewError("Script review ledger is malformed.") from None
