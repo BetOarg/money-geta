@@ -6,6 +6,7 @@ import pytest
 
 from scripts.campaign_registry import create_campaign
 from scripts.project_registry import create_project
+from scripts.money_geta import main
 from scripts.providers.openverse import (
     ImageSearchConfig, ImageSearchConfigurationError, ImageSearchRequestError,
     _normalize, search_openverse, save_image_candidates,
@@ -86,3 +87,10 @@ def test_save_image_candidates_deduplicates_and_keeps_rights_unverified(tmp_path
     rows = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
     assert len(rows) == 1
     assert rows[0]["rights_status"] == "unverified"
+
+
+def test_image_search_cli_is_opt_in(monkeypatch, capsys):
+    monkeypatch.delenv("MONEY_GETA_IMAGE_SEARCH_ALLOW_REQUESTS", raising=False)
+    code = main(["image-search", "--project", "test", "--campaign", "campaign", "--query", "city"])
+    assert code == 2
+    assert "disabled" in capsys.readouterr().out.lower()
