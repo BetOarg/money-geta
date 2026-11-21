@@ -1088,7 +1088,7 @@ class MoneyGetaApp:
                         self.script_report.configure(state="disabled")
                     except (OSError, ValueError, TypeError) as exc:
                         self._append(f"EDITED DRAFT DISPLAY WARNING: {exc}")
-                    self._append(f"SCRIPT RE-REGISTERED: {value.get('script_id")} · {value.get('sha256")}")
+                    self._append(f"SCRIPT RE-REGISTERED: {value.get('script_id')} · {value.get('sha256')}")
                 elif kind == "script_reregister_error":
                     self.busy = False
                     self.process_btn.configure(state="normal")
