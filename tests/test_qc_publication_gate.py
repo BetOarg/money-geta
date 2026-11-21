@@ -4,7 +4,16 @@ from pathlib import Path
 import pytest
 
 from scripts.artifact_registry import register_artifact, run_artifact_qc
-from tests.test_artifact_registry import setup_campaign
+
+
+def setup_campaign(tmp_path: Path) -> tuple[Path, Path]:
+    campaign_dir = tmp_path / "projects" / "p" / "campaigns" / "c"
+    campaign_dir.mkdir(parents=True)
+    campaign = campaign_dir / "campaign.json"
+    campaign.write_text(json.dumps({"schema_version": 1, "project_id": "p", "campaign_id": "c"}), encoding="utf-8")
+    output = tmp_path / "output"
+    output.mkdir()
+    return campaign, output
 
 
 def test_technical_qc_is_recorded_for_exact_artifact_hash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -20,7 +29,7 @@ def test_technical_qc_is_recorded_for_exact_artifact_hash(tmp_path: Path, monkey
     assert event["passed"] is True
     rows = json.loads((campaign.parent / "artifact_ledger.jsonl").read_text(encoding="utf-8").splitlines()[-1])
     assert rows["event_type"] == "artifact_qc"
-    assert rows["sha256"] == item["sha256"
+    assert rows["sha256"] == item["sha256"]
 
 
 def test_failed_latest_qc_is_recorded_and_bound_to_hash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -34,7 +43,7 @@ def test_failed_latest_qc_is_recorded_and_bound_to_hash(tmp_path: Path, monkeypa
     })
     result = run_artifact_qc(campaign, item["artifact_id"], item["sha256"])
     assert result["passed"] is False
-    assert "missing audio" in result["problems"
+    assert "missing audio" in result["problems"]
 
 
 def test_publication_check_requires_technical_qc_event(tmp_path: Path) -> None:
