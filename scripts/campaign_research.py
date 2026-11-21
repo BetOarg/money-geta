@@ -18,9 +18,12 @@ TRACKING_PREFIXES = ("utm_",)
 
 def canonical_url(value: str) -> str:
     parsed = urlsplit(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise ValueError("Research source URL must be HTTP(S).")
-    host = parsed.hostname.lower()
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("Research source URL must be HTTP(S) without embedded credentials.")
+    query_items = parse_qsl(parsed.query, keep_blank_values=True)
+    if any(re.search(r"(?:token|api[_-]?key|access[_-]?token|auth|signature|secret|password|credential)", key, re.I) for key, _ in query_items):
+        raise ValueError("Credential-like URL parameters are blocked from research reports.")
+    host = parsed.hostname.encode("idna").decode("ascii").lower()
     port = parsed.port
     if port and port != (443 if parsed.scheme.lower() == "https" else 80):
         host = f"{host}:{port}"
@@ -133,7 +136,13 @@ def run_campaign_research(project_id: str, campaign_id: str, queries: list[str],
         "limits": {"max_queries": 10, "provider_results_per_query": cfg.max_results},
         "interpretation": "Discovery score reflects query coverage, source-domain diversity, provider score and explicit publication freshness. It is not a popularity metric or truth/rights verification.",
     }
-    output_dir = campaign_path.parent / "research"
+    from scripts.artifact_registry import _reject_symlink_components
+    _reject_symlink_components(campaign_path)
+    campaign_file = campaign_path.resolve(strict=True)
+    if not campaign_file.is_file() or not campaign_file.is_relative_to(projects_root):
+        raise ValueError("Campaign manifest must be a regular file inside the projects root.")
+    output_dir = campaign_file.parent / "research"
+    _reject_symlink_components(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     if output_dir.is_symlink():
         raise ValueError("Research output directory symlinks are blocked.")
