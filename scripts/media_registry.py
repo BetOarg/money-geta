@@ -22,14 +22,14 @@ def _license_matches(provider_license: str, reviewed_license: str) -> bool:
     value = reviewed_license.strip().lower()
     code = provider_license.strip().lower()
     patterns = {
-        "by": r"\\bby\\b(?![-\\s]*(?:sa|nc|nd))",
-        "by-sa": r"\\bby[-\\s]*sa\\b",
-        "by-nc": r"\\bby[-\\s]*nc\\b",
-        "by-nd": r"\\bby[-\\s]*nd\\b",
-        "by-nc-sa": r"\\bby[-\\s]*nc[-\\s]*sa\\b",
-        "by-nc-nd": r"\\bby[-\\s]*nc[-\\s]*nd\\b",
-        "cc0": r"\\bcc0\\b|\\bcc\\s*zero\\b",
-        "pdm": r"\\bpublic\\s*domain\\b|\\bpdm\\b",
+        "by": r"\bby\b(?![-\s]*(?:sa|nc|nd))",
+        "by-sa": r"\bby[-\s]*sa\b",
+        "by-nc": r"\bby[-\s]*nc\b",
+        "by-nd": r"\bby[-\s]*nd\b",
+        "by-nc-sa": r"\bby[-\s]*nc[-\s]*sa\b",
+        "by-nc-nd": r"\bby[-\s]*nc[-\s]*nd\b",
+        "cc0": r"\bcc0\b|\bcc\s*zero\b",
+        "pdm": r"\bpublic\s*domain\b|\bpdm\b",
     }
     pattern = patterns.get(code)
     if pattern:
