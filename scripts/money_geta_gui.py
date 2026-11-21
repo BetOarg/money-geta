@@ -1259,6 +1259,9 @@ class MoneyGetaApp:
                             self.image_results_list.delete(index)
                             license_name = item.get("license", "unknown")
                             self.image_results_list.insert(index, f"{index + 1}. {base_title} · {creator} · {license_name} · {item['rights_status'].upper()}")
+                    selected = self.image_results_list.curselection()
+                    selected_candidate = self.image_candidates[selected[0]] if selected and selected[0] < len(self.image_candidates) else None
+                    self.image_download_btn.configure(state="normal" if passed and selected_candidate and selected_candidate.get("candidate_id") == value.get("candidate_id") else "disabled")
                     self._append(f"MEDIA RIGHTS REVIEW: {value.get('decision')} · {'PASS' if passed else 'BLOCKED'} · {value.get('candidate_id')}")
                     if value.get("problems"):
                         messagebox.showwarning("Revisión", "; ".join(value["problems"]))
