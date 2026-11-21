@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from scripts.campaign_check import check_file
 from scripts.campaign_registry import get_campaign
@@ -35,8 +36,11 @@ def _read_source_ledger(path: Path) -> list[dict[str, Any]]:
             evidence_id, text, final_url = item.get("evidence_id"), item.get("text"), item.get("final_url")
             if not isinstance(evidence_id, str) or not evidence_id or evidence_id in seen:
                 raise ValueError("Source ledger has missing or duplicate evidence IDs.")
-            if not isinstance(text, str) or not text.strip() or not isinstance(final_url, str):
+            if not isinstance(text, str) or not text.strip() or not isinstance(final_url, str) or not final_url.strip():
                 raise ValueError("Source ledger records require captured text and final URL.")
+            parsed_url = urlsplit(final_url)
+            if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname or parsed_url.username or parsed_url.password:
+                raise ValueError("Source ledger contains an unsafe source URL.")
             seen.add(evidence_id)
             rows.append(item)
     except (OSError, UnicodeError, json.JSONDecodeError):
@@ -140,9 +144,11 @@ def validate_script_payload(payload: Any, *, evidence_ids: set[str],
     source_ids = payload.get("source_ids")
     if not isinstance(source_ids, list) or not source_ids or any(not isinstance(item, str) or item not in evidence_ids for item in source_ids):
         raise ValueError("Script source_ids must reference captured evidence.")
+    if len(source_ids) != len(set(source_ids)):
+        raise ValueError("Script source_ids must not contain duplicates.")
     claims = payload.get("claims")
-    if not isinstance(claims, list):
-        raise ValueError("Script claims must be a list.")
+    if not isinstance(claims, list) or len(claims) > 20:
+        raise ValueError("Script claims must be a list with no more than 20 entries.")
     if factual_required and not claims:
         raise ValueError("News and education drafts require explicit claims linked to the supported claim ledger.")
     supported = {item["claim_id"]: item for item in supported_claims if item.get("status") == "supported"}
@@ -150,19 +156,25 @@ def validate_script_payload(payload: Any, *, evidence_ids: set[str],
         if not isinstance(claim, dict) or not isinstance(claim.get("text"), str) or not claim["text"].strip():
             raise ValueError("Every script claim must contain text.")
         refs = claim.get("evidence_ids")
-        if not isinstance(refs, list) or not refs or any(ref not in evidence_ids for ref in refs):
+        if not isinstance(refs, list) or not refs or any(not isinstance(ref, str) or ref not in evidence_ids for ref in refs):
             raise ValueError("Every script claim must cite captured source evidence.")
         if not set(refs).issubset(set(source_ids)):
             raise ValueError("Claim evidence IDs must also be included in script source_ids.")
         claim_id = claim.get("claim_id")
+        if claim_id is not None and not isinstance(claim_id, str):
+            raise ValueError("Script claim_id must be a string or null.")
         if factual_required:
             if claim_id not in supported:
                 raise ValueError("Factual script claim must match a supported claim-ledger ID.")
             record = supported[claim_id]
             if claim["text"] != record["claim"] or not set(refs).issubset(set(record.get("evidence_ids", []))):
                 raise ValueError("Factual script claims must match supported claim text and evidence.")
-        elif claim_id is not None and claim_id not in supported:
-            raise ValueError("Script claim references a claim-ledger ID that is not supported.")
+        elif claim_id is not None:
+            if claim_id not in supported:
+                raise ValueError("Script claim references a claim-ledger ID that is not supported.")
+            record = supported[claim_id]
+            if claim["text"] != record["claim"] or not set(refs).issubset(set(record.get("evidence_ids", []))):
+                raise ValueError("Script claims with a ledger ID must match supported text and evidence.")
     return payload
 
 
@@ -173,9 +185,16 @@ def draft_campaign_script(project_id: str, campaign_id: str, *, language: str = 
     if not 250 <= max_tokens <= 4000:
         raise ValueError("Script max_tokens must be between 250 and 4000.")
     projects_root = (root or default_projects_root()).expanduser().resolve()
+    from scripts.artifact_registry import _reject_symlink_components
+    project_path = projects_root / project_id / "project.json"
+    campaign_path = projects_root / project_id / "campaigns" / campaign_id / "campaign.json"
+    _reject_symlink_components(project_path)
+    _reject_symlink_components(campaign_path)
     project = get_project(project_id, projects_root)
     campaign = get_campaign(project_id, campaign_id, projects_root)
-    campaign_path = projects_root / project_id / "campaigns" / campaign_id / "campaign.json"
+    campaign_path = campaign_path.resolve(strict=True)
+    if not campaign_path.is_file() or not campaign_path.is_relative_to(projects_root):
+        raise ValueError("Campaign manifest must be a regular file inside the projects root.")
     passed, problems = check_file(campaign_path)
     if not passed:
         raise ValueError("Campaign gate blocked script draft: " + "; ".join(problems))
@@ -217,7 +236,6 @@ def draft_campaign_script(project_id: str, campaign_id: str, *, language: str = 
         "source_ids": sorted(available_ids), "supported_claim_ids": sorted(item["claim_id"] for item in supported_claims),
         "script": validated, "approval": {"status": "pending", "approved_sha256": None},
     }
-    from scripts.artifact_registry import _reject_symlink_components
     draft_dir = campaign_path.parent / "drafts"
     _reject_symlink_components(draft_dir)
     draft_dir.mkdir(parents=True, exist_ok=True)
@@ -225,8 +243,8 @@ def draft_campaign_script(project_id: str, campaign_id: str, *, language: str = 
         raise ValueError("Script draft directory symlinks are blocked.")
     digest = hashlib.sha256(json.dumps(report, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:12]
     target = draft_dir / f"script-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{digest}.json"
+    report["report_path"] = str(target)
     with target.open("x", encoding="utf-8") as handle:
         json.dump(report, handle, ensure_ascii=False, indent=2)
         handle.write("\n")
-    report["report_path"] = str(target)
     return report
