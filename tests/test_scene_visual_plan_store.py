@@ -52,3 +52,11 @@ def test_save_scene_visual_plan_rejects_path_traversal(tmp_path):
     plan["project_id"] = "../outside"
     with pytest.raises(ValueError, match="Invalid project ID"):
         save_scene_visual_plan(plan, root=tmp_path)
+
+def test_scene_visual_plan_selection_metadata_must_match_candidate_id(tmp_path):
+    campaign = tmp_path / "project-1" / "campaigns" / "campaign-1"
+    campaign.mkdir(parents=True)
+    plan = sample_plan()
+    plan["scenes"][0]["selected_asset"]["candidate_id"] = "mismatch"
+    with pytest.raises(ValueError, match="metadata must match"):
+        save_scene_visual_plan(plan, root=tmp_path)
