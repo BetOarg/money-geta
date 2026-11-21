@@ -12,6 +12,7 @@ money-geta-claims = "scripts.claims_cli:main"
 money-geta-artifact-review = "scripts.artifact_registry:main"
 money-geta-qc = "scripts.quality_control:main"
 money-geta-subtitle-qc = "scripts.subtitle_quality:main"
+money-geta-qc-review = "scripts.qc_orchestrator:main"
 money-geta-perceptual-qc = "scripts.perceptual_qc:main"
 
 [project.optional-dependencies]
