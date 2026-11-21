@@ -86,7 +86,7 @@ def rank_discovery_results(results: list[Any], *, now: datetime | None = None) -
         query_hits = record["query_hits"]
         best_age = min((item["age_days"] for item in dates if item["age_days"] is not None), default=None)
         freshness = max(0.0, 2.0 - best_age / 30.0) if best_age is not None and best_age <= 60 else 0.0
-        provider_score = max(scores, default=0.0)
+        provider_score = min(1.0, max(0.0, max(scores, default=0.0)))
         score = round(len(query_hits) * 2.0 + len(domains) * 1.5 + provider_score + freshness, 3)
         record.update({
             "query_count": len(query_hits), "source_domain_count": len(domains),
@@ -139,8 +139,8 @@ def run_campaign_research(project_id: str, campaign_id: str, queries: list[str],
         raise ValueError("Research output directory symlinks are blocked.")
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     target = output_dir / f"discovery-{timestamp}-{uuid.uuid4().hex[:8]}.json"
+    report["report_path"] = str(target)
     with target.open("x", encoding="utf-8") as handle:
         json.dump(report, handle, ensure_ascii=False, indent=2)
-        handle.write("\\n")
-    report["report_path"] = str(target)
+        handle.write("\n")
     return report
