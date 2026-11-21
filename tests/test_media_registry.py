@@ -6,7 +6,7 @@ import pytest
 from scripts.campaign_registry import create_campaign
 from scripts.project_registry import create_project
 from scripts.providers.openverse import _normalize, save_image_candidates
-from scripts.media_registry import MediaReviewError, review_media_candidate, check_media_candidate
+from scripts.media_registry import MediaReviewError, review_media_candidate, check_media_candidate, media_review_status
 
 
 def _fixture(tmp_path):
@@ -44,6 +44,7 @@ def test_approved_review_is_bound_to_candidate_metadata_hash(tmp_path):
         source_reviewed=True, root=root)
     assert event["decision"] == "approved"
     assert check_media_candidate("media-review", "campaign", candidate.candidate_id, root=root) == (True, [])
+    assert media_review_status("media-review", "campaign", candidate.candidate_id, root=root) == "reviewed_approved"
     ledger = root / "media-review" / "campaigns" / "campaign" / "media_candidates.jsonl"
     data = json.loads(ledger.read_text(encoding="utf-8"))
     data["attribution"] = "changed attribution"
@@ -51,6 +52,7 @@ def test_approved_review_is_bound_to_candidate_metadata_hash(tmp_path):
     passed, problems = check_media_candidate("media-review", "campaign", candidate.candidate_id, root=root)
     assert passed is False
     assert "stale" in problems[0]
+    assert media_review_status("media-review", "campaign", candidate.candidate_id, root=root) == "review_stale"
 
 
 def test_latest_rejection_revokes_approved_candidate(tmp_path):
