@@ -169,7 +169,7 @@ def test_publication_check_blocks_without_central_qc(tmp_path: Path, monkeypatch
     import scripts.campaign_check as campaign_check
     monkeypatch.setattr(campaign_check, "check_file", lambda *a, **k: (True, []))
     result = main(["--campaign", str(campaign), "publication-check",
-        "--artifact-id", item["artifact_id"], "--sha256", item["sha256"])
+        "--artifact-id", item["artifact_id"], "--sha256", item["sha256"]])
     assert result == 2
     assert "central QC has not been recorded" in capsys.readouterr().out
 
