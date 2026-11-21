@@ -54,3 +54,11 @@ def test_gui_can_re_register_edited_script_versions():
     import scripts.money_geta_gui as gui
     assert hasattr(gui.MoneyGetaApp, "reregister_script_ui")
     assert "script_reregister_btn" in gui.MoneyGetaApp._build_script.__code__.co_names
+
+
+def test_gui_exposes_openverse_image_search_workflow():
+    import scripts.money_geta_gui as gui
+    assert hasattr(gui.MoneyGetaApp, "image_search_ui")
+    assert hasattr(gui.MoneyGetaApp, "show_image_candidate")
+    assert hasattr(gui.MoneyGetaApp, "open_image_source")
+    assert "image_results_list" in gui.MoneyGetaApp._build_image_search.__code__.co_names
