@@ -13,7 +13,7 @@ Estados: **INTEGRADO** = existe implementación verificable en la rama actual; *
 | Subtítulos | SRT/VTT y burn-in FFmpeg | Edición, estilos, traducción y QC | PARCIAL |
 | Reencuadre/seguimiento | cutter GTA VI; OpenCV en vendor | Motor de tracking genérico | PARCIAL |
 | Edición/render | MPT CLI y FFmpeg | Adaptador común de motores | PARCIAL |
-| Guion/LLM | Chat Completions adapter opt-in; scriptwriter draft engine uses captured source text, supported claim ledger, JSON validation and local draft-only output | GUI integration, style/length calibration, full editing loop | PARCIAL |
+| Guion/LLM | Chat Completions adapter opt-in; scriptwriter draft engine uses captured source text, supported claim ledger, JSON validation, local draft-only output and GUI generation/review display | Script editing/approval ledger, style calibration, full editing loop | PARCIAL |
 | Búsqueda web e investigación | Brave/Tavily opt-in; `research` CLI y GUI por campaña, deduplicación URL y score de descubrimiento por consultas/frescura | Trend APIs sociales y métricas reales de plataformas | PARCIAL |
 | Lectura de fuentes | scripts/providers/source_reader.py: HTML/XHTML/texto, DNS/IP seguro, límites y ledger JSONL por campaña | Extracción documental ampliada y captura de versiones | PARCIAL |
 | Investigación y claims | Búsqueda, captura original y ledger de claims con evaluación humana | Corroboración multi-fuente, contradicciones y gate factual conectado a publicación | PARCIAL |
