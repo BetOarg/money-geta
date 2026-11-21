@@ -143,6 +143,8 @@ class MoneyGetaApp:
         self.settings = load_settings()
         self.events: queue.Queue = queue.Queue()
         self.current_job: Path | None = None
+        self.qc_records: list[dict] = []
+        self.qc_selected_record: dict | None = None
         self.busy = False
 
         style = ttk.Style()
@@ -166,18 +168,22 @@ class MoneyGetaApp:
         self.projects = ttk.Frame(self.tabs, padding=14)
         self.config = ttk.Frame(self.tabs, padding=14)
         self.history = ttk.Frame(self.tabs, padding=14)
+        self.qc = ttk.Frame(self.tabs, padding=14)
         self.tabs.add(self.home, text="Analizar y cortar")
         self.tabs.add(self.render, text="Render final · MPT")
         self.tabs.add(self.projects, text="Proyectos")
         self.tabs.add(self.config, text="Configuración")
         self.tabs.add(self.history, text="Clips y sesiones")
+        self.tabs.add(self.qc, text="QC y revisión")
         self._build_home()
         self._build_render()
         self._build_projects()
         self._build_config()
         self._build_history()
+        self._build_qc()
         self._set_status("Iniciando diagnóstico automático…")
         self.refresh_projects()
+        self.refresh_qc()
         self.root.after(300, self.run_doctor)
         self.root.after(150, self._poll_events)
 
@@ -319,6 +325,155 @@ class MoneyGetaApp:
             args.extend(["--voice", self.voice_var.get().strip()])
         self._run_async(self._command(*args), "Renderizando con MoneyPrinterTurbo…")
 
+
+    def _build_qc(self):
+        self.qc.columnconfigure(0, weight=1)
+        self.qc.rowconfigure(2, weight=1)
+        ttk.Label(self.qc, text="Control de calidad de artefactos registrados", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        toolbar = ttk.Frame(self.qc)
+        toolbar.grid(row=1, column=0, sticky="ew", pady=(8, 6))
+        ttk.Button(toolbar, text="Actualizar", command=self.refresh_qc).pack(side=LEFT)
+        ttk.Button(toolbar, text="Ejecutar QC completo", command=self.run_selected_qc).pack(side=LEFT, padx=6)
+        ttk.Button(toolbar, text="Abrir video", command=self.open_qc_video).pack(side=LEFT, padx=6)
+        ttk.Button(toolbar, text="Aprobar tras revisión", command=self.approve_qc_video).pack(side=LEFT)
+        self.qc_tree = ttk.Treeview(self.qc, columns=("status", "file", "campaign", "hash"), show="headings", height=8)
+        for col, label in (("status", "QC central"), ("file", "Video"), ("campaign", "Campaña"), ("hash", "SHA-256")):
+            self.qc_tree.heading(col, text=label)
+        self.qc_tree.column("status", width=190, stretch=False)
+        self.qc_tree.column("file", width=260)
+        self.qc_tree.column("campaign", width=170)
+        self.qc_tree.column("hash", width=150, stretch=False)
+        self.qc_tree.grid(row=2, column=0, sticky="nsew")
+        self.qc_tree.bind("<<TreeviewSelect>>", self._qc_selected)
+        subtitle = ttk.Frame(self.qc)
+        subtitle.grid(row=3, column=0, sticky="ew", pady=(8, 4))
+        self.qc_subtitle_var = tk.BooleanVar(value=False)
+        self.qc_subtitle_path_var = tk.StringVar()
+        ttk.Checkbutton(subtitle, text="Incluir QC de subtítulos", variable=self.qc_subtitle_var).pack(side=LEFT)
+        ttk.Entry(subtitle, textvariable=self.qc_subtitle_path_var).pack(side=LEFT, fill=X, expand=True, padx=6)
+        ttk.Button(subtitle, text="Buscar SRT/VTT…", command=self.browse_qc_subtitle).pack(side=LEFT)
+        self.qc_reviewed_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.qc, text="Confirmo que revisé visualmente el video completo antes de aprobar.", variable=self.qc_reviewed_var).grid(row=4, column=0, sticky="w", pady=(4, 6))
+        ttk.Label(self.qc, text="Informe del artefacto seleccionado").grid(row=5, column=0, sticky="w")
+        self.qc_report = tk.Text(self.qc, height=10, wrap="word", font=("Consolas", 9), state="disabled")
+        self.qc_report.grid(row=6, column=0, sticky="nsew", pady=(4, 4))
+        self.qc.rowconfigure(6, weight=1)
+
+    def refresh_qc(self):
+        if not hasattr(self, "qc_tree"):
+            return
+        from scripts.gui_qc import discover_registered_artifacts
+        previous = self.qc_tree.selection()
+        previous_id = previous[0] if previous else None
+        for row in self.qc_tree.get_children():
+            self.qc_tree.delete(row)
+        records, errors = discover_registered_artifacts(APP_DIR / "campaigns", DEFAULT_PROJECTS)
+        self.qc_records = records
+        for error in errors:
+            self._append("QC discovery warning: " + error)
+        for item in records:
+            central = item.get("latest_central_qc", {}).get("status", "PENDIENTE")
+            self.qc_tree.insert("", END, iid=item["artifact_id"], values=(
+                central, Path(item["path"]).name, Path(item["campaign_path"]).parent.name,
+                str(item.get("sha256", ""))[:12]))
+        if previous_id and previous_id in self.qc_tree.get_children():
+            self.qc_tree.selection_set(previous_id)
+        elif records:
+            self.qc_tree.selection_set(records[0]["artifact_id"])
+        self._qc_selected()
+
+    def _qc_selected(self, _event=None):
+        selected = self.qc_tree.selection() if hasattr(self, "qc_tree") else ()
+        self.qc_selected_record = next((item for item in self.qc_records if selected and item["artifact_id"] == selected[0]), None)
+        self.qc_reviewed_var.set(False)
+        if not self.qc_selected_record or not hasattr(self, "qc_report"):
+            return
+        record = self.qc_selected_record
+        details = {
+            "video": record.get("path"), "campaign_manifest": record.get("campaign_path"),
+            "artifact_id": record.get("artifact_id"), "sha256": record.get("sha256"),
+            "latest_technical_qc": record.get("latest_qc"),
+            "latest_central_qc": record.get("latest_central_qc"),
+            "latest_human_decision": record.get("latest_decision"),
+        }
+        self.qc_report.configure(state="normal")
+        self.qc_report.delete("1.0", END)
+        self.qc_report.insert(END, json.dumps(details, ensure_ascii=False, indent=2, default=str))
+        self.qc_report.configure(state="disabled")
+
+    def browse_qc_subtitle(self):
+        path = filedialog.askopenfilename(filetypes=[("Subtitles", "*.srt *.vtt"), ("All files", "*.*")])
+        if path:
+            self.qc_subtitle_path_var.set(path)
+            self.qc_subtitle_var.set(True)
+
+    def run_selected_qc(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        record = self.qc_selected_record
+        if not record:
+            messagebox.showwarning("Selecciona un video", "Elige un artefacto registrado.")
+            return
+        subtitle = None
+        if self.qc_subtitle_var.get():
+            raw = self.qc_subtitle_path_var.get().strip()
+            if not raw or not Path(raw).expanduser().is_file():
+                messagebox.showerror("Subtítulos no encontrados", "Selecciona un archivo SRT o VTT válido.")
+                return
+            subtitle = Path(raw).expanduser().resolve()
+        campaign = Path(record["campaign_path"])
+        artifact_id, sha256 = record["artifact_id"], record["sha256"]
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self._set_status("Ejecutando QC técnico, perceptual y subtítulos…")
+        self._append(f"QC iniciado para {Path(record['path']).name} · hash {sha256[:12]}")
+        def worker():
+            try:
+                from scripts.gui_qc import run_registered_artifact_qc
+                result = run_registered_artifact_qc(campaign, artifact_id, sha256, subtitle_path=subtitle)
+                self.events.put(("qc_done", result))
+            except Exception as exc:
+                self.events.put(("qc_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def open_qc_video(self):
+        record = self.qc_selected_record
+        if not record:
+            messagebox.showinfo("Video", "Selecciona un artefacto registrado.")
+            return
+        path = Path(record["path"])
+        if path.is_file():
+            os.startfile(str(path))
+        else:
+            messagebox.showerror("Video no encontrado", str(path))
+
+    def approve_qc_video(self):
+        record = self.qc_selected_record
+        if not record:
+            messagebox.showwarning("Selecciona un video", "Elige un artefacto registrado.")
+            return
+        latest = record.get("latest_central_qc", {})
+        if latest.get("sha256") != record.get("sha256") or latest.get("status") != "READY_FOR_HUMAN_REVIEW":
+            messagebox.showerror("Aprobación bloqueada", "El QC central debe estar VERDE y coincidir con el hash actual.")
+            return
+        if not self.qc_reviewed_var.get():
+            messagebox.showwarning("Revisión humana requerida", "Abre y revisa el video completo; luego confirma la casilla.")
+            return
+        reviewer = simpledialog.askstring("Revisor", "Nombre o identificador del revisor:", parent=self.root)
+        if not reviewer or not reviewer.strip():
+            return
+        notes = simpledialog.askstring("Notas", "Notas de revisión (opcional):", parent=self.root) or ""
+        if not messagebox.askyesno("Confirmar aprobación", f"¿Aprobar el video revisado con hash {record['sha256'][:12]}?"):
+            return
+        try:
+            from scripts.artifact_registry import approve_artifact
+            approve_artifact(Path(record["campaign_path"]), record["artifact_id"], record["sha256"],
+                            reviewer=reviewer.strip(), decision="approved", notes=notes.strip())
+            self._append(f"APROBADO POR HUMANO: {record['artifact_id']} · {record['sha256']}")
+            self.refresh_qc()
+        except (OSError, ValueError, RuntimeError) as exc:
+            messagebox.showerror("Aprobación fallida", str(exc))
 
     def _build_projects(self):
         self.projects.columnconfigure(0, weight=1)
@@ -599,6 +754,29 @@ class MoneyGetaApp:
                     self.refresh_jobs()
                     self.refresh_projects()
                     self.refresh_campaigns()
+                elif kind == "qc_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.refresh_qc()
+                    central = value.get("central", {})
+                    qc_status = central.get("status", "FAILED")
+                    label = {"READY_FOR_HUMAN_REVIEW": "VERDE", "REVIEW_REQUIRED": "REVISAR", "FAILED": "ROJO"}.get(qc_status, "ROJO")
+                    self._set_status(f"QC central: {label} · {qc_status}")
+                    self._append(f"QC completado para {value.get('artifact', {}).get('path', '')}: {qc_status}")
+                    self.qc_report.configure(state="normal")
+                    self.qc_report.delete("1.0", END)
+                    self.qc_report.insert(END, json.dumps(value, ensure_ascii=False, indent=2, default=str))
+                    self.qc_report.configure(state="disabled")
+                    self.qc_reviewed_var.set(False)
+                elif kind == "qc_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self._append("QC ERROR: " + value)
+                    self._set_status("QC ROJO · no se pudo completar el control.")
+                    self.qc_report.configure(state="normal")
+                    self.qc_report.delete("1.0", END)
+                    self.qc_report.insert(END, value)
+                    self.qc_report.configure(state="disabled")
                 elif kind == "error":
                     self.busy = False
                     self.process_btn.configure(state="normal")
