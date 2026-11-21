@@ -1406,8 +1406,10 @@ class MoneyGetaApp:
         ttk.Button(buttons, text="Asignar", command=self.scene_plan_assign_asset_ui).pack(side=LEFT)
         ttk.Button(buttons, text="Quitar asignación", command=self.scene_plan_clear_asset_ui).pack(side=LEFT, padx=4)
         ttk.Button(buttons, text="Marcar / desmarcar revisada", command=self.scene_plan_toggle_review_ui).pack(side=LEFT)
-        self.scene_plan_details = tk.Text(right, height=6, wrap="word", state="disabled")
+        self.scene_plan_details = tk.Text(right, height=4, wrap="word", state="disabled")
         self.scene_plan_details.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        self.scene_plan_preview_label = ttk.Label(right, text="Vista previa local del recurso seleccionado", anchor="center", justify="center")
+        self.scene_plan_preview_label.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(6, 0))
         bottom = ttk.Frame(self.scene_visual)
         bottom.grid(row=5, column=0, sticky="ew", pady=(8, 0))
         ttk.Button(bottom, text="Guardar plan visual local", command=self.scene_plan_save_ui).pack(side=LEFT)
@@ -1492,6 +1494,7 @@ class MoneyGetaApp:
             }
             self.scene_plan_details.insert(END, json.dumps(details, ensure_ascii=False, indent=2))
             self.scene_plan_details.configure(state="disabled")
+            self._scene_plan_preview_asset(current)
 
     def _scene_plan_suggestion_selected(self, _event=None):
         if not getattr(self, "scene_visual_plan", None):
@@ -1509,6 +1512,27 @@ class MoneyGetaApp:
         self.scene_plan_details.delete("1.0", END)
         self.scene_plan_details.insert(END, json.dumps(item, ensure_ascii=False, indent=2))
         self.scene_plan_details.configure(state="disabled")
+        self._scene_plan_preview_asset(item)
+
+    def _scene_plan_preview_asset(self, asset):
+        self.scene_plan_preview_image = None
+        if not asset:
+            self.scene_plan_preview_label.configure(image="", text="Escena sin recurso asignado")
+            return
+        raw_path = asset.get("local_path", "")
+        path = Path(str(raw_path)).expanduser()
+        if not path.is_file():
+            self.scene_plan_preview_label.configure(image="", text="Archivo local no disponible")
+            return
+        try:
+            from PIL import Image, ImageTk
+            with Image.open(path) as source:
+                preview = source.copy()
+                preview.thumbnail((320, 220))
+            self.scene_plan_preview_image = ImageTk.PhotoImage(preview)
+            self.scene_plan_preview_label.configure(image=self.scene_plan_preview_image, text="")
+        except (OSError, ImportError, ValueError, tk.TclError) as exc:
+            self.scene_plan_preview_label.configure(image="", text=f"Vista previa no disponible: {exc}")
 
     def scene_plan_assign_asset_ui(self):
         scene_sel = self.scene_plan_scene_tree.selection()

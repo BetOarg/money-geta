@@ -120,3 +120,13 @@ def test_gui_exposes_scene_visual_plan_review_workflow():
     assert "scene_plan_done" in poll and "scene_plan_error" in poll
     from scripts.scene_visual_plan_store import save_scene_visual_plan
     assert "render_authorized" in inspect.getsource(save_scene_visual_plan)
+
+def test_gui_scene_visual_plan_displays_local_thumbnail_preview():
+    import inspect
+    from scripts.money_geta_gui import MoneyGetaApp
+    build = inspect.getsource(MoneyGetaApp._build_scene_visual_plan)
+    preview = inspect.getsource(MoneyGetaApp._scene_plan_preview_asset)
+    assert "scene_plan_preview_label" in build
+    assert "ImageTk" in preview and "thumbnail" in preview
+    assert "local_path" in preview and "Path" in preview
+    assert "https://" not in preview

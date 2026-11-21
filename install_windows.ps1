@@ -40,7 +40,7 @@ if (-not (Test-Path $VenvPython)) {
 
 & $VenvPython -m pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
-& $VenvPython -m pip install --editable "$RepoRoot[capture,media,gtavi,test]"
+& $VenvPython -m pip install --editable "$RepoRoot[capture,media,gtavi,test,gui]"
 if ($LASTEXITCODE -ne 0) { throw "Money-Geta installation failed." }
 
 Write-Host "Checking Tkinter desktop GUI support..."

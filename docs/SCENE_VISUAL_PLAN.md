@@ -18,6 +18,6 @@ The desktop **Plan visual** tab turns an approved script's scenes into a manuall
 - Saved plans retain script ID and SHA-256, candidate metadata, selected candidate, and review state.
 - A scene can be saved before every scene is reviewed, but the plan status remains `review_pending`.
 - Even a fully reviewed visual plan does **not** authorize rendering or publishing. The plan always records `render_authorized=false` and `publishing_authorized=false`.
-- This tab does not download, copy, delete, render, or publish media.
+- The selected local asset can be previewed as a thumbnail (Pillow is installed through the optional `gui` extra). This tab does not download, copy, delete, render, or publish media.
 
 Saved plan naming: `scene_asset_plan_<script-id>_<script-sha-prefix>.json`. Re-saving the same script updates that plan atomically.
