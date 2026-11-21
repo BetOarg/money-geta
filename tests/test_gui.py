@@ -81,7 +81,7 @@ def test_gui_download_action_requires_reviewed_candidate_state():
 
 def test_gui_image_download_requires_confirmation_and_network_opt_in():
     import scripts.money_geta_gui as gui
-    names = gui.MoneyGetaApp.download_image_candidate_ui.__code__.co_names
-    assert "askyesno" in names
-    assert "allow_network" in names
-    assert "confirm_download" in names
+    code = gui.MoneyGetaApp.download_image_candidate_ui.__code__
+    assert "askyesno" in code.co_names
+    assert "allow_network" in code.co_consts
+    assert "confirm_download" in code.co_consts
