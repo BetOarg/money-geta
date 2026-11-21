@@ -1,22 +1,21 @@
-# Editor de timeline local (MVP)
+# Editor de timeline local
 
-El editor inicial de timeline trabaja sobre un plan visual de escenas generado desde un guion aprobado.
+## Alcance del MVP
+El editor de timeline parte del plan visual de escenas derivado de un guion aprobado. La interfaz de escritorio permite:
+- Abrir un timeline de borrador, o cargar uno guardado para el mismo ID y hash de guion.
+- Reordenar escenas (subir/bajar).
+- Editar duración (0,25–180 segundos), narración y texto de subtítulos por escena.
+- Guardar de forma atómica en la carpeta de campaña local.
 
-## Alcance
-
-- Convierte el plan visual en una secuencia editable, sin modificar el guion original.
-- Cada escena conserva su ID de timeline, referencia de escena, descripción visual, recurso local aprobado, narración, texto de subtítulo y duración.
-- Permite ordenar escenas y ajustar duración, narración y subtítulos.
-- Guarda el borrador JSON de forma atómica en la carpeta de la campaña.
-- Mantiene el estado `draft`; no autoriza render, publicación ni programación.
-
-## Límites de esta etapa
-
-- No es todavía un reproductor de timeline ni un editor audiovisual con preview en tiempo real.
-- No corta ni mezcla clips, no sincroniza audio externo ni aplica transiciones.
-- El render se mantiene separado y requiere los gates actuales de QC y aprobación humana.
-- La duración inicial por escena es 5 segundos y puede editarse entre 0.25 y 180 segundos.
+Cada escena mantiene descripción visual y recurso local aprobado seleccionado en el plan visual. El timeline está vinculado al ID y SHA-256 del guion; los cambios no alteran el guion aprobado.
 
 ## Persistencia
+`<projects>/<project_id>/campaigns/<campaign_id>/timelines/timeline_<script_id>_<sha12>.json`
 
-El archivo se guarda en `<projects>/<project_id>/campaigns/<campaign_id>/timelines/` con nombre basado en el script ID y su SHA-256. No se reemplaza el guion ni se da permiso automático de render/publicación.
+## Gates
+Los borradores tienen `status=draft`, `render_authorized=false` y `publishing_authorized=false`. Guardar o editar no inicia un render ni publica/programa contenido.
+
+## Fuera de alcance
+- Preview/playback audiovisual real.
+- Recorte/mezcla de clips, pistas de audio, transiciones o sincronización de voz automática.
+- Exportación a MPT; eso requiere un adaptador explícito y validación de QC en una etapa posterior.
