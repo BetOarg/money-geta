@@ -25,8 +25,14 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     (mpt / "config.toml").write_text("upload_post_auto_upload = false\n", encoding="utf-8")
     python_exe = mpt / "python.exe"
     python_exe.write_text("fake interpreter", encoding="utf-8")
-    campaign = tmp_path / "campaign.json"
+    campaign_dir = tmp_path / "projects" / "project-a" / "campaigns" / "campaign-a"
+    campaign_dir.mkdir(parents=True)
+    campaign = campaign_dir / "campaign.json"
     campaign.write_text(json.dumps({
+        "schema_version": 1,
+        "project_id": "project-a",
+        "campaign_id": "campaign-a",
+        "profile_id": "gaming",
         "campaign_name": "test",
         "platform": "YouTube Shorts",
         "permissions_confirmed": True,
