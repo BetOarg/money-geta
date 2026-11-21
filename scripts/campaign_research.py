@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -117,6 +118,10 @@ def run_campaign_research(project_id: str, campaign_id: str, queries: list[str],
     campaign = get_campaign(project_id, campaign_id, projects_root)
     campaign_path = projects_root / project_id / "campaigns" / campaign_id / "campaign.json"
     cfg = config or SearchConfig.from_env()
+    cfg.validate()
+    if not cfg.allow_requests:
+        from scripts.providers.search import SearchConfigurationError
+        raise SearchConfigurationError("Search requests are disabled. Set MONEY_GETA_SEARCH_ALLOW_REQUESTS=true only after reviewing provider, quota and possible charges.")
     evidence = []
     errors = []
     for query in cleaned:
