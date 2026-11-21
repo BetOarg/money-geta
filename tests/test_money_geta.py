@@ -22,8 +22,11 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
 
     mpt = tmp_path / "mpt"
     mpt.mkdir()
+    mpt_home = tmp_path / "mpt-runtime"
+    mpt_home.mkdir()
     (mpt / "cli.py").write_text("# fake CLI", encoding="utf-8")
-    (mpt / "config.toml").write_text("upload_post_auto_upload = false\n", encoding="utf-8")
+    (mpt_home / "config.toml").write_text("upload_post_auto_upload = false\n", encoding="utf-8")
+    monkeypatch.setenv("MPT_HOME", str(mpt_home))
     python_exe = mpt / "python.exe"
     python_exe.write_text("fake interpreter", encoding="utf-8")
     from scripts.campaign_registry import create_campaign, update_campaign
@@ -49,7 +52,7 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
         returncode = 0
         stderr = ""
 
-    video = mpt / "storage" / "tasks" / "test-task" / "final-1.mp4"
+    video = mpt_home / "storage" / "tasks" / "test-task" / "final-1.mp4"
     video.parent.mkdir(parents=True)
     video.write_bytes(b"mocked output artifact")
 
@@ -84,8 +87,8 @@ def test_render_invokes_mpt_cli_with_local_media_and_campaign_gate(tmp_path, mon
     artifacts = list_artifacts(campaign)
     assert len(artifacts) == 1
     artifact = artifacts[0]
-    assert Path(artifact["path"]).is_relative_to((mpt / "storage" / "tasks").resolve())
-    assert Path(artifact["allowed_root"]) == (mpt / "storage" / "tasks").resolve()
+    assert Path(artifact["path"]).is_relative_to((mpt_home / "storage" / "tasks").resolve())
+    assert Path(artifact["allowed_root"]) == (mpt_home / "storage" / "tasks").resolve()
     review_args = [
         "--campaign", str(campaign), "publication-check",
         "--artifact-id", artifact["artifact_id"], "--sha256", artifact["sha256"],
