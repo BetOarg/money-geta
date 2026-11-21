@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-_TIME = re.compile(r"^((?:\d{2,}:)?\d{2}:\d{2}[,.]\d{3})\s*-->\s*((?:\d{2,}:)?\d{2}:\d{2}[,.]\d{3})(?:\s+.*)?$")
+_TIME = re.compile(r"^((?:\d{2,}:\d{2}:\d{2}|\d{2,}:\d{2})[,.]\d{3})\s*-->\s*((?:\d{2,}:\d{2}:\d{2}|\d{2,}:\d{2})[,.]\d{3})(?:\s+.*)?$")
 _TAG = re.compile(r"<[^>]+>")
 
 
