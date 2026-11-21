@@ -97,7 +97,8 @@ def move_scene(timeline: dict[str, Any], scene_index: int, offset: int) -> dict[
 
 
 def update_scene(timeline: dict[str, Any], scene_index: int, *, duration_seconds: float | None = None,
-                narration: str | None = None, subtitle_text: str | None = None) -> dict[str, Any]:
+                narration: str | None = None, subtitle_text: str | None = None,
+                trim_start_seconds: float | None = None, trim_end_seconds: float | None = None) -> dict[str, Any]:
     rows = list(timeline.get("scenes", []))
     if not 0 <= scene_index < len(rows):
         raise ValueError("Scene index out of range.")
@@ -111,6 +112,26 @@ def update_scene(timeline: dict[str, Any], scene_index: int, *, duration_seconds
         row["narration"] = str(narration)
     if subtitle_text is not None:
         row["subtitle_text"] = str(subtitle_text)
+    if trim_start_seconds is not None or trim_end_seconds is not None:
+        start_seconds = float(trim_start_seconds or 0)
+        end_seconds = None if trim_end_seconds in (None, "") else float(trim_end_seconds)
+        if not math.isfinite(start_seconds) or start_seconds < 0:
+            raise ValueError("Media trim start must be a finite non-negative number.")
+        if end_seconds is not None and (not math.isfinite(end_seconds) or end_seconds <= start_seconds):
+            raise ValueError("Media trim end must be finite and greater than start.")
+        if start_seconds > 0 or end_seconds is not None:
+            from scripts.timeline_preview import resolve_scene_preview_path
+            _, kind = resolve_scene_preview_path(row.get("visual_path", ""))
+            if kind != "video":
+                raise ValueError("Trim controls are only available for local video assets.")
+            row["media_trim_start_seconds"] = round(start_seconds, 3)
+            if end_seconds is None:
+                row.pop("media_trim_end_seconds", None)
+            else:
+                row["media_trim_end_seconds"] = round(end_seconds, 3)
+        else:
+            row.pop("media_trim_start_seconds", None)
+            row.pop("media_trim_end_seconds", None)
     rows[scene_index] = row
     result = dict(timeline)
     result["scenes"] = rows
