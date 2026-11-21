@@ -169,6 +169,7 @@ class MoneyGetaApp:
         self.config = ttk.Frame(self.tabs, padding=14)
         self.history = ttk.Frame(self.tabs, padding=14)
         self.qc = ttk.Frame(self.tabs, padding=14)
+        self.research = ttk.Frame(self.tabs, padding=14)
         self.tabs.add(self.home, text="Analizar y cortar")
         self.tabs.add(self.render, text="Render final · MPT")
         self.tabs.add(self.projects, text="Proyectos")
@@ -325,6 +326,118 @@ class MoneyGetaApp:
             args.extend(["--voice", self.voice_var.get().strip()])
         self._run_async(self._command(*args), "Renderizando con MoneyPrinterTurbo…")
 
+
+    def _build_research(self):
+        self.research.columnconfigure(1, weight=1)
+        self.research.rowconfigure(4, weight=1)
+        ttk.Label(self.research, text="Radar de descubrimiento por campaña", style="Section.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(self.research, text="Proyecto (ID)").grid(row=1, column=0, sticky="w", pady=5)
+        self.research_project_var = tk.StringVar()
+        self.research_project_combo = ttk.Combobox(self.research, textvariable=self.research_project_var, state="readonly")
+        self.research_project_combo.grid(row=1, column=1, sticky="ew", pady=5)
+        self.research_project_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_research_campaigns())
+        ttk.Label(self.research, text="Campaña (ID)").grid(row=2, column=0, sticky="w", pady=5)
+        self.research_campaign_var = tk.StringVar()
+        self.research_campaign_combo = ttk.Combobox(self.research, textvariable=self.research_campaign_var, state="readonly")
+        self.research_campaign_combo.grid(row=2, column=1, sticky="ew", pady=5)
+        ttk.Label(self.research, text="Consultas (una por línea; máximo 10)").grid(row=3, column=0, sticky="nw", pady=5)
+        self.research_queries = tk.Text(self.research, height=4, wrap="word")
+        self.research_queries.grid(row=3, column=1, sticky="ew", pady=5)
+        actions = ttk.Frame(self.research)
+        actions.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 8))
+        ttk.Button(actions, text="Actualizar proyectos/campañas", command=self.refresh_research_options).pack(side=LEFT)
+        ttk.Button(actions, text="Buscar señales", command=self.run_campaign_research_ui).pack(side=LEFT, padx=8)
+        self.research_status_var = tk.StringVar(value="PENDIENTE")
+        ttk.Label(actions, textvariable=self.research_status_var).pack(side=LEFT, padx=8)
+        ttk.Label(self.research, text="Informe · el score de descubrimiento no es popularidad ni verificación").grid(row=5, column=0, columnspan=2, sticky="w")
+        self.research_output = tk.Text(self.research, height=10, wrap="word", font=("Consolas", 9), state="disabled")
+        self.research_output.grid(row=6, column=0, columnspan=2, sticky="nsew", pady=(4, 4))
+        self.research.rowconfigure(6, weight=1)
+
+    def refresh_research_options(self):
+        if not hasattr(self, "research_project_combo"):
+            return
+        projects = []
+        if DEFAULT_PROJECTS.is_dir() and not DEFAULT_PROJECTS.is_symlink():
+            for manifest in sorted(DEFAULT_PROJECTS.glob("*/project.json")):
+                if manifest.is_symlink() or not manifest.is_file():
+                    continue
+                try:
+                    data = json.loads(manifest.read_text(encoding="utf-8"))
+                    project_id = data.get("project_id")
+                    if isinstance(project_id, str) and project_id:
+                        projects.append(project_id)
+                except (OSError, ValueError):
+                    continue
+        self.research_project_combo["values"] = projects
+        if self.research_project_var.get() not in projects:
+            self.research_project_var.set(projects[0] if projects else "")
+        self.refresh_research_campaigns()
+
+    def refresh_research_campaigns(self):
+        if not hasattr(self, "research_campaign_combo"):
+            return
+        project_id = self.research_project_var.get().strip()
+        campaigns = []
+        folder = DEFAULT_PROJECTS / project_id / "campaigns" if project_id else None
+        if folder and folder.is_dir() and not folder.is_symlink():
+            for manifest in sorted(folder.glob("*/campaign.json")):
+                if manifest.is_symlink() or not manifest.is_file():
+                    continue
+                try:
+                    data = json.loads(manifest.read_text(encoding="utf-8"))
+                    campaign_id = data.get("campaign_id")
+                    if isinstance(campaign_id, str) and campaign_id:
+                        campaigns.append(campaign_id)
+                except (OSError, ValueError):
+                    continue
+        self.research_campaign_combo["values"] = campaigns
+        if self.research_campaign_var.get() not in campaigns:
+            self.research_campaign_var.set(campaigns[0] if campaigns else "")
+
+    def run_campaign_research_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        if os.environ.get("MONEY_GETA_SEARCH_ALLOW_REQUESTS", "").lower() != "true":
+            messagebox.showwarning("Búsqueda desactivada", "La red está desactivada. Revisa proveedor, API key, cuota y costos; solo entonces habilita MONEY_GETA_SEARCH_ALLOW_REQUESTS=true en el entorno.")
+            return
+        if not os.environ.get("MONEY_GETA_SEARCH_PROVIDER") or not os.environ.get("MONEY_GETA_SEARCH_API_KEY"):
+            messagebox.showwarning("Configuración incompleta", "Configura MONEY_GETA_SEARCH_PROVIDER y MONEY_GETA_SEARCH_API_KEY en el entorno local.")
+            return
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        queries = [line.strip() for line in self.research_queries.get("1.0", "end").splitlines() if line.strip()]
+        if not project_id or not campaign_id:
+            messagebox.showwarning("Selecciona campaña", "Selecciona proyecto y campaña.")
+            return
+        if not 1 <= len(queries) <= 10 or any(len(query) > 600 for query in queries):
+            messagebox.showerror("Consultas inválidas", "Introduce entre 1 y 10 consultas de hasta 600 caracteres.")
+            return
+        from scripts.providers.search import SearchConfig, SearchConfigurationError
+        try:
+            config = SearchConfig.from_env()
+            config.validate()
+            if not config.allow_requests:
+                raise SearchConfigurationError("Search requests are disabled.")
+        except ValueError as exc:
+            messagebox.showerror("Configuración de búsqueda", str(exc))
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.research_status_var.set("BUSCANDO…")
+        self.research_output.configure(state="normal")
+        self.research_output.delete("1.0", END)
+        self.research_output.insert(END, "Consulta en curso; los leads no son métricas de popularidad ni validación factual/legal.\\n")
+        self.research_output.configure(state="disabled")
+        def worker():
+            try:
+                from scripts.campaign_research import run_campaign_research
+                result = run_campaign_research(project_id, campaign_id, queries, config=config)
+                self.events.put(("research_done", result))
+            except Exception as exc:
+                self.events.put(("research_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
 
     def _build_qc(self):
         self.qc.columnconfigure(0, weight=1)
@@ -545,6 +658,7 @@ class MoneyGetaApp:
                                 item.get("status", "unknown"), item.get("topic", "")))
                 except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
                     self._append(f"Proyecto ignorado por manifiesto inválido: {exc}")
+        self.refresh_research_options()
 
     def _project_selected(self, _event=None):
         self.refresh_campaigns()
@@ -755,6 +869,32 @@ class MoneyGetaApp:
                     self.refresh_projects()
                     self.refresh_campaigns()
                     self.refresh_qc()
+                elif kind == "research_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.refresh_qc()
+                    status = value.get("status", "failed").upper()
+                    self.research_status_var.set(status)
+                    display = {
+                        "status": value.get("status"), "queries": value.get("queries"),
+                        "results": value.get("result_count"), "unique_sources": value.get("unique_source_count"),
+                        "report_path": value.get("report_path"), "provider_errors": value.get("provider_errors"),
+                        "top_results": value.get("ranked_results", [])[:10],
+                    }
+                    self.research_output.configure(state="normal")
+                    self.research_output.delete("1.0", END)
+                    self.research_output.insert(END, json.dumps(display, ensure_ascii=False, indent=2, default=str))
+                    self.research_output.configure(state="disabled")
+                    self._append(f"RESEARCH: {status} · {value.get('unique_source_count', 0)} fuentes · {value.get('report_path', '')}")
+                elif kind == "research_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.research_status_var.set("ROJO")
+                    self.research_output.configure(state="normal")
+                    self.research_output.delete("1.0", END)
+                    self.research_output.insert(END, value)
+                    self.research_output.configure(state="disabled")
+                    self._append("RESEARCH ERROR: " + value)
                 elif kind == "qc_done":
                     self.busy = False
                     self.process_btn.configure(state="normal")
