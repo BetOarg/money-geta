@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from tkinter import BOTH, END, LEFT, X, filedialog, messagebox, simpledialog, ttk
 import tkinter as tk
@@ -106,7 +107,7 @@ def save_campaign_manifest(payload, campaigns_root: Path) -> Path:
     try:
         with target.open("x", encoding="utf-8") as handle:
             json.dump(payload, handle, ensure_ascii=False, indent=2)
-            handle.write("\\n")
+            handle.write("\n")
     except Exception:
         try:
             folder.rmdir()
@@ -263,7 +264,7 @@ class MoneyGetaApp:
         ttk.Entry(opts, textvariable=self.language_var, width=8).pack(side=LEFT, padx=5)
         ttk.Label(opts, text="Voz (opcional)").pack(side=LEFT)
         ttk.Entry(opts, textvariable=self.voice_var, width=16).pack(side=LEFT, padx=5)
-        ttk.Button(self.render, text="Validar campaña y renderizar", command=self.start_render).grid(row=9, column=1, sticky="w")
+        ttk.Button(self.render, text="Validar campaña y renderizar", command=self.start_render).grid(row=12, column=1, sticky="w")
         ttk.Label(self.render, text="Salida local; la publicación automática permanece deshabilitada.").grid(row=10, column=1, columnspan=2, sticky="w")
 
     def _add_render_materials(self):
