@@ -40,7 +40,9 @@ def evaluate(artifact_path:Path,*,technical_report:Path|None,subtitle_report:Pat
         if subs.get("passed") is not True:
             if subtitle_required: blocking.append("Subtitle QC did not pass")
             else: review.append("Subtitle QC has findings; review before approval")
-    if perceptual_report is None:\n        checks["perceptual"]={"status":"not_provided"}\n        if perceptual_required: blocking.append("Perceptual QC report is required but missing")
+    if perceptual_report is None:
+        checks["perceptual"]={"status":"not_provided"}
+        if perceptual_required: blocking.append("Perceptual QC report is required but missing")
     else:
         perceptual=_video_report(perceptual_report,artifact,artifact_hash)
         observations=perceptual.get("observations",{})
