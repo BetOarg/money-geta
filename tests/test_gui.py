@@ -48,3 +48,9 @@ def test_gui_script_review_controls_are_hash_bound():
     assert hasattr(gui.MoneyGetaApp, "review_script_ui")
     assert "script_review_id_var" in gui.MoneyGetaApp._build_script.__code__.co_names
     assert "script_review_sha_var" in gui.MoneyGetaApp._build_script.__code__.co_names
+
+
+def test_gui_can_re_register_edited_script_versions():
+    import scripts.money_geta_gui as gui
+    assert hasattr(gui.MoneyGetaApp, "reregister_script_ui")
+    assert "script_reregister_btn" in gui.MoneyGetaApp._build_script.__code__.co_names

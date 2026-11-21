@@ -357,6 +357,8 @@ class MoneyGetaApp:
         ttk.Button(actions, text="Actualizar proyectos/campañas", command=self.refresh_research_options).pack(side=LEFT)
         ttk.Button(actions, text="Generar guion", command=self.generate_script_ui).pack(side=LEFT, padx=8)
         ttk.Button(actions, text="Abrir draft", command=self.open_script_draft).pack(side=LEFT)
+        self.script_reregister_btn = ttk.Button(actions, text="Re-registrar edición", command=self.reregister_script_ui, state="disabled")
+        self.script_reregister_btn.pack(side=LEFT, padx=5)
         self.script_status_var = tk.StringVar(value="PENDIENTE")
         ttk.Label(actions, textvariable=self.script_status_var).pack(side=LEFT, padx=8)
         review = ttk.Frame(self.script)
@@ -460,6 +462,30 @@ class MoneyGetaApp:
                 self.events.put(("script_review_done", {"decision": decision, "passed": passed, "problems": problems}))
             except Exception as exc:
                 self.events.put(("script_review_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def reregister_script_ui(self):
+        if self.busy:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        path_text = getattr(self, "script_last_report_path", "")
+        project_id = self.research_project_var.get().strip()
+        campaign_id = self.research_campaign_var.get().strip()
+        if not path_text or not Path(path_text).is_file() or not project_id or not campaign_id:
+            messagebox.showwarning("Draft no disponible", "Genera o abre un draft local válido para el proyecto/campaña seleccionados.")
+            return
+        if not messagebox.askyesno("Validar edición", "Se volverá a validar el JSON editado y se registrará su hash. Si el contenido cambió, será una nueva versión con aprobación pendiente. ¿Continuar?"):
+            return
+        self.busy = True
+        self.process_btn.configure(state="disabled")
+        self.script_status_var.set("VALIDANDO EDICIÓN…")
+        def worker():
+            try:
+                from scripts.script_registry import register_script
+                result = register_script(project_id, campaign_id, Path(path_text))
+                self.events.put(("script_reregister_done", result))
+            except Exception as exc:
+                self.events.put(("script_reregister_error", f"{type(exc).__name__}: {exc}"))
         threading.Thread(target=worker, daemon=True).start()
 
     def open_script_draft(self):
@@ -1032,6 +1058,7 @@ class MoneyGetaApp:
                     if value.get("review_registration_error"):
                         self._append("SCRIPT REGISTRATION BLOCKED: " + value["review_registration_error"])
                     self.script_last_report_path = value.get("report_path")
+                    self.script_reregister_btn.configure(state="normal" if self.script_last_report_path else "disabled")
                     self.script_report.configure(state="normal")
                     self.script_report.delete("1.0", END)
                     display = {
@@ -1044,6 +1071,29 @@ class MoneyGetaApp:
                     self.script_report.insert(END, json.dumps(display, ensure_ascii=False, indent=2, default=str))
                     self.script_report.configure(state="disabled")
                     self._append(f"SCRIPT DRAFT: {value.get('script', {}).get('title', '')} · {value.get('report_path', '')}")
+                elif kind == "script_reregister_done":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.script_review_id_var.set(value.get("script_id", ""))
+                    self.script_review_sha_var.set(value.get("sha256", ""))
+                    registered_ok = bool(value.get("script_id") and value.get("sha256"))
+                    self.script_approve_btn.configure(state="normal" if registered_ok else "disabled")
+                    self.script_reject_btn.configure(state="normal" if registered_ok else "disabled")
+                    self.script_status_var.set("EDICIÓN REGISTRADA · REVISIÓN PENDIENTE" if registered_ok else "ROJO")
+                    try:
+                        edited_payload = json.loads(Path(self.script_last_report_path).read_text(encoding="utf-8"))
+                        self.script_report.configure(state="normal")
+                        self.script_report.delete("1.0", END)
+                        self.script_report.insert(END, json.dumps(edited_payload, ensure_ascii=False, indent=2))
+                        self.script_report.configure(state="disabled")
+                    except (OSError, ValueError, TypeError) as exc:
+                        self._append(f"EDITED DRAFT DISPLAY WARNING: {exc}")
+                    self._append(f"SCRIPT RE-REGISTERED: {value.get('script_id')} · {value.get('sha256')}")
+                elif kind == "script_reregister_error":
+                    self.busy = False
+                    self.process_btn.configure(state="normal")
+                    self.script_status_var.set("ROJO · EDICIÓN INVALIDA")
+                    self._append("SCRIPT RE-REGISTER ERROR: " + value)
                 elif kind == "script_review_done":
                     self.busy = False
                     self.process_btn.configure(state="normal")
