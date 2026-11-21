@@ -46,6 +46,10 @@ def save_scene_visual_plan(plan: dict[str, Any], *, root: Path | None = None) ->
         selected_asset = scene.get("selected_asset")
         if selected and (not isinstance(selected_asset, dict) or selected_asset.get("candidate_id") != selected):
             raise ValueError("Selected asset metadata must match the selected candidate ID.")
+        if selected and (selected_asset.get("rights_status") != "reviewed_approved"
+                          or selected_asset.get("integrity_status") != "verified"
+                          or selected_asset.get("metadata_current") is not True):
+            raise ValueError("Selected asset must have current approved rights and verified integrity.")
         if not selected and selected_asset is not None:
             raise ValueError("Selected asset metadata cannot exist without a candidate ID.")
         if not isinstance(scene.get("human_reviewed", False), bool):
