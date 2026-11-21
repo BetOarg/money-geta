@@ -3,7 +3,6 @@ from pathlib import Path
 
 from scripts.campaign_registry import create_campaign, update_campaign
 from scripts.project_registry import create_project
-from scripts.providers.llm import LLMConfig
 from scripts.providers.source_reader import SourceDocument, record_source_document
 from scripts.money_geta import main
 
@@ -39,7 +38,7 @@ def test_script_draft_cli_reports_saved_draft_without_real_llm_calls(monkeypatch
         "title": "Draft title", "hook": "A short hook", "narration": "Narration text",
         "scenes": [{"visual": "Show footage.", "narration": "Explain briefly."}],
         "cta": "Follow for more.", "source_ids": ["cli-evidence"],
-        "claims": [{"claim_id": None, "text": "Fact note", "evidence_ids": ["cli-evidence"}],
+        "claims": [{"claim_id": None, "text": "Fact note", "evidence_ids": ["cli-evidence"]}],
     }
     monkeypatch.setattr(writer, "chat_completion", lambda *args, **kwargs: {"choices": [{"message": {"content": json.dumps(script)}}]})
     code = main(["script-draft", "--project", "cli-project", "--campaign", campaign_id])
