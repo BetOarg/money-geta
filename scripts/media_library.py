@@ -23,10 +23,12 @@ def _read_download_ledger(campaign_file: Path) -> list[dict[str, Any]]:
             item=json.loads(line)
             if not isinstance(item,dict) or item.get("schema_version")!=1 or item.get("event_type")!="approved_media_download":
                 raise MediaLibraryError("Download ledger contains an invalid record.")
-            cid=item.get("candidate_id","")
+            cid=item.get("candidate_id")
+            candidate_hash=item.get("candidate_sha256")
+            file_hash=item.get("sha256")
             if not isinstance(cid,str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}",cid):
                 raise MediaLibraryError("Download ledger contains an unsafe candidate ID.")
-            if not re.fullmatch(r"[a-f0-9]{64}",item.get("candidate_sha256","")) or not re.fullmatch(r"[a-f0-9]{64}",item.get("sha256","")):
+            if not isinstance(candidate_hash,str) or not re.fullmatch(r"[a-f0-9]{64}",candidate_hash) or not isinstance(file_hash,str) or not re.fullmatch(r"[a-f0-9]{64}",file_hash):
                 raise MediaLibraryError("Download ledger contains invalid hash fields.")
             rows.append(item)
     except (OSError,UnicodeError,json.JSONDecodeError):
@@ -53,7 +55,7 @@ def _catalog_campaign(project_id: str, campaign_id: str, campaign_file: Path, pr
         local_path=None
         integrity="invalid_path"
         path_parts=Path(rel).parts if isinstance(rel,str) else ()
-        if path_parts and not Path(rel).is_absolute() and len(path_parts)==2 and path_parts[0]=="media_assets" and path_parts[1] not in {".",".."}:
+        if path_parts and not Path(rel).is_absolute() and len(path_parts)==2 and path_parts[0]=="media_assets" and Path(path_parts[1]).stem==cid and Path(path_parts[1]).suffix.lower() in {".jpg",".png",".webp",".gif",".bmp"}:
             local_path=campaign_root/rel
             try:
                 _reject_symlink_components(local_path)
@@ -104,7 +106,8 @@ def search_media_assets(query: str, *, project_id: str|None=None, campaign_id: s
 def verify_media_library(*, project_id: str|None=None, campaign_id: str|None=None, root: Path|None=None) -> dict[str,Any]:
     items=list_media_assets(project_id=project_id,campaign_id=campaign_id,root=root)
     issues=[item for item in items if item["integrity_status"]!="verified" or item["rights_status"]!="reviewed_approved" or not item["metadata_current"]]
-    return {"status":"PASS" if not issues else "BLOCKED","asset_count":len(items),
+    status = "EMPTY" if not items else ("PASS" if not issues else "BLOCKED")
+    return {"status":status,"asset_count":len(items),
         "verified_count":sum(x["integrity_status"]=="verified" for x in items),
         "current_approved_count":sum(x["rights_status"]=="reviewed_approved" for x in items),
         "metadata_current_count":sum(x["metadata_current"] for x in items),
