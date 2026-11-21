@@ -4,7 +4,9 @@ from __future__ import annotations
 import json
 import os
 import queue
+from io import BytesIO
 import subprocess
+import shutil
 import sys
 import threading
 import uuid
@@ -1382,6 +1384,13 @@ class MoneyGetaApp:
         self.timeline_subtitles = tk.Text(editor, height=4, wrap="word")
         self.timeline_subtitles.grid(row=4, column=0, columnspan=2, sticky="ew", pady=3)
         ttk.Button(editor, text="Aplicar a escena", command=self._timeline_apply_ui).grid(row=5, column=0, columnspan=2, sticky="w", pady=(5, 0))
+        preview_frame = ttk.LabelFrame(editor, text="Preview del recurso asignado", padding=4)
+        preview_frame.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self.timeline_preview_label = ttk.Label(preview_frame, text="Seleccioná una escena para ver su recurso local.", anchor="center")
+        self.timeline_preview_label.pack(fill="both", expand=True)
+        self.timeline_preview_caption = ttk.Label(preview_frame, text="", anchor="w")
+        self.timeline_preview_caption.pack(fill="x", pady=(3, 0))
+        self.timeline_preview_image = None
         controls = ttk.Frame(self.timeline)
         controls.grid(row=3, column=0, sticky="ew", pady=8)
         ttk.Button(controls, text="↑ Subir", command=lambda: self._timeline_move_ui(-1)).pack(side=LEFT)
@@ -1512,6 +1521,45 @@ class MoneyGetaApp:
         for widget, key in ((self.timeline_narration, "narration"), (self.timeline_subtitles, "subtitle_text")):
             widget.delete("1.0", END)
             widget.insert("1.0", scene.get(key, ""))
+        self._timeline_update_preview_ui(scene)
+
+    def _timeline_update_preview_ui(self, scene):
+        from scripts.timeline_preview import resolve_scene_preview_path
+        path, kind = resolve_scene_preview_path(scene.get("visual_path", ""))
+        self.timeline_preview_image = None
+        if path is None:
+            self.timeline_preview_label.configure(image="", text=kind)
+            self.timeline_preview_caption.configure(text="")
+            return
+        try:
+            from PIL import Image, ImageTk
+            if kind == "image":
+                with Image.open(path) as source:
+                    frame = source.copy()
+            else:
+                ffmpeg = shutil.which("ffmpeg")
+                if not ffmpeg:
+                    self.timeline_preview_label.configure(image="", text="FFmpeg no disponible; no se puede extraer fotograma.")
+                    self.timeline_preview_caption.configure(text=str(path))
+                    return
+                result = subprocess.run(
+                    [ffmpeg, "-hide_banner", "-loglevel", "error", "-ss", "0.5", "-i", str(path),
+                     "-frames:v", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "-"],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5, check=True,
+                )
+                frame = Image.open(BytesIO(result.stdout))
+                frame.load()
+            frame.thumbnail((320, 220))
+            photo = ImageTk.PhotoImage(frame)
+            self.timeline_preview_image = photo
+            self.timeline_preview_label.configure(image=photo, text="")
+            self.timeline_preview_caption.configure(text=f"{path.name} · {kind} · vista previa local")
+        except ImportError:
+            self.timeline_preview_label.configure(image="", text="Instalá Pillow para ver miniaturas.")
+            self.timeline_preview_caption.configure(text=str(path))
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            self.timeline_preview_label.configure(image="", text=f"Preview no disponible: {exc}")
+            self.timeline_preview_caption.configure(text=str(path))
 
     def _timeline_apply_ui(self):
         selection = self.timeline_tree.selection()
