@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import uuid
@@ -74,6 +75,7 @@ def create_timeline_from_visual_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "human_review_required": True,
         "render_authorized": False,
         "publishing_authorized": False,
+        "audio_tracks": [],
     }
 
 
@@ -95,8 +97,56 @@ def move_scene(timeline: dict[str, Any], scene_index: int, offset: int) -> dict[
     return result
 
 
+TRANSITIONS = {"cut", "fade", "dissolve", "slide"}
+
+
+def update_scene_transition(timeline: dict[str, Any], scene_index: int, *, transition: str, duration_seconds: float) -> dict[str, Any]:
+    rows = list(timeline.get("scenes", []))
+    if not 0 <= scene_index < len(rows):
+        raise ValueError("Scene index out of range.")
+    kind = str(transition).strip().lower()
+    duration = float(duration_seconds)
+    scene_duration = float(rows[scene_index].get("duration_seconds", 0))
+    if kind not in TRANSITIONS:
+        raise ValueError("Unsupported transition type.")
+    if not math.isfinite(duration) or duration < 0:
+        raise ValueError("Transition duration must be finite and non-negative.")
+    if kind == "cut" and duration != 0:
+        raise ValueError("Cut transition duration must be zero.")
+    if kind != "cut" and (duration <= 0 or duration > scene_duration):
+        raise ValueError("Transition duration must be positive and fit inside the scene.")
+    row = dict(rows[scene_index])
+    row["transition_in"] = kind
+    row["transition_duration_seconds"] = round(duration, 3)
+    rows[scene_index] = row
+    result = dict(timeline)
+    result["scenes"] = rows
+    return result
+
+
+def update_subtitle_timing(timeline: dict[str, Any], scene_index: int, *, start_seconds: float, end_seconds: float) -> dict[str, Any]:
+    rows = list(timeline.get("scenes", []))
+    if not 0 <= scene_index < len(rows):
+        raise ValueError("Scene index out of range.")
+    row = dict(rows[scene_index])
+    start = float(start_seconds)
+    end = float(end_seconds)
+    duration = float(row.get("duration_seconds", 0))
+    if not all(math.isfinite(value) for value in (start, end)):
+        raise ValueError("Subtitle timing must be finite.")
+    if start < 0 or end <= start or end > duration:
+        raise ValueError("Subtitle timing must fit inside the scene duration.")
+    row["subtitle_start_seconds"] = round(start, 3)
+    row["subtitle_end_seconds"] = round(end, 3)
+    rows[scene_index] = row
+    result = dict(timeline)
+    result["scenes"] = rows
+    return result
+
+
 def update_scene(timeline: dict[str, Any], scene_index: int, *, duration_seconds: float | None = None,
-                narration: str | None = None, subtitle_text: str | None = None) -> dict[str, Any]:
+                narration: str | None = None, subtitle_text: str | None = None,
+                trim_start_seconds: float | None = None, trim_end_seconds: float | None = None) -> dict[str, Any]:
     rows = list(timeline.get("scenes", []))
     if not 0 <= scene_index < len(rows):
         raise ValueError("Scene index out of range.")
@@ -110,6 +160,26 @@ def update_scene(timeline: dict[str, Any], scene_index: int, *, duration_seconds
         row["narration"] = str(narration)
     if subtitle_text is not None:
         row["subtitle_text"] = str(subtitle_text)
+    if trim_start_seconds is not None or trim_end_seconds is not None:
+        start_seconds = float(trim_start_seconds or 0)
+        end_seconds = None if trim_end_seconds in (None, "") else float(trim_end_seconds)
+        if not math.isfinite(start_seconds) or start_seconds < 0:
+            raise ValueError("Media trim start must be a finite non-negative number.")
+        if end_seconds is not None and (not math.isfinite(end_seconds) or end_seconds <= start_seconds):
+            raise ValueError("Media trim end must be finite and greater than start.")
+        if start_seconds > 0 or end_seconds is not None:
+            from scripts.timeline_preview import resolve_scene_preview_path
+            _, kind = resolve_scene_preview_path(row.get("visual_path", ""))
+            if kind != "video":
+                raise ValueError("Trim controls are only available for local video assets.")
+            row["media_trim_start_seconds"] = round(start_seconds, 3)
+            if end_seconds is None:
+                row.pop("media_trim_end_seconds", None)
+            else:
+                row["media_trim_end_seconds"] = round(end_seconds, 3)
+        else:
+            row.pop("media_trim_start_seconds", None)
+            row.pop("media_trim_end_seconds", None)
     rows[scene_index] = row
     result = dict(timeline)
     result["scenes"] = rows
@@ -129,6 +199,11 @@ def save_timeline(timeline: dict[str, Any], *, root: Path | None = None) -> Path
     rows = timeline.get("scenes")
     if not isinstance(rows, list) or not rows:
         raise ValueError("Timeline must contain scenes.")
+    audio_rows = timeline.get("audio_tracks", [])
+    if not isinstance(audio_rows, list):
+        raise ValueError("Audio tracks must be a list.")
+    from scripts.timeline_audio import validate_audio_track
+    normalized_audio = [validate_audio_track(item) for item in audio_rows]
     seen = set()
     for row in rows:
         if not isinstance(row, dict):
@@ -140,6 +215,35 @@ def save_timeline(timeline: dict[str, Any], *, root: Path | None = None) -> Path
         duration = float(row.get("duration_seconds", 0))
         if not MIN_DURATION <= duration <= MAX_DURATION:
             raise ValueError(f"Duration must be between {MIN_DURATION} and {MAX_DURATION} seconds.")
+        trim_start = float(row.get("media_trim_start_seconds", 0))
+        trim_end_raw = row.get("media_trim_end_seconds")
+        trim_end = None if trim_end_raw is None else float(trim_end_raw)
+        if not math.isfinite(trim_start) or trim_start < 0:
+            raise ValueError("Media trim start must be finite and non-negative.")
+        if trim_end is not None and (not math.isfinite(trim_end) or trim_end <= trim_start):
+            raise ValueError("Media trim end must be finite and greater than start.")
+        if trim_start > 0 or trim_end is not None:
+            from scripts.timeline_preview import resolve_scene_preview_path
+            _, kind = resolve_scene_preview_path(row.get("visual_path", ""))
+            if kind != "video":
+                raise ValueError("Media trim controls require a local video asset.")
+        transition = str(row.get("transition_in", "cut")).lower()
+        transition_duration = float(row.get("transition_duration_seconds", 0))
+        if transition not in TRANSITIONS or not math.isfinite(transition_duration) or transition_duration < 0:
+            raise ValueError("Invalid transition metadata.")
+        if transition == "cut" and transition_duration != 0:
+            raise ValueError("Cut transition duration must be zero.")
+        if transition != "cut" and (transition_duration <= 0 or transition_duration > duration):
+            raise ValueError("Transition duration must be positive and fit inside the scene.")
+        subtitle_start = float(row.get("subtitle_start_seconds", 0))
+        subtitle_end_raw = row.get("subtitle_end_seconds")
+        subtitle_end = None if subtitle_end_raw is None else float(subtitle_end_raw)
+        if not math.isfinite(subtitle_start) or subtitle_start < 0:
+            raise ValueError("Subtitle start must be finite and non-negative.")
+        if subtitle_end is not None and (not math.isfinite(subtitle_end) or subtitle_end <= subtitle_start or subtitle_end > duration):
+            raise ValueError("Subtitle timing must fit inside the scene duration.")
+        if subtitle_end is not None and not str(row.get("subtitle_text", "")).strip():
+            raise ValueError("Subtitle timing requires subtitle text.")
         for field in ("narration", "subtitle_text", "visual_description", "visual_path", "candidate_id"):
             if not isinstance(row.get(field, ""), str):
                 raise ValueError(f"{field} must be text.")
@@ -161,6 +265,7 @@ def save_timeline(timeline: dict[str, Any], *, root: Path | None = None) -> Path
         raise ValueError("Timeline target cannot be a symlink.")
     temp = timeline_dir / f".tmp-{uuid.uuid4().hex}"
     payload = dict(timeline)
+    payload["audio_tracks"] = normalized_audio
     payload["status"] = "draft"
     payload["human_review_required"] = True
     payload["render_authorized"] = False
@@ -199,6 +304,11 @@ def load_timeline(project_id: str, campaign_id: str, script_id: str, sha: str, *
     payload = json.loads(target.read_text(encoding="utf-8"))
     if payload.get("plan_type") != "editable_timeline" or payload.get("script_sha256") != sha:
         raise ValueError("Saved timeline does not match the approved script hash.")
+    audio_rows = payload.get("audio_tracks", [])
+    if not isinstance(audio_rows, list):
+        raise ValueError("Saved audio tracks must be a list.")
+    from scripts.timeline_audio import validate_audio_track
+    payload["audio_tracks"] = [validate_audio_track(row) for row in audio_rows]
     return payload
 
 
