@@ -61,6 +61,8 @@ def _validate(timeline: dict[str, Any]) -> list[dict[str, Any]]:
             raise ValueError("Cut transition duration must be zero.")
         if transition != "cut" and not 0 < transition_duration <= duration:
             raise ValueError("Transition duration must be positive and fit inside the scene.")
+        if transition != "cut" and idx > 1 and transition_duration > validated[-1]["duration_seconds"]:
+            raise ValueError(f"Scene {idx} transition duration exceeds the preceding scene.")
         media = Path(str(scene.get("visual_path") or "")).expanduser()
         if not media.is_file() or media.is_symlink():
             raise ValueError(f"Scene {idx} requires a valid local non-symlink media file.")
