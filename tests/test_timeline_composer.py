@@ -174,6 +174,18 @@ def test_preview_cut_groups_concat_and_transition_duration_validation(tmp_path):
         compose_preview(plan, tmp_path / "invalid-transition.mp4", ffmpeg="fake", runner=success_runner)
 
 
+def test_transition_cannot_exceed_preceding_scene_duration(tmp_path):
+    plan = draft(tmp_path)
+    plan["scenes"][0]["duration_seconds"] = 0.5
+    second = tmp_path / "still-2.png"
+    second.write_bytes(b"placeholder")
+    plan["scenes"].append({"scene_id": "scene-002", "duration_seconds": 3,
+        "visual_path": str(second), "subtitle_text": "", "transition_in": "fade",
+        "transition_duration_seconds": 1})
+    with pytest.raises(ValueError, match="preceding scene"):
+        compose_preview(plan, tmp_path / "invalid-transition.mp4", ffmpeg="fake", runner=success_runner)
+
+
 def test_first_scene_cannot_have_incoming_transition(tmp_path):
     plan = draft(tmp_path)
     plan["scenes"][0]["transition_in"] = "fade"
