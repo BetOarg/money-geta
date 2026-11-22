@@ -112,3 +112,37 @@ def test_timeline_visual_blocks_validate_dimensions_and_duration():
         timeline_visual_blocks([{"duration_seconds": 181}])
     with pytest.raises(ValueError):
         timeline_visual_blocks([{"duration_seconds": 5}], pixels_per_second=0)
+
+
+def test_subtitle_timing_must_fit_scene_duration():
+    from scripts.timeline_plan import update_subtitle_timing
+    timeline={"scenes":[{"duration_seconds":5,"subtitle_text":"Hola"}]}
+    result=update_subtitle_timing(timeline,0,start_seconds=1,end_seconds=4.5)
+    assert result["scenes"][0]["subtitle_start_seconds"]==1
+    assert result["scenes"][0]["subtitle_end_seconds"]==4.5
+    with pytest.raises(ValueError,match="fit inside"):
+        update_subtitle_timing(timeline,0,start_seconds=1,end_seconds=6)
+    with pytest.raises(ValueError,match="fit inside"):
+        update_subtitle_timing(timeline,0,start_seconds=4,end_seconds=2)
+
+
+def test_subtitle_timing_rejects_non_finite_values():
+    from scripts.timeline_plan import update_subtitle_timing
+    timeline={"scenes":[{"duration_seconds":5,"subtitle_text":"Hola"}]}
+    with pytest.raises(ValueError,match="finite"):
+        update_subtitle_timing(timeline,0,start_seconds=float("nan"),end_seconds=2)
+
+
+def test_scene_transition_metadata_and_validation():
+    from scripts.timeline_plan import update_scene_transition
+    timeline={"scenes":[{"duration_seconds":5,"visual_description":"Scene 1"},{"duration_seconds":4,"visual_description":"Scene 2"}]}
+    result=update_scene_transition(timeline,1,transition="fade",duration_seconds=1.25)
+    assert result["scenes"][1]["transition_in"]=="fade"
+    assert result["scenes"][1]["transition_duration_seconds"]==1.25
+    assert result["scenes"][0].get("transition_in") is None
+    with pytest.raises(ValueError,match="zero"):
+        update_scene_transition(timeline,0,transition="cut",duration_seconds=0.2)
+    with pytest.raises(ValueError,match="fit inside"):
+        update_scene_transition(timeline,0,transition="dissolve",duration_seconds=6)
+    with pytest.raises(ValueError,match="Unsupported"):
+        update_scene_transition(timeline,0,transition="wipe",duration_seconds=1)
