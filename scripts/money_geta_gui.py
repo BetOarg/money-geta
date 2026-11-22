@@ -4,7 +4,9 @@ from __future__ import annotations
 import json
 import os
 import queue
+from io import BytesIO
 import subprocess
+import shutil
 import sys
 import threading
 import uuid
@@ -1381,7 +1383,47 @@ class MoneyGetaApp:
         ttk.Label(editor, text="Subtítulos").grid(row=3, column=0, sticky="w")
         self.timeline_subtitles = tk.Text(editor, height=4, wrap="word")
         self.timeline_subtitles.grid(row=4, column=0, columnspan=2, sticky="ew", pady=3)
-        ttk.Button(editor, text="Aplicar a escena", command=self._timeline_apply_ui).grid(row=5, column=0, columnspan=2, sticky="w", pady=(5, 0))
+        subtitle_timing = ttk.Frame(editor)
+        subtitle_timing.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(2, 4))
+        ttk.Label(subtitle_timing, text="Subtítulo desde (s)").pack(side=LEFT)
+        self.timeline_subtitle_start_var = tk.StringVar(value="0")
+        ttk.Entry(subtitle_timing, textvariable=self.timeline_subtitle_start_var, width=8).pack(side=LEFT, padx=(3, 6))
+        ttk.Label(subtitle_timing, text="hasta (s)").pack(side=LEFT)
+        self.timeline_subtitle_end_var = tk.StringVar(value="")
+        ttk.Entry(subtitle_timing, textvariable=self.timeline_subtitle_end_var, width=8).pack(side=LEFT, padx=3)
+        transition_frame = ttk.Frame(editor)
+        transition_frame.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(2, 4))
+        ttk.Label(transition_frame, text="Transición entrante").pack(side=LEFT)
+        self.timeline_transition_var = tk.StringVar(value="cut")
+        ttk.Combobox(transition_frame, textvariable=self.timeline_transition_var, values=("cut", "fade", "dissolve", "slide"), state="readonly", width=10).pack(side=LEFT, padx=(3, 6))
+        ttk.Label(transition_frame, text="Duración (s)").pack(side=LEFT)
+        self.timeline_transition_duration_var = tk.StringVar(value="0")
+        ttk.Entry(transition_frame, textvariable=self.timeline_transition_duration_var, width=8).pack(side=LEFT, padx=3)
+        ttk.Button(editor, text="Aplicar a escena", command=self._timeline_apply_ui).grid(row=7, column=0, columnspan=2, sticky="w", pady=(5, 0))
+        preview_frame = ttk.LabelFrame(editor, text="Preview del recurso asignado", padding=4)
+        preview_frame.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self.timeline_preview_label = ttk.Label(preview_frame, text="Seleccioná una escena para ver su recurso local.", anchor="center")
+        self.timeline_preview_label.pack(fill="both", expand=True)
+        self.timeline_preview_caption = ttk.Label(preview_frame, text="", anchor="w")
+        self.timeline_preview_caption.pack(fill="x", pady=(3, 0))
+        self.timeline_preview_image = None
+        audio_frame = ttk.LabelFrame(editor, text="Pistas de audio · borrador local", padding=4)
+        audio_frame.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        self.timeline_audio_list = tk.Listbox(audio_frame, height=3, exportselection=False)
+        self.timeline_audio_list.pack(fill="x")
+        audio_controls = ttk.Frame(audio_frame)
+        audio_controls.pack(fill="x", pady=3)
+        ttk.Button(audio_controls, text="Agregar pista", command=self._timeline_audio_add_ui).pack(side=LEFT)
+        ttk.Button(audio_controls, text="Eliminar pista", command=self._timeline_audio_remove_ui).pack(side=LEFT, padx=4)
+        ttk.Button(audio_controls, text="Editar pista", command=self._timeline_audio_edit_ui).pack(side=LEFT, padx=4)
+        trim_frame = ttk.LabelFrame(editor, text="Recorte del video · segundos", padding=4)
+        trim_frame.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        ttk.Label(trim_frame, text="Entrada").grid(row=0, column=0, sticky="w")
+        self.timeline_trim_start_var = tk.StringVar(value="0")
+        ttk.Entry(trim_frame, textvariable=self.timeline_trim_start_var, width=10).grid(row=0, column=1, sticky="w", padx=(3, 8))
+        ttk.Label(trim_frame, text="Salida (vacío = hasta el final)").grid(row=0, column=2, sticky="w")
+        self.timeline_trim_end_var = tk.StringVar(value="")
+        ttk.Entry(trim_frame, textvariable=self.timeline_trim_end_var, width=10).grid(row=0, column=3, sticky="w", padx=(3, 8))
         controls = ttk.Frame(self.timeline)
         controls.grid(row=3, column=0, sticky="ew", pady=8)
         ttk.Button(controls, text="↑ Subir", command=lambda: self._timeline_move_ui(-1)).pack(side=LEFT)
@@ -1464,6 +1506,7 @@ class MoneyGetaApp:
             self.timeline_status_var.set("ROJO · no se pudo abrir timeline")
             return
         self._timeline_refresh_ui()
+        self._timeline_audio_refresh_ui()
         self.tabs.select(self.timeline)
         self.timeline_status_var.set(f"TIMELINE {'CARGADO' if saved else 'CREADO'} · {len(self.timeline_plan['scenes'])} escenas · render bloqueado")
 
@@ -1509,9 +1552,143 @@ class MoneyGetaApp:
             return
         scene = self.timeline_plan["scenes"][int(selection[0])]
         self.timeline_duration_var.set(str(scene.get("duration_seconds", 5)))
+        self.timeline_trim_start_var.set(str(scene.get("media_trim_start_seconds", 0)))
+        self.timeline_transition_var.set(str(scene.get("transition_in", "cut")))
+        self.timeline_transition_duration_var.set(str(scene.get("transition_duration_seconds", 0)))
+        self.timeline_subtitle_start_var.set(str(scene.get("subtitle_start_seconds", 0)))
+        self.timeline_subtitle_end_var.set("" if scene.get("subtitle_end_seconds") is None else str(scene.get("subtitle_end_seconds")))
+        self.timeline_trim_end_var.set("" if scene.get("media_trim_end_seconds") is None else str(scene.get("media_trim_end_seconds")))
         for widget, key in ((self.timeline_narration, "narration"), (self.timeline_subtitles, "subtitle_text")):
             widget.delete("1.0", END)
             widget.insert("1.0", scene.get(key, ""))
+        self._timeline_update_preview_ui(scene)
+        self._timeline_audio_refresh_ui()
+
+    def _timeline_update_preview_ui(self, scene):
+        from scripts.timeline_preview import resolve_scene_preview_path
+        path, kind = resolve_scene_preview_path(scene.get("visual_path", ""))
+        self.timeline_preview_image = None
+        if path is None:
+            self.timeline_preview_label.configure(image="", text=kind)
+            self.timeline_preview_caption.configure(text="")
+            return
+        try:
+            from PIL import Image, ImageTk
+            if kind == "image":
+                with Image.open(path) as source:
+                    frame = source.copy()
+            else:
+                ffmpeg = shutil.which("ffmpeg")
+                if not ffmpeg:
+                    self.timeline_preview_label.configure(image="", text="FFmpeg no disponible; no se puede extraer fotograma.")
+                    self.timeline_preview_caption.configure(text=str(path))
+                    return
+                result = subprocess.run(
+                    [ffmpeg, "-hide_banner", "-loglevel", "error", "-ss", str(max(0.0, float(scene.get("media_trim_start_seconds", 0.5)))), "-i", str(path),
+                     "-frames:v", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "-"],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5, check=True,
+                )
+                frame = Image.open(BytesIO(result.stdout))
+                frame.load()
+            frame.thumbnail((320, 220))
+            photo = ImageTk.PhotoImage(frame)
+            self.timeline_preview_image = photo
+            self.timeline_preview_label.configure(image=photo, text="")
+            self.timeline_preview_caption.configure(text=f"{path.name} · {kind} · vista previa local")
+        except ImportError:
+            self.timeline_preview_label.configure(image="", text="Instalá Pillow para ver miniaturas.")
+            self.timeline_preview_caption.configure(text=str(path))
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            self.timeline_preview_label.configure(image="", text=f"Preview no disponible: {exc}")
+            self.timeline_preview_caption.configure(text=str(path))
+
+    def _timeline_audio_refresh_ui(self):
+        box = getattr(self, "timeline_audio_list", None)
+        if box is None:
+            return
+        box.delete(0, END)
+        for row in getattr(self, "timeline_plan", {}).get("audio_tracks", []):
+            source = Path(row.get("source_path", "")).name or "sin fuente"
+            box.insert(END, f"{row.get('name','Audio')} · {row.get('start_seconds',0):.2f}s · {row.get('duration_seconds',0):.2f}s · {source}")
+
+    def _timeline_audio_add_ui(self):
+        from scripts.timeline_audio import update_audio_track
+        name = simpledialog.askstring("Agregar pista de audio", "Nombre (música, narración, efectos):", parent=self.root)
+        if not name:
+            return
+        path = filedialog.askopenfilename(parent=self.root, title="Seleccionar archivo de audio local", filetypes=[("Audio", "*.wav *.mp3 *.ogg *.m4a *.aac *.flac"), ("Todos", "*.*")])
+        if not path:
+            messagebox.showinfo("Pista de audio", "La fuente local es necesaria para agregar una pista.")
+            return
+        start = simpledialog.askfloat("Pista de audio", "Inicio en segundos:", parent=self.root, minvalue=0)
+        if start is None:
+            return
+        duration = simpledialog.askfloat("Pista de audio", "Duración en segundos:", parent=self.root, minvalue=0.01)
+        if duration is None:
+            return
+        volume = simpledialog.askfloat("Pista de audio", "Volumen (0 a 2; 1 = normal):", parent=self.root, minvalue=0, maxvalue=2)
+        if volume is None:
+            return
+        fade_in = simpledialog.askfloat("Pista de audio", "Fade-in (segundos):", parent=self.root, minvalue=0)
+        if fade_in is None:
+            return
+        fade_out = simpledialog.askfloat("Pista de audio", "Fade-out (segundos):", parent=self.root, minvalue=0)
+        if fade_out is None:
+            return
+        try:
+            project_root = Path(self.timeline_plan.get("project_root", "")) if self.timeline_plan.get("project_root") else None
+            if project_root is None:
+                messagebox.showerror("Pista de audio", "No se pudo determinar la carpeta raíz del proyecto; no se acepta audio fuera de un proyecto.")
+                return
+            draft = {"name": name, "source_path": path, "start_seconds": start, "duration_seconds": duration,
+                     "volume": volume, "fade_in_seconds": fade_in, "fade_out_seconds": fade_out}
+            self.timeline_plan = update_audio_track(self.timeline_plan, len(self.timeline_plan.get("audio_tracks", [])), draft, project_root=project_root)
+            self._timeline_audio_refresh_ui()
+            self.timeline_status_var.set("PENDIENTE · pista de audio agregada al borrador; aún no se mezcla ni renderiza")
+        except (ValueError, TypeError) as exc:
+            messagebox.showerror("Pista de audio inválida", str(exc))
+
+    def _timeline_audio_remove_ui(self):
+        from scripts.timeline_audio import remove_audio_track
+        selection = self.timeline_audio_list.curselection()
+        if not selection:
+            messagebox.showinfo("Pista de audio", "Seleccioná una pista para eliminar.")
+            return
+        try:
+            self.timeline_plan = remove_audio_track(self.timeline_plan, int(selection[0]))
+            self._timeline_audio_refresh_ui()
+        except ValueError as exc:
+            messagebox.showerror("Pista de audio", str(exc))
+
+    def _timeline_audio_edit_ui(self):
+        selection = self.timeline_audio_list.curselection()
+        if not selection:
+            messagebox.showinfo("Pista de audio", "Seleccioná una pista para editar.")
+            return
+        from scripts.timeline_audio import update_audio_track
+        index = int(selection[0])
+        current = self.timeline_plan.get("audio_tracks", [])[index]
+        try:
+            start = simpledialog.askfloat("Editar audio", "Inicio en segundos:", initialvalue=current.get("start_seconds", 0), minvalue=0, parent=self.root)
+            if start is None:
+                return
+            duration = simpledialog.askfloat("Editar audio", "Duración en segundos:", initialvalue=current.get("duration_seconds", 1), minvalue=0.01, parent=self.root)
+            if duration is None:
+                return
+            volume = simpledialog.askfloat("Editar audio", "Volumen (0 a 2):", initialvalue=current.get("volume", 1), minvalue=0, maxvalue=2, parent=self.root)
+            if volume is None:
+                return
+            fade_in = simpledialog.askfloat("Editar audio", "Fade-in:", initialvalue=current.get("fade_in_seconds", 0), minvalue=0, parent=self.root)
+            if fade_in is None:
+                return
+            fade_out = simpledialog.askfloat("Editar audio", "Fade-out:", initialvalue=current.get("fade_out_seconds", 0), minvalue=0, parent=self.root)
+            if fade_out is None:
+                return
+            updated = dict(current, start_seconds=start, duration_seconds=duration, volume=volume, fade_in_seconds=fade_in, fade_out_seconds=fade_out)
+            self.timeline_plan = update_audio_track(self.timeline_plan, index, updated, project_root=Path(self.timeline_plan["project_root"]) if self.timeline_plan.get("project_root") else None)
+            self._timeline_audio_refresh_ui()
+        except (ValueError, TypeError) as exc:
+            messagebox.showerror("Pista de audio inválida", str(exc))
 
     def _timeline_apply_ui(self):
         selection = self.timeline_tree.selection()
@@ -1524,7 +1701,22 @@ class MoneyGetaApp:
             self.timeline_plan = update_scene(self.timeline_plan, index,
                 duration_seconds=float(self.timeline_duration_var.get()),
                 narration=self.timeline_narration.get("1.0", "end-1c"),
-                subtitle_text=self.timeline_subtitles.get("1.0", "end-1c"))
+                subtitle_text=self.timeline_subtitles.get("1.0", "end-1c"),
+                trim_start_seconds=float(self.timeline_trim_start_var.get() or 0),
+                trim_end_seconds=(float(self.timeline_trim_end_var.get()) if self.timeline_trim_end_var.get().strip() else None))
+            from scripts.timeline_plan import update_scene_transition
+            self.timeline_plan = update_scene_transition(self.timeline_plan, index, transition=self.timeline_transition_var.get(), duration_seconds=float(self.timeline_transition_duration_var.get() or 0))
+            subtitle_end = self.timeline_subtitle_end_var.get().strip()
+            if subtitle_end:
+                from scripts.timeline_plan import update_subtitle_timing
+                self.timeline_plan = update_subtitle_timing(self.timeline_plan, index, start_seconds=float(self.timeline_subtitle_start_var.get() or 0), end_seconds=float(subtitle_end))
+            else:
+                scene_row = dict(self.timeline_plan["scenes"][index])
+                scene_row.pop("subtitle_start_seconds", None)
+                scene_row.pop("subtitle_end_seconds", None)
+                rows = list(self.timeline_plan["scenes"])
+                rows[index] = scene_row
+                self.timeline_plan["scenes"] = rows
         except (ValueError, TypeError) as exc:
             messagebox.showerror("Datos de escena inválidos", str(exc))
             return
@@ -1545,6 +1737,42 @@ class MoneyGetaApp:
             return
         new_index = max(0, min(index + offset, len(self.timeline_plan["scenes"]) - 1))
         self._timeline_refresh_ui(new_index)
+
+    def _timeline_render_preview_ui(self):
+        if self.timeline_preview_busy:
+            messagebox.showinfo("Preview en curso", "Espera a que termine la preview actual.")
+            return
+        timeline = getattr(self, "timeline_plan", None)
+        if not isinstance(timeline, dict) or timeline.get("plan_type") != "editable_timeline":
+            messagebox.showwarning("Timeline requerido", "Primero abre un plan visual y crea/carga su timeline.")
+            return
+        destination = filedialog.asksaveasfilename(
+            title="Guardar preview local",
+            defaultextension=".mp4",
+            filetypes=[("Video MP4", "*.mp4")],
+            initialfile="timeline-preview.mp4",
+        )
+        if not destination:
+            return
+        snapshot = json.loads(json.dumps(timeline))
+        self.timeline_preview_busy = True
+        self.timeline_preview_button.configure(state="disabled")
+        self.timeline_status_var.set("GENERANDO PREVIEW · solo local · no es render final")
+        def worker():
+            try:
+                from scripts.timeline_composer import compose_preview
+                from scripts.timeline_preview_qc import review_preview
+                result = compose_preview(snapshot, Path(destination))
+                report_path = Path(destination).with_name(Path(destination).stem + "-preview-qc.json")
+                suffix = 1
+                while report_path.exists():
+                    report_path = Path(destination).with_name(Path(destination).stem + f"-preview-qc-{suffix}.json")
+                    suffix += 1
+                qc = review_preview(result, snapshot, report_path=report_path)
+                self.events.put(("timeline_preview_done", {"path": str(result), "qc": qc}))
+            except Exception as exc:
+                self.events.put(("timeline_preview_error", f"{type(exc).__name__}: {exc}"))
+        threading.Thread(target=worker, daemon=True).start()
 
     def scene_plan_save_timeline_ui(self):
         if not getattr(self, "timeline_plan", None):
@@ -1833,6 +2061,21 @@ class MoneyGetaApp:
                     self.refresh_campaigns()
                     self.refresh_research_options()
                     self.refresh_qc()
+                elif kind == "timeline_preview_done":
+                    self.timeline_preview_busy = False
+                    self.timeline_preview_button.configure(state="normal")
+                    preview_path = value.get("path", "")
+                    qc = value.get("qc", {})
+                    qc_status = qc.get("status", "REVIEW_REQUIRED")
+                    self.timeline_status_var.set(f"PREVIEW VERDE · QC {qc_status} · no autorizada para publicación")
+                    self._append(f"TIMELINE PREVIEW: VERDE · {preview_path} · QC {qc_status} · {qc.get('report_path', '')}")
+                    messagebox.showinfo("Preview completada", f"Preview MP4 local:\n{preview_path}\n\nQC técnico: {qc_status}\nReporte: {qc.get('report_path', '')}\n\nLas observaciones perceptuales no son defectos automáticos.")
+                elif kind == "timeline_preview_error":
+                    self.timeline_preview_busy = False
+                    self.timeline_preview_button.configure(state="normal")
+                    self.timeline_status_var.set("PREVIEW ROJO · " + value[:160])
+                    self._append("TIMELINE PREVIEW ERROR: " + value)
+                    messagebox.showerror("Preview fallida", value)
                 elif kind == "image_search_done":
                     self.busy = False
                     self.process_btn.configure(state="normal")
