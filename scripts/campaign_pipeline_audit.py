@@ -62,30 +62,44 @@ def audit_campaign(project_id: str, campaign_id: str, *, root: Path | None = Non
         event_type: sum(1 for row in events if row.get("event_type") == event_type)
         for event_type in sorted({row.get("event_type") for row in events if isinstance(row.get("event_type"), str)})
     }
-    claims_created = sum(1 for row in claim_events if row.get("event_type") == "claim_created")
-    claims_assessed = sum(1 for row in claim_events if row.get("event_type") == "claim_assessed")
+    claim_ids = {row.get("claim_id") for row in claim_events if row.get("event_type") == "claim_created"}
+    latest_claim_status: dict[str, str] = {}
+    for row in claim_events:
+        if row.get("event_type") == "claim_assessed" and row.get("claim_id") in claim_ids:
+            latest_claim_status[row["claim_id"]] = str(row.get("status", "unverified"))
+    claims_created = len(claim_ids)
+    claims_assessed = len(latest_claim_status)
+    claim_status_counts = {
+        status: sum(1 for value in latest_claim_status.values() if value == status)
+        for status in sorted(set(latest_claim_status.values()))
+    }
     scripts_registered = sum(1 for row in script_events if row.get("event_type") == "script_registered")
+    script_decisions = sum(1 for row in script_events if row.get("event_type") == "script_decision" and row.get("decision") in {"approved", "rejected"})
     scripts_approved = sum(1 for row in script_events if row.get("event_type") == "script_decision" and row.get("decision") == "approved")
+    media_decisions = sum(1 for row in media_events if row.get("decision") in {"approved", "rejected"})
     media_approved = sum(1 for row in media_events if row.get("decision") == "approved")
     artifact_registered = sum(1 for row in artifact_events if row.get("event_type") == "artifact_registered")
+    artifact_decisions = sum(1 for row in artifact_events if row.get("event_type") in {"artifact_approved", "artifact_rejected"})
     artifact_approved = sum(1 for row in artifact_events if row.get("event_type") == "artifact_approved")
+    technical_qc_events = sum(1 for row in artifact_events if row.get("event_type") == "artifact_qc")
     artifact_qc = sum(1 for row in artifact_events if row.get("event_type") == "artifact_qc" and row.get("passed") is True)
+    central_qc_events = sum(1 for row in artifact_events if row.get("event_type") == "artifact_central_qc")
     central_qc_ready = sum(1 for row in artifact_events if row.get("event_type") == "artifact_central_qc" and row.get("status") == "READY_FOR_HUMAN_REVIEW")
     stages = [
         {"stage": "campaign_gate", "status": "complete" if gate_passed else "blocked", "notes": gate_problems},
         {"stage": "research_reports", "status": "complete" if _count_files(folder / "research", "*.json") else "pending", "count": _count_files(folder / "research", "*.json")},
         {"stage": "captured_sources", "status": "complete" if source_events and not source_error else "blocked" if source_error else "pending", "count": len(source_events), "error": source_error},
-        {"stage": "claim_review", "status": "complete" if claims_created and claims_assessed >= claims_created and not claim_error else "blocked" if claim_error else "pending", "created": claims_created, "assessed": claims_assessed, "events": event_counts(claim_events), "error": claim_error},
+        {"stage": "claim_review", "status": "complete" if claims_created and claims_assessed == claims_created and not claim_error else "blocked" if claim_error else "pending", "created": claims_created, "assessed": claims_assessed, "latest_status_counts": claim_status_counts, "events": event_counts(claim_events), "error": claim_error},
         {"stage": "script_drafts", "status": "complete" if _count_files(folder / "drafts", "*.json") else "pending", "count": _count_files(folder / "drafts", "*.json")},
-        {"stage": "script_approval", "status": "complete" if scripts_registered and scripts_approved else "pending", "registered": scripts_registered, "approved_decisions": scripts_approved, "events": event_counts(script_events), "error": script_error},
+        {"stage": "script_review", "status": "complete" if script_decisions else "pending", "registered": scripts_registered, "decision_records": script_decisions, "approved_decisions": scripts_approved, "events": event_counts(script_events), "error": script_error},
         {"stage": "media_candidates", "status": "complete" if candidates and not candidate_error else "blocked" if candidate_error else "pending", "count": len(candidates), "error": candidate_error},
-        {"stage": "media_rights_review", "status": "complete" if media_approved else "pending", "approved_decisions": media_approved, "events": event_counts(media_events), "error": media_error},
+        {"stage": "media_rights_review", "status": "complete" if media_decisions else "pending", "decision_records": media_decisions, "approved_decisions": media_approved, "events": event_counts(media_events), "error": media_error},
         {"stage": "visual_plans", "status": "complete" if _count_files(folder / "visual_plans", "*.json") else "pending", "count": _count_files(folder / "visual_plans", "*.json")},
         {"stage": "editable_timelines", "status": "complete" if _count_files(folder / "timelines", "timeline_*.json") else "pending", "count": _count_files(folder / "timelines", "timeline_*.json")},
         {"stage": "final_render_registration", "status": "complete" if artifact_registered else "pending", "registered": artifact_registered},
-        {"stage": "technical_qc", "status": "complete" if artifact_qc else "pending", "passed_records": artifact_qc},
-        {"stage": "central_qc", "status": "complete" if central_qc_ready else "pending", "ready_records": central_qc_ready},
-        {"stage": "human_artifact_approval", "status": "complete" if artifact_approved else "pending", "approved_decisions": artifact_approved},
+        {"stage": "technical_qc", "status": "complete" if technical_qc_events else "pending", "qc_records": technical_qc_events, "passed_records": artifact_qc},
+        {"stage": "central_qc", "status": "complete" if central_qc_events else "pending", "records": central_qc_events, "ready_records": central_qc_ready},
+        {"stage": "human_artifact_review", "status": "complete" if artifact_decisions else "pending", "decision_records": artifact_decisions, "approved_decisions": artifact_approved},
     ]
     completed = sum(1 for stage in stages if stage["status"] == "complete")
     return {
