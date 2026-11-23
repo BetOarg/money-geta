@@ -49,3 +49,38 @@ def test_campaign_audit_cli_outputs_json(tmp_path, capsys, monkeypatch):
     assert '"campaign_id": "test-campaign"' in output
     assert '"campaign_gate_passed": false' in output
     assert '"stage": "editable_timelines"' in output
+
+def test_claim_review_requires_latest_assessment_for_each_claim(tmp_path):
+    folder = _campaign(tmp_path)
+    (folder / "claim_ledger.jsonl").write_text(
+        '{"schema_version":1,"event_type":"claim_created","claim_id":"a"}\n'
+        '{"schema_version":1,"event_type":"claim_assessed","claim_id":"a","status":"supported"}\n'
+        '{"schema_version":1,"event_type":"claim_created","claim_id":"b"}\n'
+        '{"schema_version":1,"event_type":"claim_assessed","claim_id":"a","status":"unverified"}\n',
+        encoding="utf-8",
+    )
+    report = audit_campaign("test-project", "test-campaign", root=tmp_path)
+    stage = next(item for item in report["stages"] if item["stage"] == "claim_review")
+    assert stage["status"] == "pending"
+    assert stage["assessed"] == 1
+    assert stage["latest_status_counts"] == {"unverified": 1}
+
+
+def test_rejected_review_is_a_recorded_checkpoint_not_approval(tmp_path):
+    folder = _campaign(tmp_path)
+    (folder / "script_ledger.jsonl").write_text(
+        '{"schema_version":1,"event_type":"script_registered","script_id":"s"}\n'
+        '{"schema_version":1,"event_type":"script_decision","script_id":"s","decision":"rejected"}\n',
+        encoding="utf-8",
+    )
+    (folder / "media_review_ledger.jsonl").write_text(
+        '{"schema_version":1,"event_type":"media_review","candidate_id":"c","decision":"rejected"}\n',
+        encoding="utf-8",
+    )
+    report = audit_campaign("test-project", "test-campaign", root=tmp_path)
+    script_stage = next(item for item in report["stages"] if item["stage"] == "script_review")
+    media_stage = next(item for item in report["stages"] if item["stage"] == "media_rights_review")
+    assert script_stage["status"] == "complete"
+    assert script_stage["approved_decisions"] == 0
+    assert media_stage["status"] == "complete"
+    assert media_stage["approved_decisions"] == 0
