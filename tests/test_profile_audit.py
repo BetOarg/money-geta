@@ -43,3 +43,11 @@ def test_profiles_audit_cli_is_read_only_and_reports_gaps(capsys):
     assert '"audit_status": "partial"' in output
     assert '"profile": "education"' in output
     assert '"gaps": [' in output
+
+
+def test_moment_detection_is_not_claimed_for_non_gaming_profiles():
+    result = audit_profiles([{
+        "id": "viral", "status": "planned", "capabilities": ["moment-detection"]
+    }])[0]
+    assert result["capabilities"][0]["status"] == "planned"
+    assert result["gaps"] == ["moment-detection"]
