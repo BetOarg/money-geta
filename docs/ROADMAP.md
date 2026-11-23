@@ -12,7 +12,7 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [x] Añadir CLI para listar e inspeccionar perfiles.
 - [x] Auditar metadata de licencia/actividad de los 20 proyectos candidatos.
 - [x] Documentar reglas de distribución Buffer/X/YouTube/Instagram/TikTok.
-- [ ] Verificar CI del último HEAD y revisar todos los cambios antes de marcar la fase cerrada.
+- [x] Verificar CI del último HEAD y revisar todos los cambios antes de marcar la fase cerrada (run post-merge 44968386754, 6/6 jobs verdes; merge SHA `f6a42d01d52a7b6662f1e52a1bc1dde19bf250b5`).
 
 ## Fase 1 — Modelo operativo y proyectos
 - [x] Añadir modelo versionado de proyecto/campaña común independiente del perfil.
@@ -39,6 +39,7 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 
 ## Fase 3 — Perfiles temáticos
 - [ ] Completar Gaming general, manteniendo GTA VI como subperfil.
+- [x] Añadir auditoría declarativa de capacidades y gaps de perfiles (no certifica readiness ni E2E).
 - [ ] Crear subperfiles Minecraft, Fortnite, Roblox y otros juegos sin duplicar motores.
 - [ ] Implementar Viral con verificación de afirmaciones y derechos.
 - [ ] Implementar Noticias con fuentes primarias, corroboración, timestamps y correcciones.
