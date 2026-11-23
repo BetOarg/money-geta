@@ -617,6 +617,7 @@ def main(argv: list[str] | None = None) -> int:
     profiles = sub.add_parser("profiles", help="list or inspect declarative content profiles")
     profile_actions = profiles.add_subparsers(dest="profile_action", required=True)
     profile_actions.add_parser("list", help="list available content profiles")
+    profile_actions.add_parser("audit", help="report capability implementation gaps for every profile")
     profile_show = profile_actions.add_parser("show", help="show one profile's capabilities and rules")
     profile_show.add_argument("profile_id")
     projects = sub.add_parser("projects", help="create, list or inspect editorial projects")
@@ -804,6 +805,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "profiles":
         from scripts.profile_registry import get_profile, list_profiles
         try:
+            if args.profile_action == "audit":
+                from scripts.profile_audit import audit_profiles
+                report = audit_profiles(list_profiles())
+                print(json.dumps(report, ensure_ascii=False, indent=2))
+                return 0
             if args.profile_action == "list":
                 for profile in list_profiles():
                     print(f"{profile['id']} | {profile['name']} | {profile['status']}")
