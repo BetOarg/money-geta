@@ -39,3 +39,13 @@ def test_audit_reports_malformed_ledger_as_blocked(tmp_path):
     source_stage = next(item for item in report["stages"] if item["stage"] == "captured_sources")
     assert source_stage["status"] == "blocked"
     assert "malformed" in source_stage["error"]
+
+def test_campaign_audit_cli_outputs_json(tmp_path, capsys, monkeypatch):
+    folder = _campaign(tmp_path)
+    monkeypatch.setenv("MONEY_GETA_PROJECTS_DIR", str(tmp_path))
+    from scripts.money_geta import main
+    assert main(["campaigns", "audit", "--project", "test-project", "test-campaign"]) == 0
+    output = capsys.readouterr().out
+    assert '"campaign_id": "test-campaign"' in output
+    assert '"campaign_gate_passed": false' in output
+    assert '"stage": "editable_timelines"' in output
