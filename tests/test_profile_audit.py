@@ -51,3 +51,10 @@ def test_moment_detection_is_not_claimed_for_non_gaming_profiles():
     }])[0]
     assert result["capabilities"][0]["status"] == "planned"
     assert result["gaps"] == ["moment-detection"]
+
+
+def test_empty_capability_list_never_certifies_ready():
+    result = audit_profiles([{
+        "id": "empty", "status": "ready", "capabilities": []
+    }])[0]
+    assert result["audit_status"] == "planned"
