@@ -14,6 +14,6 @@ Este comando es una auditoría declarativa, de solo lectura. Lista cada capacida
 - `partial`: existe implementación o adaptador, pero no está verificado end-to-end para todos los perfiles/escenarios.
 - `planned`: la capacidad está en la lista declarada pero todavía no hay una base implementada que permita considerarla.
 - `unknown`: capacidad no reconocida en el inventario del auditor; se reporta como gap y nunca se presume soportada.
-- GTA VI `moment-detection` y `clip-editing` quedan limitados a ese subperfil de Gaming. El auditor no declara que estos módulos funcionen para Minecraft, Fortnite, Roblox u otros juegos.
+- GTA VI `moment-detection` y `clip-editing` quedan limitados a ese subperfil de Gaming. El auditor no declara que estos módulos funcionen para Minecraft, Fortnite, Roblox u otros juegos. La detección de momentos se marca como pendiente para Viral, Noticias y Educación hasta que exista un módulo y pruebas por perfil.
 
 El inventario de capacidad es intencionalmente conservador y debe actualizarse junto con pruebas/evidencia de implementación. El reporte no sustituye pruebas locales, verificación factual, derechos, QC ni aprobación humana.
