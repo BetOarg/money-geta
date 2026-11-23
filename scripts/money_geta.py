@@ -641,6 +641,9 @@ def main(argv: list[str] | None = None) -> int:
     campaign_show = campaign_actions.add_parser("show", help="inspect a campaign manifest")
     campaign_show.add_argument("--project", required=True)
     campaign_show.add_argument("campaign_id")
+    campaign_audit = campaign_actions.add_parser("audit", help="report local pipeline checkpoints for a campaign")
+    campaign_audit.add_argument("--project", required=True)
+    campaign_audit.add_argument("campaign_id")
     campaign_update = campaign_actions.add_parser("update", help="add sources, rights evidence, disclosures and explicit attestations")
     campaign_update.add_argument("--project", required=True)
     campaign_update.add_argument("campaign_id")
@@ -972,6 +975,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "campaigns":
         from scripts.campaign_registry import create_campaign, get_campaign, list_campaigns
         try:
+            if args.campaign_action == "audit":
+                from scripts.campaign_pipeline_audit import audit_campaign
+                report = audit_campaign(args.project, args.campaign_id)
+                print(json.dumps(report, ensure_ascii=False, indent=2))
+                return 0
             if args.campaign_action == "create":
                 path = create_campaign(args.project, args.name, args.platform)
                 print(f"CAMPAIGN: {path}")
