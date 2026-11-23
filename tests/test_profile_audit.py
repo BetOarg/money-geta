@@ -1,6 +1,4 @@
-import json
-
-from scripts.profile_audit import audit_profiles, CAPABILITY_STATUS
+from scripts.profile_audit import audit_profiles
 from scripts.profile_registry import list_profiles
 
 
@@ -35,3 +33,13 @@ def test_gta_vi_specific_capabilities_are_marked_partial_for_gaming():
     }])[0]
     assert all(item["status"] == "partial" for item in result["capabilities"])
     assert all("GTA VI" in item["note"] for item in result["capabilities"])
+
+
+def test_profiles_audit_cli_is_read_only_and_reports_gaps(capsys):
+    from scripts.money_geta import main
+    assert main(["profiles", "audit"]) == 0
+    output = capsys.readouterr().out
+    assert '"profile": "gaming"' in output
+    assert '"audit_status": "partial"' in output
+    assert '"profile": "education"' in output
+    assert '"gaps": [' in output
