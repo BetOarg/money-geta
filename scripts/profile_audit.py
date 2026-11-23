@@ -25,6 +25,12 @@ CAPABILITY_STATUS: dict[str, str] = {
 PROFILE_LIMITS = {
     "gaming": {"moment-detection", "clip-editing"},
 }
+PROFILE_CAPABILITY_OVERRIDES = {
+    # The only currently integrated moment-analysis module is GTA VI-specific.
+    "viral": {"moment-detection": "planned"},
+    "news": {"moment-detection": "planned"},
+    "education": {"moment-detection": "planned"},
+}
 
 
 def audit_profiles(profiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -36,12 +42,16 @@ def audit_profiles(profiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
         details = []
         unknown = []
         for capability in declared:
-            status = CAPABILITY_STATUS.get(capability, "unknown")
+            status = PROFILE_CAPABILITY_OVERRIDES.get(profile_id, {}).get(
+                capability, CAPABILITY_STATUS.get(capability, "unknown")
+            )
             if status == "unknown":
                 unknown.append(capability)
             if profile_id in PROFILE_LIMITS and capability in PROFILE_LIMITS[profile_id]:
                 status = "partial"
                 note = "disponible solo para subperfil GTA VI; no generalizado a todos los juegos"
+            elif status == "planned" and capability == "moment-detection":
+                note = "no implementado para este perfil"
             else:
                 note = ""
             details.append({"capability": capability, "status": status, "note": note})
