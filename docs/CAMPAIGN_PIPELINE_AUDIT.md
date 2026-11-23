@@ -10,7 +10,7 @@ Reporta checkpoints locales de investigación, fuentes, claims, guion, revisión
 
 ## Interpretación
 
-- `complete`: checkpoint detectado por presencia/estado local; no implica frescura, integridad ni aprobación actual.
+- `complete`: checkpoint detectado por presencia/estado local; no implica frescura, integridad ni aprobación actual. Una revisión registrada (incluso rechazada) completa el checkpoint de revisión, pero no se cuenta como aprobación.
 - `pending`: aún no se detecta el checkpoint.
 - `blocked`: el gate de campaña no pasa o un ledger no puede leerse con seguridad.
 
