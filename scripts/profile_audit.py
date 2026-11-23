@@ -56,7 +56,7 @@ def audit_profiles(profiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 note = ""
             details.append({"capability": capability, "status": status, "note": note})
         unsupported = [item["capability"] for item in details if item["status"] in {"planned", "unknown"}]
-        overall = "ready" if profile.get("status") == "ready" and not unsupported and all(
+        overall = "ready" if profile.get("status") == "ready" and bool(declared) and not unsupported and all(
             item["status"] == "available" for item in details
         ) else "partial" if any(item["status"] == "partial" for item in details) else "planned"
         report.append({
