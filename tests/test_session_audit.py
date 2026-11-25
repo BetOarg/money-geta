@@ -65,3 +65,44 @@ def test_sessions_audit_cli_prints_json_and_exit_status(tmp_path, monkeypatch, c
     captured = capsys.readouterr()
     assert '"status": "interrupted_or_active"' in captured.out
     assert "Read-only audit" in captured.out
+
+
+@pytest.mark.parametrize("schema_version", [2, 0, "1", True])
+def test_audit_blocks_unsupported_session_schema(tmp_path, schema_version):
+    folder = tmp_path / "future"
+    folder.mkdir()
+    (folder / "money-geta.json").write_text(
+        json.dumps({"schema_version": schema_version, "stage": "created"}),
+        encoding="utf-8",
+    )
+    result = audit_sessions(tmp_path)
+    assert result["sessions"][0]["status"] == "blocked"
+    assert "schema_version" in result["sessions"][0]["reason"]
+
+
+def test_audit_accepts_legacy_manifest_without_schema_version(tmp_path):
+    folder = tmp_path / "legacy"
+    folder.mkdir()
+    (folder / "money-geta.json").write_text(
+        json.dumps({"stage": "recorded"}),
+        encoding="utf-8",
+    )
+    result = audit_sessions(tmp_path)
+    assert result["sessions"][0]["status"] == "completed_stage"
+
+
+@pytest.mark.parametrize("limit", [0, -1, 501, True])
+def test_audit_rejects_invalid_limit(tmp_path, limit):
+    with pytest.raises(ValueError, match="between 1 and 500"):
+        audit_sessions(tmp_path, limit=limit)
+
+
+def test_audit_blocks_invalid_stage_type(tmp_path):
+    folder = tmp_path / "invalid-stage"
+    folder.mkdir()
+    (folder / "money-geta.json").write_text(
+        json.dumps({"schema_version": 1, "stage": ["rendering"]}),
+        encoding="utf-8",
+    )
+    result = audit_sessions(tmp_path)
+    assert result["sessions"][0]["status"] == "blocked"
