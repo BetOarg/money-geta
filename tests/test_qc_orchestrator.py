@@ -91,3 +91,56 @@ def test_subtitle_source_hash_is_checked(tmp_path):
     srt.write_text("modified caption")
     with pytest.raises(ValueError, match="Subtitle QC hash"):
         evaluate(video, technical_report=technical, perceptual_report=perceptual, subtitle_report=report)
+
+
+def test_malformed_technical_report_fails_closed(tmp_path):
+    video, technical, perceptual = fixture(tmp_path)
+    video_report(technical, video, {"schema_version": 1, "passed": "yes", "problems": []})
+    with pytest.raises(ValueError, match="passed field must be boolean"):
+        evaluate(video, technical_report=technical, perceptual_report=perceptual)
+
+
+def test_malformed_technical_problems_fails_closed(tmp_path):
+    video, technical, perceptual = fixture(tmp_path)
+    video_report(technical, video, {"schema_version": 1, "passed": True, "problems": "none"})
+    with pytest.raises(ValueError, match="problems must be a list"):
+        evaluate(video, technical_report=technical, perceptual_report=perceptual)
+
+
+def test_malformed_subtitle_report_fails_closed(tmp_path):
+    video, technical, perceptual = fixture(tmp_path)
+    srt = tmp_path / "captions.srt"
+    srt.write_text("caption")
+    report = tmp_path / "subtitles.json"
+    subtitle_report(report, srt, {"schema_version": 1, "passed": 1, "cue_count": 1, "problems": []})
+    with pytest.raises(ValueError, match="passed field must be boolean"):
+        evaluate(video, technical_report=technical, perceptual_report=perceptual, subtitle_report=report)
+
+
+def test_malformed_perceptual_observations_fail_closed(tmp_path):
+    video, technical, perceptual = fixture(tmp_path)
+    video_report(perceptual, video, {"schema_version": 1, "observations": []})
+    with pytest.raises(ValueError, match="observations must be a JSON object"):
+        evaluate(video, technical_report=technical, perceptual_report=perceptual)
+
+
+def test_qc_report_symlink_is_rejected(tmp_path):
+    video, technical, perceptual = fixture(tmp_path)
+    alias = tmp_path / "technical-link.json"
+    try:
+        alias.symlink_to(technical)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+    with pytest.raises(ValueError, match="symlink is blocked"):
+        evaluate(video, technical_report=alias, perceptual_report=perceptual)
+
+
+def test_artifact_symlink_is_rejected(tmp_path):
+    video, technical, perceptual = fixture(tmp_path)
+    alias = tmp_path / "video-link.mp4"
+    try:
+        alias.symlink_to(video)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+    with pytest.raises(ValueError, match="symlink is blocked"):
+        evaluate(alias, technical_report=technical, perceptual_report=perceptual)
