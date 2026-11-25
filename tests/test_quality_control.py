@@ -105,8 +105,8 @@ def test_signal_scan_detects_clipped_audio_samples(tmp_path, monkeypatch):
     def fake_run(command, **kwargs):
         assert "astats=metadata=1:reset=0" in command
         return subprocess.CompletedProcess(command, 0, "", (
-            "Channel: 1\\nNumber of samples clipped: 12\\n"
-            "Overall\\nNumber of samples clipped: 12\\n"
+            "Channel: 1\nNumber of samples clipped: 12\n"
+            "Overall\nNumber of samples clipped: 12\n"
         ))
     monkeypatch.setattr(qc.subprocess, "run", fake_run)
     result = qc.scan_signals(source, ffmpeg="ffmpeg", detect_clipping=True)
@@ -123,7 +123,7 @@ def test_signal_scan_reports_zero_clipping(tmp_path, monkeypatch):
     monkeypatch.setattr(
         qc.subprocess, "run",
         lambda command, **kwargs: subprocess.CompletedProcess(
-            command, 0, "", "Number of samples clipped: 0\\n"
+            command, 0, "", "Number of samples clipped: 0\n"
         ),
     )
     result = qc.scan_signals(source, ffmpeg="ffmpeg", detect_clipping=True)
