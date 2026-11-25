@@ -119,7 +119,7 @@ def build_script_prompt(campaign: dict[str, Any], profile: dict[str, Any],
             "Use only the captured source excerpts and explicitly supported claim ledger. "
             "Do not invent facts, numbers, quotes, attribution, popularity, or metrics. "
             "Keep opinions clearly framed as commentary. Do not imply reuse rights from research. "
-            "For every profile, each entry in the claims array is factual and must exactly match a supported claim-ledger record and its evidence IDs. " 
+            "For every profile, include every factual assertion in the claims array; each entry must exactly match a supported claim-ledger record and its evidence IDs. " 
             "Leave claims empty when the script contains no factual claims; news and education require factual claims to be explicitly listed. "
             "Output only valid JSON matching the supplied schema; no Markdown fences or explanation."
         )},
