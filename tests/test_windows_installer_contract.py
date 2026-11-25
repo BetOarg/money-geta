@@ -30,3 +30,19 @@ def test_installer_reports_install_tests_and_doctor_as_distinct_stages():
     assert 'Write-Stage "Environment diagnostics"' in script
     assert "INSTALLATION: PASS | REGRESSION TESTS: PASS | ENVIRONMENT DIAGNOSTICS: PENDING/FAIL" in script
     assert "INSTALLATION, REGRESSION TESTS AND ENVIRONMENT DIAGNOSTICS PASSED" in script
+
+
+def test_installer_checks_cli_and_gui_entrypoints_and_smokes_cli_help():
+    script = installer_text()
+    assert 'if (-not (Test-Path $Cli))' in script
+    assert 'money-geta-gui.exe' in script
+    assert '& $Cli --help | Out-Null' in script
+    assert 'CLI smoke test failed' in script
+
+
+def test_installer_verifies_shortcut_and_jobs_directory_creation():
+    script = installer_text()
+    assert 'if (-not (Test-Path $ShortcutPath))' in script
+    assert 'Desktop shortcut creation failed' in script
+    assert 'if (-not (Test-Path $JobsDir -PathType Container))' in script
+    assert 'local jobs directory was not created' in script
