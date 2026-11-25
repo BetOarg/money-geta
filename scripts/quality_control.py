@@ -123,8 +123,8 @@ def scan_signals(path: Path, *, ffmpeg: str | None = None, detect_black: bool = 
             black.append({"start": float(match.group(1)), "end": float(match.group(2)),
                           "duration": float(match.group(3))})
     if detect_silence:
-        starts = [float(x) for x in re.findall(r"silence_start: ([0-9.]+)", log)]
-        ends = [float(x) for x in re.findall(r"silence_end: ([0-9.]+)", log)]
+        starts = [float(x) for x in re.findall(r"silence_start:\s*([0-9.]+)", log)]
+        ends = [float(x) for x in re.findall(r"silence_end:\s*([0-9.]+)", log)]
         for index, start in enumerate(starts):
             end = ends[index] if index < len(ends) else None
             silence.append({"start": start, "end": end,
