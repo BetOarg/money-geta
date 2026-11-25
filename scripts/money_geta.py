@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -398,7 +399,8 @@ def run_process_source(args: argparse.Namespace) -> int:
                        rights_confirmed=True, workflow="download-and-analyze")
         source = download_source(url, session, args.ffmpeg_location)
         write_manifest(session, stage="source_ready", source_path=str(source),
-                       file_size=source.stat().st_size)
+                       file_size=source.stat().st_size, top=args.top,
+                       min_seconds=args.min_seconds, max_seconds=args.max_seconds)
     except (OSError, RuntimeError, ValueError) as exc:
         if session is not None:
             write_manifest(session, stage="download_failed", failure=str(exc))
@@ -414,6 +416,78 @@ def run_process_source(args: argparse.Namespace) -> int:
     result = run_moments(analysis_args, session_dir=session)
     print(f"WORKFLOW_SESSION: {session}")
     return result
+
+
+def resume_source_session(args: argparse.Namespace) -> int:
+    """Resume only a pristine source_ready session; never redownload or overwrite analysis outputs."""
+    if not args.confirm_resume:
+        print("BLOCKED: resuming requires explicit --confirm-resume.")
+        return 2
+    root = args.jobs_root.expanduser().resolve()
+    supplied = args.session_dir.expanduser()
+    if supplied.is_symlink():
+        print("BLOCKED: session directory cannot be a symlink.")
+        return 2
+    session = supplied.resolve(strict=True)
+    if not session.is_dir() or not session.is_relative_to(root):
+        print("BLOCKED: session must be a directory inside the configured jobs root.")
+        return 2
+    manifest_path = session / "money-geta.json"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        print("BLOCKED: session manifest is missing or unsafe.")
+        return 2
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        print("BLOCKED: session manifest is unreadable or malformed.")
+        return 2
+    if not isinstance(manifest, dict) or manifest.get("schema_version", 1) != 1:
+        print("BLOCKED: unsupported session manifest schema.")
+        return 2
+    if manifest.get("stage") != "source_ready" or manifest.get("workflow") != "download-and-analyze":
+        print("BLOCKED: only untouched source_ready download-and-analyze sessions can be resumed.")
+        return 2
+    if manifest.get("rights_confirmed") is not True:
+        print("BLOCKED: original rights confirmation is missing.")
+        return 2
+    try:
+        source = Path(manifest["source_path"]).expanduser().resolve(strict=True)
+        expected_size = manifest["file_size"]
+        top = manifest["top"]
+        minimum = manifest["min_seconds"]
+        maximum = manifest["max_seconds"]
+    except (KeyError, TypeError, OSError, ValueError):
+        print("BLOCKED: source path, size or original analysis parameters are missing.")
+        return 2
+    if not source.is_file() or not source.is_relative_to(session):
+        print("BLOCKED: source must be a regular file inside this session directory.")
+        return 2
+    if not isinstance(expected_size, int) or source.stat().st_size != expected_size:
+        print("BLOCKED: source file size differs from the recorded checkpoint.")
+        return 2
+    if not isinstance(top, int) or isinstance(top, bool) or not 1 <= top <= 30:
+        print("BLOCKED: recorded top-candidate parameter is invalid.")
+        return 2
+    if not isinstance(minimum, (int, float)) or not isinstance(maximum, (int, float)) or minimum <= 0 or maximum <= minimum:
+        print("BLOCKED: recorded duration parameters are invalid.")
+        return 2
+    output_root = session / "jobs"
+    if output_root.exists() or output_root.is_symlink():
+        print("BLOCKED: analysis output directory already exists; possible partial outputs require manual inspection.")
+        return 2
+    digest = hashlib.sha256()
+    with source.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    write_manifest(session, stage="analyzing", source_sha256=digest.hexdigest(),
+                   resume_count=1, resume_authorized_at=datetime.now(timezone.utc).isoformat())
+    analysis_args = argparse.Namespace(
+        gtavi_dir=args.gtavi_dir, gtavi_python=args.gtavi_python, source=source,
+        jobs_root=root, top=top, min_seconds=minimum, max_seconds=maximum,
+    )
+    print("RESUME: source checkpoint verified; starting local moment analysis only.")
+    return run_moments(analysis_args, session_dir=session)
+
 
 def run_cut(args: argparse.Namespace) -> int:
     gtavi_dir = args.gtavi_dir.expanduser().resolve()
@@ -694,6 +768,12 @@ def main(argv: list[str] | None = None) -> int:
     session_audit = session_actions.add_parser("audit", help="read-only audit of job/session manifests")
     session_audit.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     session_audit.add_argument("--limit", type=int, choices=range(1, 501), default=100)
+    session_resume = session_actions.add_parser("resume-source", help="resume one untouched source_ready session after explicit confirmation")
+    session_resume.add_argument("--session-dir", type=Path, required=True)
+    session_resume.add_argument("--confirm-resume", action="store_true")
+    session_resume.add_argument("--gtavi-dir", type=Path, default=default_gtavi_dir())
+    session_resume.add_argument("--gtavi-python", type=Path, default=None)
+    session_resume.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     session = sub.add_parser("new-session", help="allocate a unique, non-destructive recording workspace")
     session.add_argument("job_id")
     session.add_argument("--root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
@@ -1056,6 +1136,12 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             print(json.dumps(report, ensure_ascii=False, indent=2))
             return 0 if all(item["status"] not in {"blocked", "unknown_stage"} for item in report["sessions"]) else 2
+        if args.sessions_action == "resume-source":
+            try:
+                return resume_source_session(args)
+            except (OSError, ValueError) as exc:
+                print(f"BLOCKED: {exc}")
+                return 2
     if args.command == "new-session":
         path = create_session_dir(args.root, args.job_id)
         write_manifest(path, stage="created", job_id=args.job_id)
