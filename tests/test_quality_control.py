@@ -52,3 +52,45 @@ def test_cli_writes_json_report_on_probe_failure(tmp_path):
     data = json.loads(report.read_text(encoding="utf-8"))
     assert data["passed"] is False
     assert data["problems"]
+
+
+def test_signal_scan_parses_black_and_silence_findings(tmp_path, monkeypatch):
+    import subprocess
+    import scripts.quality_control as qc
+
+    source = tmp_path / "sample.mp4"
+    source.write_bytes(b"media")
+    def fake_run(command, **kwargs):
+        assert "blackdetect=d=0.5:pix_th=0.10" in command
+        assert "silencedetect=noise=-50dB:d=1.0" in command
+        return subprocess.CompletedProcess(command, 0, "", (
+            "[blackdetect] black_start:1.000 black_end:2.500 black_duration:1.500\n"
+            "[silencedetect] silence_start:3.000\n"
+            "[silencedetect] silence_end:4.250 | silence_duration:1.250\n"
+        ))
+    monkeypatch.setattr(qc.subprocess, "run", fake_run)
+    result = qc.scan_signals(source, ffmpeg="ffmpeg", detect_black=True, detect_silence=True)
+    assert result["black_segments"] == [{"start": 1.0, "end": 2.5, "duration": 1.5}]
+    assert result["silence_segments"] == [{"start": 3.0, "end": 4.25, "duration": 1.25}]
+
+
+def test_signal_scan_fails_closed_when_ffmpeg_fails(tmp_path, monkeypatch):
+    import subprocess
+    import scripts.quality_control as qc
+
+    source = tmp_path / "sample.mp4"
+    source.write_bytes(b"media")
+    monkeypatch.setattr(qc.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0], 1, "", "decode error"))
+    import pytest
+    with pytest.raises(ValueError, match="signal scan failed"):
+        qc.scan_signals(source, ffmpeg="ffmpeg", detect_black=True)
+
+
+def test_signal_scan_requires_ffmpeg_when_enabled(tmp_path, monkeypatch):
+    import scripts.quality_control as qc
+    source = tmp_path / "sample.mp4"
+    source.write_bytes(b"media")
+    monkeypatch.setattr(qc.shutil, "which", lambda name: None)
+    import pytest
+    with pytest.raises(ValueError, match="ffmpeg executable not found"):
+        qc.scan_signals(source, detect_silence=True)
