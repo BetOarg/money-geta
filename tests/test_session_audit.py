@@ -52,3 +52,13 @@ def test_audit_limit_caps_number_of_manifests(tmp_path):
         _manifest(tmp_path, f"job-{n}", "created")
     report = audit_sessions(tmp_path, limit=2)
     assert report["count"] == 2
+
+
+def test_sessions_audit_cli_prints_json_and_exit_status(tmp_path, monkeypatch, capsys):
+    _manifest(tmp_path, "incomplete", "created")
+    monkeypatch.setenv("MONEY_GETA_JOBS_DIR", str(tmp_path))
+    from scripts.money_geta import main
+    assert main(["sessions", "audit", "--jobs-root", str(tmp_path)]) == 0
+    captured = capsys.readouterr()
+    assert '"status": "interrupted_or_active"' in captured.out
+    assert "Read-only audit" in captured.out
