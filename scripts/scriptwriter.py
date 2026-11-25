@@ -119,7 +119,8 @@ def build_script_prompt(campaign: dict[str, Any], profile: dict[str, Any],
             "Use only the captured source excerpts and explicitly supported claim ledger. "
             "Do not invent facts, numbers, quotes, attribution, popularity, or metrics. "
             "Keep opinions clearly framed as commentary. Do not imply reuse rights from research. "
-            "For news or education, every factual claim must exactly match a supported claim and its evidence IDs. "
+            "For every profile, include every factual assertion in the claims array; each entry must exactly match a supported claim-ledger record and its evidence IDs. " 
+            "Leave claims empty when the script contains no factual claims; news and education require factual claims to be explicitly listed. "
             "Output only valid JSON matching the supplied schema; no Markdown fences or explanation."
         )},
         {"role": "user", "content": json.dumps(context, ensure_ascii=False, indent=2)},
@@ -166,18 +167,13 @@ def validate_script_payload(payload: Any, *, evidence_ids: set[str],
         claim_id = claim.get("claim_id")
         if claim_id is not None and not isinstance(claim_id, str):
             raise ValueError("Script claim_id must be a string or null.")
-        if factual_required:
-            if claim_id not in supported:
-                raise ValueError("Factual script claim must match a supported claim-ledger ID.")
-            record = supported[claim_id]
-            if claim["text"] != record["claim"] or not set(refs).issubset(set(record.get("evidence_ids", []))):
-                raise ValueError("Factual script claims must match supported claim text and evidence.")
-        elif claim_id is not None:
-            if claim_id not in supported:
-                raise ValueError("Script claim references a claim-ledger ID that is not supported.")
-            record = supported[claim_id]
-            if claim["text"] != record["claim"] or not set(refs).issubset(set(record.get("evidence_ids", []))):
-                raise ValueError("Script claims with a ledger ID must match supported text and evidence.")
+        if not isinstance(claim_id, str) or not claim_id:
+            raise ValueError("Every factual script claim must reference a supported claim-ledger ID.")
+        if claim_id not in supported:
+            raise ValueError("Script claim must match a supported claim-ledger ID.")
+        record = supported[claim_id]
+        if claim["text"] != record["claim"] or not set(refs).issubset(set(record.get("evidence_ids", []))):
+            raise ValueError("Script claims must match supported claim text and evidence.")
     return payload
 
 

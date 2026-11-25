@@ -22,7 +22,7 @@ A JSON draft is stored in the campaign's `drafts/` folder. It includes the title
 
 ## Validation
 
-The generated JSON is checked for required fields, length limits, 1–8 scenes, citation IDs, and claim references. News and education claims must match a supported claim-ledger entry exactly, including evidence IDs. Other profiles still require source citations; if the model adds a claim-ledger ID, its text and evidence must match that supported record.
+The generated JSON is checked for required fields, length limits, 1–8 scenes, citation IDs, and claim references. Every factual claim listed by any profile must match a supported claim-ledger entry exactly, including evidence IDs. The model must leave the claims array empty when the script contains no factual claims. News and education additionally require factual claims to be explicitly listed. Other profiles still require source citations.
 
 These structural checks cannot semantically prove that narration is accurate, complete or appropriately framed. A person must review the script and sources. The model is not the truth adjudicator.
 

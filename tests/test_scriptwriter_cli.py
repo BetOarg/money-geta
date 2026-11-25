@@ -38,7 +38,7 @@ def test_script_draft_cli_reports_saved_draft_without_real_llm_calls(monkeypatch
         "title": "Draft title", "hook": "A short hook", "narration": "Narration text",
         "scenes": [{"visual": "Show footage.", "narration": "Explain briefly."}],
         "cta": "Follow for more.", "source_ids": ["cli-evidence"],
-        "claims": [{"claim_id": None, "text": "Fact note", "evidence_ids": ["cli-evidence"]}],
+        "claims": [],
     }
     monkeypatch.setattr(writer, "chat_completion", lambda *args, **kwargs: {"choices": [{"message": {"content": json.dumps(script)}}]})
     code = main(["script-draft", "--project", "cli-project", "--campaign", campaign_id])
