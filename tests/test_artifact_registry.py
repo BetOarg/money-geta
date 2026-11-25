@@ -192,13 +192,16 @@ def test_central_qc_ready_status_rejects_findings(tmp_path: Path) -> None:
 def test_review_required_central_qc_needs_acknowledgement_and_new_artifact_approval(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
-    from scripts.artifact_registry import acknowledge_central_qc, main, record_central_qc
+    from scripts.artifact_registry import acknowledge_central_qc, main, record_central_qc, run_artifact_qc
     import scripts.campaign_check as campaign_check
+    import scripts.quality_control as qc
 
     campaign, output = setup_campaign(tmp_path)
     video = output / "final.mp4"
     video.write_bytes(b"video")
     item = register_artifact(campaign, video, allowed_root=output)
+    monkeypatch.setattr(qc, "inspect_media", lambda *a, **k: {"passed": True, "problems": [], "probe": {}})
+    run_artifact_qc(campaign, item["artifact_id"], item["sha256"])
     report = output / "central.json"
     report.write_text(json.dumps({
         "schema_version": 1, "artifact": str(video.resolve()), "sha256": item["sha256"],
