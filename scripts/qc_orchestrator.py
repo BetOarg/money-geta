@@ -95,12 +95,21 @@ def evaluate(
             not isinstance(item, str) for item in technical["problems"]
         ):
             raise ValueError("Technical QC report problems must be a list of strings")
+        technical_observations = technical.get("observations", {})
+        if not isinstance(technical_observations, dict):
+            raise ValueError("Technical QC observations must be a JSON object")
+        technical_findings = {key: value for key, value in technical_observations.items() if value}
         checks["technical"] = {
             "passed": technical["passed"],
             "problems": technical["problems"],
+            "observations": technical_findings,
         }
         if technical["passed"] is not True:
             blocking.append("Technical QC did not pass")
+        if technical_findings:
+            review.append(
+                "Technical signal observations (such as black frames or silence) require human review"
+            )
 
     if subtitle_report is None:
         checks["subtitles"] = {"status": "not_provided"}
