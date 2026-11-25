@@ -94,3 +94,53 @@ def test_signal_scan_requires_ffmpeg_when_enabled(tmp_path, monkeypatch):
     import pytest
     with pytest.raises(ValueError, match="ffmpeg executable not found"):
         qc.scan_signals(source, detect_silence=True)
+
+
+def test_signal_scan_detects_clipped_audio_samples(tmp_path, monkeypatch):
+    import subprocess
+    import scripts.quality_control as qc
+
+    source = tmp_path / "sample.mp4"
+    source.write_bytes(b"media")
+    def fake_run(command, **kwargs):
+        assert "astats=metadata=1:reset=0" in command
+        return subprocess.CompletedProcess(command, 0, "", (
+            "Channel: 1\nNumber of samples clipped: 12\n"
+            "Overall\nNumber of samples clipped: 12\n"
+        ))
+    monkeypatch.setattr(qc.subprocess, "run", fake_run)
+    result = qc.scan_signals(source, ffmpeg="ffmpeg", detect_clipping=True)
+    assert result["clipped_sample_counts"] == [12, 12]
+    assert result["clipping_detected"] is True
+
+
+def test_signal_scan_reports_zero_clipping(tmp_path, monkeypatch):
+    import subprocess
+    import scripts.quality_control as qc
+
+    source = tmp_path / "sample.mp4"
+    source.write_bytes(b"media")
+    monkeypatch.setattr(
+        qc.subprocess, "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "", "Number of samples clipped: 0\n"
+        ),
+    )
+    result = qc.scan_signals(source, ffmpeg="ffmpeg", detect_clipping=True)
+    assert result["clipped_sample_counts"] == [0]
+    assert result["clipping_detected"] is False
+
+
+def test_signal_scan_fails_closed_if_astats_has_no_clipping_metric(tmp_path, monkeypatch):
+    import subprocess
+    import scripts.quality_control as qc
+    import pytest
+
+    source = tmp_path / "sample.mp4"
+    source.write_bytes(b"media")
+    monkeypatch.setattr(
+        qc.subprocess, "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 0, "", "no astats output"),
+    )
+    with pytest.raises(ValueError, match="did not report clipping sample counts"):
+        qc.scan_signals(source, ffmpeg="ffmpeg", detect_clipping=True)
