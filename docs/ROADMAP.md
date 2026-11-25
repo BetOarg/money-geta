@@ -19,7 +19,7 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [ ] Definir esquema versionado para brief, guion, fuentes, medios, derechos, render, QC, aprobación y publicación.
 - [ ] Añadir migraciones/versionado de manifests sin romper sesiones anteriores.
 - [ ] Añadir estados de pipeline y recuperación tras fallo.
-- [x] Añadir auditoría de sesiones incompletas/interrumpidas, con guía de recuperación manual de solo lectura; la reanudación automática permanece pendiente.
+- [x] Añadir auditoría de sesiones incompletas/interrumpidas, con guía de recuperación manual de solo lectura.
 - [x] Fortalecer checkpoints de sesión con schema v1, ID estable, timestamps y escritura atómica; rechazar manifiestos corruptos/symlinks y validar compatibilidad de esquema en auditorías.
 - [x] Implementar reanudación explícita y conservadora de sesiones `source_ready` sin redescarga, con validación de hash/tamaño, parámetros originales, aislamiento de salida y bloqueo ante outputs parciales.
 - [ ] Generalizar la reanudación idempotente a recording, análisis parcial, corte, render y QC; verificar entradas/salidas por etapa y no repetir operaciones externas o costosas.
@@ -30,7 +30,7 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 ## Fase 2 — Servicios de capacidad comunes
 - [ ] Extraer interfaces de research, scriptwriting, claim-check, transcription, moment detection, subtitles, reframing, translation y render.
 - [x] Implementar adaptador LLM intercambiable compatible con Chat Completions (Gemini/OpenAI API/gateways compatibles), con credenciales locales y opt-in explícito de red.
-- [x] Generar guiones estructurados draft-only desde fuentes capturadas y claim ledger; validar citas y claims de News/Education.
+- [x] Generar guiones estructurados draft-only desde fuentes capturadas y claim ledger; toda afirmación listada debe coincidir exactamente con un claim supported en todos los perfiles; News/Education además exigen claims explícitos.
 - [x] Separar ChatGPT web de OpenAI API; nunca asumir API incluida en plan ChatGPT.
 - [x] Añadir adaptadores de búsqueda Brave/Tavily con resultados normalizados, URL, extracto, fecha disponible, puntuación e instante de recuperación (separados del LLM).
 - [x] Añadir lectura limitada de fuentes originales HTML/XHTML/texto y ledger JSONL versionado por campaña, con opt-in de red y defensas SSRF.
@@ -45,9 +45,10 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [ ] Completar Gaming general, manteniendo GTA VI como subperfil.
 - [x] Añadir auditoría declarativa de capacidades y gaps de perfiles (no certifica readiness ni E2E).
 - [ ] Crear subperfiles Minecraft, Fortnite, Roblox y otros juegos sin duplicar motores.
-- [ ] Implementar Viral con verificación de afirmaciones y derechos.
-- [ ] Implementar Noticias con fuentes primarias, corroboración, timestamps y correcciones.
-- [ ] Implementar Educación con referencias, precisión y revisión de ejemplos.
+- [x] Compartir entre perfiles la base de captura de fuentes, claim ledger, borradores de guion y validación de afirmaciones factuales (no equivale a perfiles terminados).
+- [ ] Implementar Viral con verificación de tendencias, afirmaciones y derechos específicas del perfil.
+- [ ] Implementar Noticias con fuentes primarias, corroboración independiente, timestamps y correcciones.
+- [ ] Implementar Educación con referencias, precisión, revisión de ejemplos y bibliografía.
 - [ ] Añadir pruebas de aislamiento para demostrar que reglas de GTA VI no afectan otros perfiles.
 
 ## Fase 4 — Control de calidad y derechos
@@ -59,8 +60,10 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [ ] Crear revisión editorial/factual específica por perfil.
 - [x] Crear ledger hash-bound de revisión humana de derechos/atribución para candidatos Openverse (parcial: no cubre todos los assets ni certifica licencias).
 - [ ] Crear ledger de licencias, permisos, atribuciones y procedencia por asset.
-- [ ] Ligar aprobación humana al hash exacto del guion, medios y render.
-- [ ] Bloquear distribución si falta cualquier evidencia o aprobación.
+- [x] Ligar aprobación humana del artefacto final al SHA-256 exacto; los hallazgos `REVIEW_REQUIRED` exigen reconocimiento humano ligado al evento QC y una nueva aprobación posterior.
+- [x] Añadir `publication-check` local que bloquea sin campaign gate, QC técnico, QC central y aprobación exacta del artefacto (todavía no controla un canal externo).
+- [ ] Ligar aprobación humana al hash exacto de guion, cada medio y render, y cubrir derechos/procedencia de todos los assets.
+- [ ] Bloquear distribución en todos los conectores si falta cualquier evidencia o aprobación.
 
 ## Fase 5 — Distribución y analítica
 - [ ] Implementar Buffer API GraphQL en modo borrador primero.
