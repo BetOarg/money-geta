@@ -90,22 +90,24 @@ def evaluate_media(payload: dict[str, Any], *, min_duration: float = 1.0,
 
 
 def scan_signals(path: Path, *, ffmpeg: str | None = None, detect_black: bool = False,
-                 detect_silence: bool = False, timeout: int = 180) -> dict[str, Any]:
-    """Run read-only FFmpeg black-frame/silence detectors; findings require human review."""
+                 detect_silence: bool = False, detect_clipping: bool = False,
+                 timeout: int = 180) -> dict[str, Any]:
+    """Run read-only FFmpeg black-frame, silence and clipping detectors; findings require human review."""
     executable = ffmpeg or shutil.which("ffmpeg")
     if not executable:
         raise ValueError("ffmpeg executable not found; signal QC was requested")
-    filters = []
-    if detect_black:
-        filters.append("blackdetect=d=0.5:pix_th=0.10")
+    video_filter = "blackdetect=d=0.5:pix_th=0.10" if detect_black else "null"
+    audio_filters = []
     if detect_silence:
-        filters.append("silencedetect=noise=-50dB:d=1.0")
-    if not filters:
-        return {"black_segments": [], "silence_segments": []}
-    command = [executable, "-hide_banner", "-nostats", "-i", str(path), "-vf",
-               filters[0] if detect_black else "null"]
-    if detect_silence:
-        command += ["-af", filters[-1]]
+        audio_filters.append("silencedetect=noise=-50dB:d=1.0")
+    if detect_clipping:
+        audio_filters.append("astats=metadata=1:reset=0")
+    if not detect_black and not audio_filters:
+        return {"black_segments": [], "silence_segments": [],
+                "clipped_sample_counts": [], "clipping_detected": False}
+    command = [executable, "-hide_banner", "-nostats", "-i", str(path), "-vf", video_filter]
+    if audio_filters:
+        command += ["-af", ",".join(audio_filters)]
     command += ["-f", "null", "-"]
     try:
         result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout)
@@ -129,20 +131,28 @@ def scan_signals(path: Path, *, ffmpeg: str | None = None, detect_black: bool = 
             end = ends[index] if index < len(ends) else None
             silence.append({"start": start, "end": end,
                             "duration": round(end - start, 3) if end is not None else None})
-    return {"black_segments": black, "silence_segments": silence}
+    clipped_counts = []
+    if detect_clipping:
+        clipped_counts = [int(value) for value in re.findall(r"Number of samples clipped:\\s*([0-9]+)", log, re.I)]
+        if not clipped_counts:
+            raise ValueError("FFmpeg astats did not report clipping sample counts")
+    return {"black_segments": black, "silence_segments": silence,
+            "clipped_sample_counts": clipped_counts,
+            "clipping_detected": any(value > 0 for value in clipped_counts)}
 
 
 def inspect_media(path: Path, *, ffprobe: str | None = None, timeout: int = 30,
                   min_duration: float = 1.0, max_duration: float | None = None,
                   expected_aspect: str | None = None, require_audio: bool = False,
                   ffmpeg: str | None = None, detect_black: bool = False,
-                  detect_silence: bool = False) -> dict[str, Any]:
+                  detect_silence: bool = False, detect_clipping: bool = False) -> dict[str, Any]:
     source = path.expanduser().resolve()
     payload = probe_media(source, ffprobe=ffprobe, timeout=timeout)
     problems = evaluate_media(payload, min_duration=min_duration, max_duration=max_duration,
                               expected_aspect=expected_aspect, require_audio=require_audio)
     observations = scan_signals(source, ffmpeg=ffmpeg, detect_black=detect_black,
-                                detect_silence=detect_silence, timeout=max(timeout, 180))
+                                detect_silence=detect_silence, detect_clipping=detect_clipping,
+                                timeout=max(timeout, 180))
     return {"schema_version": 1, "file": str(source), "sha256": sha256_file(source),
             "passed": not problems, "problems": problems, "observations": observations,
             "probe": payload,
@@ -161,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-audio", action="store_true")
     parser.add_argument("--detect-black", action="store_true")
     parser.add_argument("--detect-silence", action="store_true")
+    parser.add_argument("--detect-clipping", action="store_true")
     parser.add_argument("--report", type=Path)
     args = parser.parse_args(argv)
     try:
@@ -168,7 +179,8 @@ def main(argv: list[str] | None = None) -> int:
                                min_duration=args.min_duration, max_duration=args.max_duration,
                                expected_aspect=args.aspect, require_audio=args.require_audio,
                                ffmpeg=args.ffmpeg, detect_black=args.detect_black,
-                               detect_silence=args.detect_silence)
+                               detect_silence=args.detect_silence,
+                               detect_clipping=args.detect_clipping)
     except (OSError, ValueError) as exc:
         report = {"schema_version": 1, "file": str(args.file), "passed": False,
                   "problems": [str(exc)], "observations": {},
