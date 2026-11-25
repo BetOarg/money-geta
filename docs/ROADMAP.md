@@ -21,7 +21,8 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [ ] Añadir estados de pipeline y recuperación tras fallo.
 - [x] Añadir auditoría de sesiones incompletas/interrumpidas, con guía de recuperación manual de solo lectura; la reanudación automática permanece pendiente.
 - [x] Fortalecer checkpoints de sesión con schema v1, ID estable, timestamps y escritura atómica; rechazar manifiestos corruptos/symlinks y validar compatibilidad de esquema en auditorías.
-- [ ] Implementar reanudación real de procesos interrumpidos con checkpoints por etapa, validación de entradas/salidas y pruebas de idempotencia.
+- [x] Implementar reanudación explícita y conservadora de sesiones `source_ready` sin redescarga, con validación de hash/tamaño, parámetros originales, aislamiento de salida y bloqueo ante outputs parciales.
+- [ ] Generalizar la reanudación idempotente a recording, análisis parcial, corte, render y QC; verificar entradas/salidas por etapa y no repetir operaciones externas o costosas.
 - [x] Añadir GUI para crear proyectos, elegir perfil y revisar campañas/estado.
 - [x] Integrar radar de investigación y generación de guiones draft-only en la GUI con opt-in de red y confirmación previa.
 - [x] Registrar drafts y aprobar/rechazar mediante ledger local ligado a SHA-256, desde CLI y GUI.

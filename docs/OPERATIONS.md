@@ -62,7 +62,7 @@ The registry currently identifies four profiles. Gaming is marked partial becaus
 
 ## Session persistence
 
-- Session checkpoints: each `money-geta.json` manifest now carries `schema_version`, a stable `session_id`, and `created_at`; updates are written through a unique temporary file and atomic replacement. Malformed existing manifests and symlink manifests are rejected rather than overwritten. This improves persistence integrity but does not automatically resume an interrupted external process.
+- Session checkpoints: each `money-geta.json` manifest carries `schema_version`, a stable `session_id`, and timestamps; updates use atomic replacement. `sessions resume-source` can resume only a `source_ready` download-and-analyze checkpoint after explicit `--confirm-resume`, verifying the original rights attestation, source path, file size, recorded analysis parameters and absence of prior analysis output. It never redownloads. Other stages, missing metadata, changed files or possible partial outputs are blocked for manual inspection. This is a limited recovery path, not general automatic pipeline resumption.
 
 ## Commands
 
@@ -70,6 +70,7 @@ The registry currently identifies four profiles. Gaming is marked partial becaus
 money-geta doctor
 money-geta status
 money-geta sessions audit --jobs-root .\\jobs
+money-geta sessions resume-source --session-dir ".\\jobs\\<job>\\live\\<session>" --confirm-resume
 money-geta new-session gta6-weekly
 money-geta record-live --url "https://www.youtube.com/watch?v=..." --minutes 60 --confirm-recording
 money-geta process-source --url "URL_DE_UN_VIDEO_AUTORIZADO" --confirm-rights
