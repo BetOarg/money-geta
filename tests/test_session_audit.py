@@ -1,3 +1,4 @@
+import hashlib
 import json
 import pytest
 
@@ -121,6 +122,7 @@ def _resumable_source_session(root):
         rights_confirmed=True,
         source_path=str(source),
         file_size=source.stat().st_size,
+        source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
         top=8,
         min_seconds=15,
         max_seconds=40,
@@ -180,10 +182,26 @@ def test_resume_source_blocks_changed_source_size(tmp_path, capsys):
     from argparse import Namespace
     from scripts.money_geta import resume_source_session
     session, source = _resumable_source_session(tmp_path)
-    source.write_bytes(b"changed source bytes")
+    source.write_bytes(b"AuthoriZed local media")
     args = Namespace(
         confirm_resume=True, jobs_root=tmp_path, session_dir=session,
         gtavi_dir=tmp_path, gtavi_python=None,
     )
     assert resume_source_session(args) == 2
-    assert "size differs" in capsys.readouterr().out
+    assert "SHA-256 differs" in capsys.readouterr().out
+
+
+def test_resume_source_blocks_checkpoint_without_original_hash(tmp_path, capsys):
+    from argparse import Namespace
+    from scripts.money_geta import resume_source_session
+    session, _ = _resumable_source_session(tmp_path)
+    manifest_path = session / "money-geta.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest.pop("source_sha256")
+    manifest_path.write_text(json.dumps(manifest))
+    args = Namespace(
+        confirm_resume=True, jobs_root=tmp_path, session_dir=session,
+        gtavi_dir=tmp_path, gtavi_python=None,
+    )
+    assert resume_source_session(args) == 2
+    assert "original source SHA-256 is missing" in capsys.readouterr().out
