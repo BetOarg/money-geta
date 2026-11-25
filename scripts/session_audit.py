@@ -16,6 +16,8 @@ COMPLETED_STAGES = {"recorded", "analyzed", "source_ready", "clip_ready"}
 
 def audit_sessions(root: str | Path, *, limit: int = 100) -> dict[str, Any]:
     """Read session manifests without modifying jobs or attempting automatic resume."""
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 500:
+        raise ValueError("Session audit limit must be between 1 and 500.")
     base = Path(root).expanduser()
     if base.is_symlink():
         raise ValueError("Jobs root cannot be a symlink.")
@@ -37,7 +39,18 @@ def audit_sessions(root: str | Path, *, limit: int = 100) -> dict[str, Any]:
         if not isinstance(payload, dict):
             entries.append({"manifest": str(manifest), "status": "blocked", "reason": "manifest is not a JSON object"})
             continue
+        schema_version = payload.get("schema_version", 1)  # legacy manifests are schema v1
+        if schema_version != 1 or isinstance(schema_version, bool):
+            entries.append({"manifest": str(manifest), "status": "blocked", "reason": f"unsupported session schema_version: {schema_version}"})
+            continue
         stage = payload.get("stage")
+        if not isinstance(stage, str) or not stage:
+            entries.append({"manifest": str(manifest), "status": "blocked", "reason": "session stage is missing or invalid"})
+            continue
+        job_id = payload.get("job_id")
+        if job_id is not None and not isinstance(job_id, str):
+            entries.append({"manifest": str(manifest), "status": "blocked", "reason": "job_id must be a string"})
+            continue
         if stage in ACTIVE_STAGES or stage == "created":
             status = "interrupted_or_active"
             recommendation = "Inspect the session manifest and output files; resume manually only after verifying inputs."
@@ -55,7 +68,7 @@ def audit_sessions(root: str | Path, *, limit: int = 100) -> dict[str, Any]:
             recommendation = "Inspect this manifest manually; stage is not recognized by this audit."
         entries.append({
             "manifest": str(manifest),
-            "job_id": payload.get("job_id"),
+            "job_id": job_id,
             "stage": stage,
             "status": status,
             "updated_at": payload.get("updated_at"),
