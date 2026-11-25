@@ -59,6 +59,11 @@ Write-Stage "Install dependencies"
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed. Installation is incomplete; fix the pip/network error and rerun." }
 & $VenvPython -m pip install --editable "$RepoRoot[capture,media,gtavi,test,gui]"
 if ($LASTEXITCODE -ne 0) { throw "Money-Geta installation failed. The virtual environment may be partial; rerun after resolving the pip error." }
+if (-not (Test-Path $Cli)) { throw "The money-geta CLI entry point was not created by installation: $Cli" }
+$GuiEntry = Join-Path $VenvDir "Scripts\\money-geta-gui.exe"
+if (-not (Test-Path $GuiEntry)) { throw "The money-geta-gui entry point was not created by installation: $GuiEntry" }
+& $Cli --help | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "The CLI smoke test failed. Installation is incomplete." }
 
 Write-Stage "Validate desktop GUI"
 & $VenvPython -c "import tkinter; import scripts.money_geta_gui"
@@ -97,6 +102,7 @@ foreach ($Name in $Settings.Keys) {
     Set-Item -Path "Env:$Name" -Value $Settings[$Name]
 }
 New-Item -ItemType Directory -Force -Path $JobsDir | Out-Null
+if (-not (Test-Path $JobsDir -PathType Container)) { throw "The local jobs directory was not created: $JobsDir" }
 Write-Host "Money-Geta dependencies and regression suite installed successfully. Optional external live-recording checkout, credentials and generated media were not modified."
 
 Write-Stage "Create desktop shortcut"
@@ -111,7 +117,9 @@ $Shortcut.Arguments = "-m scripts.money_geta_gui"
 $Shortcut.WorkingDirectory = $RepoRoot
 $Shortcut.Description = "Money-Geta - procesamiento local de videos"
 $Shortcut.Save()
-Write-Host "Desktop shortcut created: $ShortcutPath"
+if (-not (Test-Path $ShortcutPath)) { throw "Desktop shortcut creation failed: $ShortcutPath" }
+if ((Get-Item $ShortcutPath).Length -le 0) { throw "Desktop shortcut is empty or invalid: $ShortcutPath" }
+Write-Host "Desktop shortcut created and verified: $ShortcutPath"
 
 Write-Stage "Environment diagnostics"
 Write-Host "Diagnostics are separate from installation/tests: PENDING optional providers or external projects do not mean pip/tests failed."
