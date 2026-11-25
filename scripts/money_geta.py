@@ -60,11 +60,11 @@ def write_manifest(session_dir: Path, **fields) -> Path:
     current.setdefault("created_at", now)
     current.update(fields)
     current["updated_at"] = now
-    payload = json.dumps(current, ensure_ascii=False, indent=2) + "\\n"
+    payload = json.dumps(current, ensure_ascii=False, indent=2) + "\n"
     temp_path = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", newline="\\n",
+            mode="w", encoding="utf-8", newline="\n",
             prefix=".money-geta-", suffix=".tmp", dir=directory, delete=False,
         ) as handle:
             temp_path = Path(handle.name)
