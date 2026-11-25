@@ -51,7 +51,9 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 
 ## Fase 4 — Control de calidad y derechos
 - [ ] Validar integridad de audio/video, duración, ratio, resolución, FPS, códec y subtítulos.
-- [ ] Detectar pantalla negra, audio ausente, clipping, silencios y errores de render.
+- [x] Detectar segmentos de pantalla negra y silencios con FFmpeg (opt-in; observaciones para revisión humana).
+- [x] Comprobar ausencia de stream de audio cuando el perfil exige audio (`--require-audio`).
+- [ ] Detectar clipping/distorsión, silencios no deseados según guion y errores perceptuales de render.
 - [ ] Crear revisión editorial/factual específica por perfil.
 - [x] Crear ledger hash-bound de revisión humana de derechos/atribución para candidatos Openverse (parcial: no cubre todos los assets ni certifica licencias).
 - [ ] Crear ledger de licencias, permisos, atribuciones y procedencia por asset.
