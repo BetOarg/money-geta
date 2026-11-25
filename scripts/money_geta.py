@@ -33,16 +33,48 @@ def default_gtavi_dir() -> Path:
 
 
 def write_manifest(session_dir: Path, **fields) -> Path:
-    session_dir.mkdir(parents=True, exist_ok=True)
-    manifest = session_dir / "money-geta.json"
+    """Persist a session checkpoint atomically without following symlinks or clobbering corrupt state."""
+    import tempfile
+    import uuid
+
+    requested = Path(session_dir).expanduser()
+    if requested.is_symlink():
+        raise ValueError("Session directory cannot be a symlink.")
+    requested.mkdir(parents=True, exist_ok=True)
+    directory = requested.resolve()
+    if not directory.is_dir():
+        raise ValueError("Session path must be a directory.")
+    manifest = directory / "money-geta.json"
+    if manifest.is_symlink():
+        raise ValueError("Session manifest cannot be a symlink.")
     current = {}
     if manifest.exists():
+        if not manifest.is_file():
+            raise ValueError("Session manifest must be a regular file.")
         current = json.loads(manifest.read_text(encoding="utf-8"))
+        if not isinstance(current, dict):
+            raise ValueError("Session manifest must contain a JSON object.")
+    now = datetime.now(timezone.utc).isoformat()
+    current.setdefault("schema_version", 1)
+    current.setdefault("session_id", uuid.uuid4().hex)
+    current.setdefault("created_at", now)
     current.update(fields)
-    current["updated_at"] = datetime.now(timezone.utc).isoformat()
-    temp = manifest.with_suffix(".json.tmp")
-    temp.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
-    temp.replace(manifest)
+    current["updated_at"] = now
+    payload = json.dumps(current, ensure_ascii=False, indent=2) + "\\n"
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="\\n",
+            prefix=".money-geta-", suffix=".tmp", dir=directory, delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, manifest)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
     return manifest
 
 
