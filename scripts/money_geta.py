@@ -423,11 +423,11 @@ def resume_source_session(args: argparse.Namespace) -> int:
     if not args.confirm_resume:
         print("BLOCKED: resuming requires explicit --confirm-resume.")
         return 2
+    from scripts.artifact_registry import _reject_symlink_components
+    _reject_symlink_components(args.jobs_root)
     root = args.jobs_root.expanduser().resolve()
     supplied = args.session_dir.expanduser()
-    if supplied.is_symlink():
-        print("BLOCKED: session directory cannot be a symlink.")
-        return 2
+    _reject_symlink_components(supplied)
     session = supplied.resolve(strict=True)
     if not session.is_dir() or not session.is_relative_to(root):
         print("BLOCKED: session must be a directory inside the configured jobs root.")
@@ -451,7 +451,9 @@ def resume_source_session(args: argparse.Namespace) -> int:
         print("BLOCKED: original rights confirmation is missing.")
         return 2
     try:
-        source = Path(manifest["source_path"]).expanduser().resolve(strict=True)
+        source_input = Path(manifest["source_path"]).expanduser()
+        _reject_symlink_components(source_input)
+        source = source_input.resolve(strict=True)
         expected_size = manifest["file_size"]
         top = manifest["top"]
         minimum = manifest["min_seconds"]
