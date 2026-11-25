@@ -235,3 +235,61 @@ def test_run_manifest_updates_and_status_lists_it(tmp_path, capsys):
     assert data["clip_path"] == "clip.mp4"
     assert show_status(tmp_path / "jobs", 10) == 0
     assert "clip_ready" in capsys.readouterr().out
+
+
+def test_session_manifest_adds_stable_identity_and_preserves_creation_time(tmp_path):
+    from scripts.money_geta import write_manifest
+
+    session = tmp_path / "jobs" / "session-identity"
+    manifest = write_manifest(session, stage="created")
+    first = json.loads(manifest.read_text(encoding="utf-8"))
+    write_manifest(session, stage="rendering")
+    second = json.loads(manifest.read_text(encoding="utf-8"))
+
+    assert first["schema_version"] == 1
+    assert first["session_id"]
+    assert second["session_id"] == first["session_id"]
+    assert second["created_at"] == first["created_at"]
+    assert second["stage"] == "rendering"
+    assert second["updated_at"] >= first["updated_at"]
+
+
+def test_session_manifest_refuses_to_overwrite_malformed_state(tmp_path):
+    from scripts.money_geta import write_manifest
+
+    session = tmp_path / "jobs" / "broken"
+    session.mkdir(parents=True)
+    manifest = session / "money-geta.json"
+    manifest.write_text("{broken", encoding="utf-8")
+
+    with pytest.raises(json.JSONDecodeError):
+        write_manifest(session, stage="recovered")
+
+    assert manifest.read_text(encoding="utf-8") == "{broken"
+
+
+def test_session_manifest_rejects_manifest_symlink(tmp_path):
+    from scripts.money_geta import write_manifest
+
+    session = tmp_path / "jobs" / "linked"
+    session.mkdir(parents=True)
+    target = tmp_path / "outside.json"
+    target.write_text('{"stage": "created"}', encoding="utf-8")
+    manifest = session / "money-geta.json"
+    try:
+        manifest.symlink_to(target)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable on this platform: {exc}")
+
+    with pytest.raises(ValueError, match="symlink"):
+        write_manifest(session, stage="rendering")
+    assert json.loads(target.read_text(encoding="utf-8"))["stage"] == "created"
+
+
+def test_session_manifest_writes_complete_json_without_temp_files(tmp_path):
+    from scripts.money_geta import write_manifest
+
+    session = tmp_path / "jobs" / "atomic"
+    manifest = write_manifest(session, stage="created", label="sesión")
+    assert json.loads(manifest.read_text(encoding="utf-8"))["label"] == "sesión"
+    assert not list(session.glob(".money-geta-*.tmp"))
