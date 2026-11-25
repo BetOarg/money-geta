@@ -657,6 +657,11 @@ def main(argv: list[str] | None = None) -> int:
     status = sub.add_parser("status", help="list recent Money-Geta workflow sessions")
     status.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
     status.add_argument("--limit", type=int, choices=range(1, 101), default=20)
+    sessions = sub.add_parser("sessions", help="audit interrupted or incomplete sessions without resuming them")
+    session_actions = sessions.add_subparsers(dest="sessions_action", required=True)
+    session_audit = session_actions.add_parser("audit", help="read-only audit of job/session manifests")
+    session_audit.add_argument("--jobs-root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
+    session_audit.add_argument("--limit", type=int, choices=range(1, 501), default=100)
     session = sub.add_parser("new-session", help="allocate a unique, non-destructive recording workspace")
     session.add_argument("job_id")
     session.add_argument("--root", type=Path, default=Path(os.environ.get("MONEY_GETA_JOBS_DIR", "jobs")))
@@ -1009,6 +1014,16 @@ def main(argv: list[str] | None = None) -> int:
         return doctor()
     if args.command == "status":
         return show_status(args.jobs_root, args.limit)
+    if args.command == "sessions":
+        if args.sessions_action == "audit":
+            from scripts.session_audit import audit_sessions
+            try:
+                report = audit_sessions(args.jobs_root, limit=args.limit)
+            except ValueError as exc:
+                print(f"BLOCKED: {exc}")
+                return 2
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            return 0 if all(item["status"] not in {"blocked", "unknown_stage"} for item in report["sessions"]) else 2
     if args.command == "new-session":
         path = create_session_dir(args.root, args.job_id)
         write_manifest(path, stage="created", job_id=args.job_id)

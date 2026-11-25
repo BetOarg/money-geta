@@ -65,6 +65,7 @@ The registry currently identifies four profiles. Gaming is marked partial becaus
 ```powershell
 money-geta doctor
 money-geta status
+money-geta sessions audit --jobs-root .\\jobs
 money-geta new-session gta6-weekly
 money-geta record-live --url "https://www.youtube.com/watch?v=..." --minutes 60 --confirm-recording
 money-geta process-source --url "URL_DE_UN_VIDEO_AUTORIZADO" --confirm-rights
