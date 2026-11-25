@@ -34,8 +34,14 @@ def review_preview(
             raise ValueError("Scene duration must be finite and positive.")
         total += duration
     path = Path(preview_path).expanduser().resolve()
+    # Preview renders can be short or long due to dropped/duplicated segments.
+    # Permit a small encoder tolerance, but fail closed on substantial truncation.
+    duration_tolerance = max(1.0, total * 0.03)
+    min_duration = max(0.1, total - duration_tolerance)
+    max_duration = total + duration_tolerance
     try:
-        technical = technical_checker(path, max_duration=total, expected_aspect="9:16",
+        technical = technical_checker(path, min_duration=min_duration, max_duration=max_duration,
+                                     expected_aspect="9:16",
                                      require_audio=bool(timeline.get("audio_tracks")))
         technical_error = None
     except Exception as exc:
