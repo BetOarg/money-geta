@@ -19,6 +19,7 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [ ] Definir esquema versionado para brief, guion, fuentes, medios, derechos, render, QC, aprobación y publicación.
 - [ ] Añadir migraciones/versionado de manifests sin romper sesiones anteriores.
 - [ ] Añadir estados de pipeline y recuperación tras fallo.
+- [x] Añadir auditoría de sesiones incompletas/interrumpidas, con guía de recuperación manual de solo lectura; la reanudación automática permanece pendiente.
 - [x] Añadir GUI para crear proyectos, elegir perfil y revisar campañas/estado.
 - [x] Integrar radar de investigación y generación de guiones draft-only en la GUI con opt-in de red y confirmación previa.
 - [x] Registrar drafts y aprobar/rechazar mediante ledger local ligado a SHA-256, desde CLI y GUI.
