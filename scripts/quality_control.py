@@ -119,7 +119,7 @@ def scan_signals(path: Path, *, ffmpeg: str | None = None, detect_black: bool = 
     black = []
     silence = []
     if detect_black:
-        for match in re.finditer(r"black_start:([0-9.]+)\\s+black_end:([0-9.]+)\\s+black_duration:([0-9.]+)", log):
+        for match in re.finditer(r"black_start:([0-9.]+)\s+black_end:([0-9.]+)\s+black_duration:([0-9.]+)", log):
             black.append({"start": float(match.group(1)), "end": float(match.group(2)),
                           "duration": float(match.group(3))})
     if detect_silence:
@@ -178,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.report:
         destination = args.report.expanduser().resolve()
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(serialized + "\\n", encoding="utf-8")
+        destination.write_text(serialized + "\n", encoding="utf-8")
     return 0 if report["passed"] else 2
 
 
