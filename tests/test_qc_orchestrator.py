@@ -144,3 +144,28 @@ def test_artifact_symlink_is_rejected(tmp_path):
         pytest.skip(f"symlink creation unavailable: {exc}")
     with pytest.raises(ValueError, match="symlink is blocked"):
         evaluate(alias, technical_report=technical, perceptual_report=perceptual)
+
+
+def test_technical_signal_observations_survive_aggregation_and_require_review(tmp_path):
+    video, technical, perceptual = fixture(tmp_path)
+    video_report(technical, video, {
+        "schema_version": 1, "passed": True, "problems": [],
+        "observations": {
+            "black_segments": [{"start": 1.0, "end": 2.0, "duration": 1.0}],
+            "silence_segments": [{"start": 3.0, "end": 4.0, "duration": 1.0}],
+        },
+    })
+    result = evaluate(video, technical_report=technical, perceptual_report=perceptual)
+    assert result["status"] == "REVIEW_REQUIRED"
+    assert result["blocking"] == []
+    assert result["checks"]["technical"]["observations"]["black_segments"]
+    assert result["checks"]["technical"]["observations"]["silence_segments"]
+
+
+def test_malformed_technical_observations_fail_closed(tmp_path):
+    video, technical, perceptual = fixture(tmp_path)
+    video_report(technical, video, {
+        "schema_version": 1, "passed": True, "problems": [], "observations": []
+    })
+    with pytest.raises(ValueError, match="Technical QC observations must be a JSON object"):
+        evaluate(video, technical_report=technical, perceptual_report=perceptual)
