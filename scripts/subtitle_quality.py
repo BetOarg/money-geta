@@ -19,11 +19,16 @@ def _seconds(value:str)->float:
     return int(hours)*3600+int(minutes)*60+float(seconds)
 def parse_subtitles(path:Path)->list[dict[str,Any]]:
     text=path.expanduser().read_text(encoding="utf-8-sig"); cues=[]
-    for block in re.split(r"\n\s*\n",text.replace("\r\n","\n").replace("\r","\n")):
+    for block_number,block in enumerate(re.split(r"\n\s*\n",text.replace("\r\n","\n").replace("\r","\n")),start=1):
         lines=[line.strip() for line in block.splitlines() if line.strip()]
-        if not lines or lines[0].upper().startswith("WEBVTT"): continue
+        if not lines: continue
+        first=lines[0].upper()
+        if first.startswith("WEBVTT") or first.startswith("NOTE") or first in {"STYLE","REGION"}: continue
         timing_index=next((i for i,line in enumerate(lines) if _TIME.match(line)),None)
-        if timing_index is None: continue
+        if timing_index is None:
+            if any("-->" in line for line in lines):
+                raise ValueError(f"subtitle block {block_number}: malformed timing line")
+            raise ValueError(f"subtitle block {block_number}: cue has no timing line")
         match=_TIME.match(lines[timing_index]); caption_lines=lines[timing_index+1:]; caption_text="\n".join(caption_lines)
         cues.append({"start":_seconds(match.group(1)),"end":_seconds(match.group(2)),"text":caption_text,"line_count":len(caption_lines),"line_lengths":[len(_TAG.sub("",line)) for line in caption_lines]})
     return cues
