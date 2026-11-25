@@ -60,6 +60,10 @@ money-geta profiles show education
 
 The registry currently identifies four profiles. Gaming is marked partial because the existing implementation is still GTA VI-centric; Viral, News and Education are planned profiles. Listing a profile does not imply that every listed capability is already implemented.
 
+## Session persistence
+
+- Session checkpoints: each `money-geta.json` manifest now carries `schema_version`, a stable `session_id`, and `created_at`; updates are written through a unique temporary file and atomic replacement. Malformed existing manifests and symlink manifests are rejected rather than overwritten. This improves persistence integrity but does not automatically resume an interrupted external process.
+
 ## Commands
 
 ```powershell
