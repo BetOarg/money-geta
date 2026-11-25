@@ -133,7 +133,7 @@ def scan_signals(path: Path, *, ffmpeg: str | None = None, detect_black: bool = 
                             "duration": round(end - start, 3) if end is not None else None})
     clipped_counts = []
     if detect_clipping:
-        clipped_counts = [int(value) for value in re.findall(r"Number of samples clipped:\\s*([0-9]+)", log, re.I)]
+        clipped_counts = [int(value) for value in re.findall(r"Number of samples clipped:\s*([0-9]+)", log, re.I)]
         if not clipped_counts:
             raise ValueError("FFmpeg astats did not report clipping sample counts")
     return {"black_segments": black, "silence_segments": silence,
