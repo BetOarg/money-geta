@@ -12,7 +12,7 @@ def test_preview_qc_technical_pass_and_observations(tmp_path):
     report_path = tmp_path / "preview-qc.json"
     def technical(path, **kwargs):
         assert path == media.resolve()
-        assert kwargs == {"max_duration": 9.0, "expected_aspect": "9:16", "require_audio": False}
+        assert kwargs == {"min_duration": 8.0, "max_duration": 10.0, "expected_aspect": "9:16", "require_audio": False}
         return {"passed": True, "problems": [], "sha256": "x"}
     def perceptual(path, **kwargs):
         return {"observations": {"black_segments": [], "freeze_segments": [], "silence_segments": []}}
@@ -56,3 +56,19 @@ def test_preview_qc_captures_technical_tool_error_as_review_required(tmp_path):
         perceptual_checker=lambda *args, **kwargs: {"observations": {}})
     assert result["status"] == "REVIEW_REQUIRED"
     assert "ffprobe missing" in result["technical_error"]
+
+
+def test_preview_qc_rejects_substantially_truncated_preview_duration(tmp_path):
+    media = tmp_path / "preview.mp4"
+    media.write_bytes(b"fake")
+    timeline = {"plan_type": "editable_timeline", "scenes": [{"duration_seconds": 10}]}
+    received = {}
+    def technical(path, **kwargs):
+        received.update(kwargs)
+        return {"passed": False, "problems": ["duration 5.000s is below minimum 9.000s"]}
+    result = review_preview(media, timeline, technical_checker=technical,
+        perceptual_checker=lambda path, **kwargs: {"observations": {}})
+    assert received["min_duration"] == 9.0
+    assert received["max_duration"] == 11.0
+    assert result["status"] == "REVIEW_REQUIRED"
+    assert "below minimum" in result["technical"]["problems"][0]
