@@ -54,7 +54,8 @@ Money-Geta se considera centro operativo cuando un usuario puede crear un proyec
 - [ ] Validar integridad de audio/video, duración, ratio, resolución, FPS, códec y subtítulos.
 - [x] Detectar segmentos de pantalla negra y silencios con FFmpeg (opt-in; observaciones para revisión humana).
 - [x] Comprobar ausencia de stream de audio cuando el perfil exige audio (`--require-audio`).
-- [ ] Detectar clipping/distorsión, silencios no deseados según guion y errores perceptuales de render.
+- [x] Detectar muestras de audio recortadas (clipping) mediante FFmpeg `astats`.
+- [ ] Evaluar distorsión, silencios no deseados según guion y errores perceptuales de render.
 - [ ] Crear revisión editorial/factual específica por perfil.
 - [x] Crear ledger hash-bound de revisión humana de derechos/atribución para candidatos Openverse (parcial: no cubre todos los assets ni certifica licencias).
 - [ ] Crear ledger de licencias, permisos, atribuciones y procedencia por asset.
