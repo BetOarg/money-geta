@@ -82,6 +82,7 @@ def _read_events(ledger: Path) -> list[dict[str, Any]]:
         raise ArtifactReviewError("Artifact ledger contains an unsupported event.")
     seen: set[str] = set()
     registered_hashes: dict[str, str] = {}
+    latest_central_qc: dict[str, dict[str, Any]] = {}
     for row in rows:
         event = row.get("event_type")
         artifact_id = row.get("artifact_id")
@@ -94,7 +95,7 @@ def _read_events(ledger: Path) -> list[dict[str, Any]]:
             if not re.fullmatch(r"[0-9a-f]{64}", str(row.get("sha256", ""))):
                 raise ArtifactReviewError("Artifact registration has an invalid SHA-256.")
             registered_hashes[artifact_id] = row["sha256"]
-        elif event in {"artifact_approved", "artifact_rejected", "artifact_qc", "artifact_central_qc"}:
+        elif event in {"artifact_approved", "artifact_rejected", "artifact_qc", "artifact_central_qc", "artifact_central_qc_reviewed"}:
             if (artifact_id not in seen or row.get("sha256") != registered_hashes.get(artifact_id)
                     or not re.fullmatch(r"[0-9a-f]{64}", str(row.get("sha256", "")))):
                 raise ArtifactReviewError("Artifact decision/QC is malformed or precedes registration.")
@@ -109,6 +110,15 @@ def _read_events(ledger: Path) -> list[dict[str, Any]]:
             elif event == "artifact_central_qc":
                 if row.get("status") not in {"FAILED", "REVIEW_REQUIRED", "READY_FOR_HUMAN_REVIEW"} or not isinstance(row.get("report"), dict):
                     raise ArtifactReviewError("Central QC event is malformed.")
+                latest_central_qc[artifact_id] = row
+            elif event == "artifact_central_qc_reviewed":
+                central = latest_central_qc.get(artifact_id)
+                if (central is None or central.get("status") != "REVIEW_REQUIRED"
+                        or row.get("central_qc_at") != central.get("qc_at")
+                        or not isinstance(row.get("reviewer"), str) or not row["reviewer"].strip()
+                        or not isinstance(row.get("notes"), str)
+                        or not isinstance(row.get("reviewed_at"), str)):
+                    raise ArtifactReviewError("Central QC acknowledgement is malformed or does not match the latest review-required event.")
         else:
             raise ArtifactReviewError("Artifact ledger contains an unknown event type.")
     return rows
