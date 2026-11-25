@@ -64,9 +64,9 @@ def test_signal_scan_parses_black_and_silence_findings(tmp_path, monkeypatch):
         assert "blackdetect=d=0.5:pix_th=0.10" in command
         assert "silencedetect=noise=-50dB:d=1.0" in command
         return subprocess.CompletedProcess(command, 0, "", (
-            "[blackdetect] black_start:1.000 black_end:2.500 black_duration:1.500\\n"
-            "[silencedetect] silence_start:3.000\\n"
-            "[silencedetect] silence_end:4.250 | silence_duration:1.250\\n"
+            "[blackdetect] black_start:1.000 black_end:2.500 black_duration:1.500\n"
+            "[silencedetect] silence_start:3.000\n"
+            "[silencedetect] silence_end:4.250 | silence_duration:1.250\n"
         ))
     monkeypatch.setattr(qc.subprocess, "run", fake_run)
     result = qc.scan_signals(source, ffmpeg="ffmpeg", detect_black=True, detect_silence=True)
