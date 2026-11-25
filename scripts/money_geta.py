@@ -459,7 +459,7 @@ def resume_source_session(args: argparse.Namespace) -> int:
         _reject_symlink_components(source_input)
         source = source_input.resolve(strict=True)
         expected_size = manifest["file_size"]
-        expected_sha256 = manifest["source_sha256"]
+        expected_sha256 = manifest.get("source_sha256")
         top = manifest["top"]
         minimum = manifest["min_seconds"]
         maximum = manifest["max_seconds"]
