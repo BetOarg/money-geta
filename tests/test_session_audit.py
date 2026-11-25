@@ -42,7 +42,10 @@ def test_audit_rejects_symlink_jobs_root(tmp_path):
     actual = tmp_path / "real"
     actual.mkdir()
     alias = tmp_path / "alias"
-    alias.symlink_to(actual, target_is_directory=True)
+    try:
+        alias.symlink_to(actual, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable on this platform: {exc}")
     with pytest.raises(ValueError, match="symlink"):
         audit_sessions(alias)
 
