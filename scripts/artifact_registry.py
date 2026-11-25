@@ -82,6 +82,7 @@ def _read_events(ledger: Path) -> list[dict[str, Any]]:
         raise ArtifactReviewError("Artifact ledger contains an unsupported event.")
     seen: set[str] = set()
     registered_hashes: dict[str, str] = {}
+    latest_central_qc: dict[str, dict[str, Any]] = {}
     for row in rows:
         event = row.get("event_type")
         artifact_id = row.get("artifact_id")
@@ -94,7 +95,7 @@ def _read_events(ledger: Path) -> list[dict[str, Any]]:
             if not re.fullmatch(r"[0-9a-f]{64}", str(row.get("sha256", ""))):
                 raise ArtifactReviewError("Artifact registration has an invalid SHA-256.")
             registered_hashes[artifact_id] = row["sha256"]
-        elif event in {"artifact_approved", "artifact_rejected", "artifact_qc", "artifact_central_qc"}:
+        elif event in {"artifact_approved", "artifact_rejected", "artifact_qc", "artifact_central_qc", "artifact_central_qc_reviewed"}:
             if (artifact_id not in seen or row.get("sha256") != registered_hashes.get(artifact_id)
                     or not re.fullmatch(r"[0-9a-f]{64}", str(row.get("sha256", "")))):
                 raise ArtifactReviewError("Artifact decision/QC is malformed or precedes registration.")
@@ -109,6 +110,15 @@ def _read_events(ledger: Path) -> list[dict[str, Any]]:
             elif event == "artifact_central_qc":
                 if row.get("status") not in {"FAILED", "REVIEW_REQUIRED", "READY_FOR_HUMAN_REVIEW"} or not isinstance(row.get("report"), dict):
                     raise ArtifactReviewError("Central QC event is malformed.")
+                latest_central_qc[artifact_id] = row
+            elif event == "artifact_central_qc_reviewed":
+                central = latest_central_qc.get(artifact_id)
+                if (central is None or central.get("status") != "REVIEW_REQUIRED"
+                        or row.get("central_qc_at") != central.get("qc_at")
+                        or not isinstance(row.get("reviewer"), str) or not row["reviewer"].strip()
+                        or not isinstance(row.get("notes"), str)
+                        or not isinstance(row.get("reviewed_at"), str)):
+                    raise ArtifactReviewError("Central QC acknowledgement is malformed or does not match the latest review-required event.")
         else:
             raise ArtifactReviewError("Artifact ledger contains an unknown event type.")
     return rows
@@ -298,6 +308,53 @@ def record_central_qc(campaign_path: str | Path, artifact_id: str, sha256: str, 
     return event
 
 
+
+def acknowledge_central_qc(campaign_path: str | Path, artifact_id: str, sha256: str, *,
+                           reviewer: str, notes: str = "") -> dict[str, Any]:
+    """Record a human acknowledgement of review-only findings for the exact artifact/QC event."""
+    if not isinstance(reviewer, str) or not reviewer.strip():
+        raise ArtifactReviewError("A non-empty reviewer is required.")
+    if not isinstance(notes, str) or len(notes) > 2000:
+        raise ArtifactReviewError("Review notes must be text up to 2000 characters.")
+    _, _, ledger = _campaign_context(campaign_path)
+    rows = _read_events(ledger)
+    registration = next((row for row in rows if row.get("event_type") == "artifact_registered"
+                         and row.get("artifact_id") == artifact_id), None)
+    if not registration or registration.get("sha256") != sha256:
+        raise ArtifactReviewError("Artifact ID/hash does not match registration.")
+    path, root = Path(registration["path"]), Path(registration["allowed_root"])
+    _reject_symlink_components(path)
+    _reject_symlink_components(root)
+    try:
+        path.relative_to(root)
+    except ValueError:
+        raise ArtifactReviewError("Artifact moved outside allowed output directory.") from None
+    if not path.is_file() or path.is_symlink() or _sha256(path) != sha256:
+        raise ArtifactReviewError("Artifact missing or changed after registration.")
+    central_events = [(index, row) for index, row in enumerate(rows)
+                      if row.get("event_type") == "artifact_central_qc"
+                      and row.get("artifact_id") == artifact_id]
+    if not central_events:
+        raise ArtifactReviewError("Central QC must be recorded before acknowledging findings.")
+    central_index, central = central_events[-1]
+    if central.get("sha256") != sha256:
+        raise ArtifactReviewError("Latest central QC belongs to a different artifact hash.")
+    if central.get("status") != "REVIEW_REQUIRED":
+        raise ArtifactReviewError("Only REVIEW_REQUIRED central QC findings can be acknowledged.")
+    event = {
+        "schema_version": 1,
+        "event_type": "artifact_central_qc_reviewed",
+        "artifact_id": artifact_id,
+        "sha256": sha256,
+        "central_qc_at": central.get("qc_at"),
+        "reviewer": reviewer.strip(),
+        "notes": notes.strip(),
+        "reviewed_at": _now(),
+    }
+    _append(ledger, event)
+    return event
+
+
 def check_artifact(campaign_path: str | Path, artifact_id: str, sha256: str) -> tuple[bool, list[str]]:
     rows = _read_events(_campaign_context(campaign_path)[2])
     registration = next((row for row in rows if row["event_type"] == "artifact_registered"
@@ -351,6 +408,11 @@ def main(argv: list[str] | None = None) -> int:
     central.add_argument("--artifact-id", required=True)
     central.add_argument("--sha256", required=True)
     central.add_argument("--report", type=Path, required=True)
+    central_review = sub.add_parser("central-qc-acknowledge", help="acknowledge review-only QC findings for an exact artifact hash")
+    central_review.add_argument("--artifact-id", required=True)
+    central_review.add_argument("--sha256", required=True)
+    central_review.add_argument("--reviewer", required=True)
+    central_review.add_argument("--notes", default="")
     qc = sub.add_parser("qc", help="run technical QC and record it against an exact artifact hash")
     qc.add_argument("--artifact-id", required=True)
     qc.add_argument("--sha256", required=True)
@@ -377,6 +439,11 @@ def main(argv: list[str] | None = None) -> int:
             event = record_central_qc(args.campaign, args.artifact_id, args.sha256, args.report)
             print(f'CENTRAL QC RECORDED: {event["status"]} artifact={event["artifact_id"]} sha256={event["sha256"]}')
             return 0 if event["status"] == "READY_FOR_HUMAN_REVIEW" else 2
+        if args.action == "central-qc-acknowledge":
+            event = acknowledge_central_qc(args.campaign, args.artifact_id, args.sha256,
+                                            reviewer=args.reviewer, notes=args.notes)
+            print(f'CENTRAL QC FINDINGS ACKNOWLEDGED: reviewer={event["reviewer"]} artifact={event["artifact_id"]} sha256={event["sha256"]}')
+            return 0
         if args.action == "qc":
             result = run_artifact_qc(args.campaign, args.artifact_id, args.sha256,
                 ffprobe=args.ffprobe, timeout=args.timeout, min_duration=args.min_duration,
@@ -399,17 +466,35 @@ def main(argv: list[str] | None = None) -> int:
                     problems.append("latest technical QC does not pass for this exact artifact hash")
                     passed = False
             central_events = [(i,row) for i,row in enumerate(all_events) if row.get("event_type") == "artifact_central_qc" and row.get("artifact_id") == args.artifact_id]
+            required_after_index = -1
             if not central_events:
                 problems.append("central QC has not been recorded for this artifact")
                 passed = False
             else:
                 central_index, central_latest = central_events[-1]
-                if central_latest.get("sha256") != args.sha256 or central_latest.get("status") != "READY_FOR_HUMAN_REVIEW":
-                    problems.append("latest central QC is not READY_FOR_HUMAN_REVIEW for this exact hash")
+                required_after_index = central_index
+                if central_latest.get("sha256") != args.sha256:
+                    problems.append("latest central QC does not match this exact artifact hash")
+                    passed = False
+                elif central_latest.get("status") == "REVIEW_REQUIRED":
+                    acknowledgements = [
+                        (i,row) for i,row in enumerate(all_events)
+                        if row.get("event_type") == "artifact_central_qc_reviewed"
+                        and row.get("artifact_id") == args.artifact_id
+                        and row.get("sha256") == args.sha256
+                        and row.get("central_qc_at") == central_latest.get("qc_at")
+                    ]
+                    if not acknowledgements:
+                        problems.append("central QC findings require explicit human acknowledgement")
+                        passed = False
+                    else:
+                        required_after_index = acknowledgements[-1][0]
+                elif central_latest.get("status") != "READY_FOR_HUMAN_REVIEW":
+                    problems.append("latest central QC is FAILED or has an unsupported status")
                     passed = False
                 approval_indices = [i for i,row in enumerate(all_events) if row.get("event_type") == "artifact_approved" and row.get("artifact_id") == args.artifact_id and row.get("sha256") == args.sha256]
-                if not approval_indices or approval_indices[-1] <= central_index:
-                    problems.append("human approval must be recorded after the latest central QC")
+                if not approval_indices or approval_indices[-1] <= required_after_index:
+                    problems.append("human artifact approval must be recorded after the latest central QC and any findings acknowledgement")
                     passed = False
             if not campaign_passed:
                 problems = [f"campaign: {item}" for item in campaign_problems] + problems

@@ -187,3 +187,76 @@ def test_central_qc_ready_status_rejects_findings(tmp_path: Path) -> None:
     }), encoding="utf-8")
     with pytest.raises(ArtifactReviewError, match="cannot contain blocking issues or review findings"):
         record_central_qc(campaign, item["artifact_id"], item["sha256"], report)
+
+
+def test_review_required_central_qc_needs_acknowledgement_and_new_artifact_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    from scripts.artifact_registry import acknowledge_central_qc, main, record_central_qc, run_artifact_qc
+    import scripts.campaign_check as campaign_check
+    import scripts.quality_control as qc
+
+    campaign, output = setup_campaign(tmp_path)
+    video = output / "final.mp4"
+    video.write_bytes(b"video")
+    item = register_artifact(campaign, video, allowed_root=output)
+    monkeypatch.setattr(qc, "inspect_media", lambda *a, **k: {"passed": True, "problems": [], "probe": {}})
+    run_artifact_qc(campaign, item["artifact_id"], item["sha256"])
+    report = output / "central.json"
+    report.write_text(json.dumps({
+        "schema_version": 1, "artifact": str(video.resolve()), "sha256": item["sha256"],
+        "status": "REVIEW_REQUIRED", "blocking": [],
+        "review": ["Black segment detected; inspect the actual footage."], "checks": {},
+    }), encoding="utf-8")
+    record_central_qc(campaign, item["artifact_id"], item["sha256"], report)
+    approve_artifact(campaign, item["artifact_id"], item["sha256"], reviewer="operator")
+    monkeypatch.setattr(campaign_check, "check_file", lambda *a, **k: (True, []))
+    args = ["--campaign", str(campaign), "publication-check",
+            "--artifact-id", item["artifact_id"], "--sha256", item["sha256"]]
+    assert main(args) == 2
+    assert "explicit human acknowledgement" in capsys.readouterr().out
+
+    acknowledged = acknowledge_central_qc(
+        campaign, item["artifact_id"], item["sha256"],
+        reviewer="operator", notes="Reviewed the black segment; it is an intentional fade.",
+    )
+    assert acknowledged["event_type"] == "artifact_central_qc_reviewed"
+    # The final artifact approval must occur after the acknowledgement.
+    approve_artifact(campaign, item["artifact_id"], item["sha256"], reviewer="operator",
+                     notes="Approved after QC findings review.")
+    assert main(args) == 0
+    assert "READY_FOR_HUMAN_PUBLISH_ACTION" in capsys.readouterr().out
+
+
+def test_central_qc_acknowledgement_rejects_ready_or_failed_status(tmp_path: Path) -> None:
+    from scripts.artifact_registry import acknowledge_central_qc, record_central_qc
+
+    campaign, output = setup_campaign(tmp_path)
+    video = output / "final.mp4"
+    video.write_bytes(b"video")
+    item = register_artifact(campaign, video, allowed_root=output)
+    report = output / "central.json"
+    report.write_text(json.dumps({
+        "schema_version": 1, "artifact": str(video.resolve()), "sha256": item["sha256"],
+        "status": "READY_FOR_HUMAN_REVIEW", "blocking": [], "review": [], "checks": {},
+    }), encoding="utf-8")
+    record_central_qc(campaign, item["artifact_id"], item["sha256"], report)
+    with pytest.raises(ArtifactReviewError, match="Only REVIEW_REQUIRED"):
+        acknowledge_central_qc(campaign, item["artifact_id"], item["sha256"], reviewer="operator")
+
+
+def test_central_qc_acknowledgement_requires_reviewer(tmp_path: Path) -> None:
+    from scripts.artifact_registry import acknowledge_central_qc, record_central_qc
+
+    campaign, output = setup_campaign(tmp_path)
+    video = output / "final.mp4"
+    video.write_bytes(b"video")
+    item = register_artifact(campaign, video, allowed_root=output)
+    report = output / "central.json"
+    report.write_text(json.dumps({
+        "schema_version": 1, "artifact": str(video.resolve()), "sha256": item["sha256"],
+        "status": "REVIEW_REQUIRED", "blocking": [], "review": ["Observation"], "checks": {},
+    }), encoding="utf-8")
+    record_central_qc(campaign, item["artifact_id"], item["sha256"], report)
+    with pytest.raises(ArtifactReviewError, match="reviewer is required"):
+        acknowledge_central_qc(campaign, item["artifact_id"], item["sha256"], reviewer=" ")
