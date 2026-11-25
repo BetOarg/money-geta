@@ -41,7 +41,7 @@ def _mock_response(source_id):
         "narration": "Based on the captured source, here is the short explanation.",
         "scenes": [{"visual": "Show the relevant scene.", "narration": "Explain the verified detail."}],
         "cta": "Follow for more context.", "source_ids": [source_id],
-        "claims": [{"claim_id": None, "text": "The verified detail.", "evidence_ids": [source_id]}],
+        "claims": [],
     }
     return {"choices": [{"message": {"content": json.dumps(script)}}]}
 
@@ -51,7 +51,7 @@ def test_validate_script_requires_source_citations_and_scene_structure():
         "title": "Title", "hook": "Hook", "narration": "Narration",
         "scenes": [{"visual": "Visual", "narration": "Scene narration"}],
         "cta": "CTA", "source_ids": ["source-1"],
-        "claims": [{"claim_id": None, "text": "Claim text", "evidence_ids": ["source-1"]}],
+        "claims": [],
     }
     assert validate_script_payload(valid, evidence_ids={"source-1"}, supported_claims=[], factual_required=False)
     invalid = dict(valid, source_ids=["not-known"])
@@ -125,3 +125,35 @@ def test_draft_script_rejects_missing_campaign_rights_gate(monkeypatch, tmp_path
     monkeypatch.setattr(writer, "chat_completion", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("LLM called")))
     with pytest.raises(ValueError, match="Campaign gate blocked"):
         draft_campaign_script("no-evidence", "campaign", root=root, config=_llm_config())
+
+
+def test_viral_factual_claim_must_match_supported_ledger_when_present():
+    supported = [{
+        "claim_id": "claim-viral-1", "claim": "Exact supported detail",
+        "status": "supported", "evidence_ids": ["source-1"],
+    }]
+    payload = {
+        "title": "Title", "hook": "Hook", "narration": "Narration",
+        "scenes": [{"visual": "Visual", "narration": "Scene narration"}],
+        "cta": "CTA", "source_ids": ["source-1"],
+        "claims": [{"claim_id": None, "text": "Unverified detail", "evidence_ids": ["source-1"]}],
+    }
+    with pytest.raises(ValueError, match="supported claim-ledger ID"):
+        validate_script_payload(payload, evidence_ids={"source-1"},
+                                supported_claims=supported, factual_required=False)
+    payload["claims"][0] = {
+        "claim_id": "claim-viral-1", "text": "Exact supported detail",
+        "evidence_ids": ["source-1"],
+    }
+    assert validate_script_payload(payload, evidence_ids={"source-1"},
+                                   supported_claims=supported, factual_required=False)
+
+
+def test_non_factual_viral_script_can_have_empty_claim_list():
+    payload = {
+        "title": "Opinion", "hook": "My reaction", "narration": "This is commentary.",
+        "scenes": [{"visual": "Show a clip", "narration": "This is my opinion."}],
+        "cta": "Follow", "source_ids": ["source-1"], "claims": [],
+    }
+    assert validate_script_payload(payload, evidence_ids={"source-1"},
+                                   supported_claims=[], factual_required=False)
