@@ -39,8 +39,8 @@ def test_no_cues_and_bad_file_fail(tmp_path: Path) -> None:
 def test_malformed_cue_block_is_not_silently_ignored(tmp_path: Path) -> None:
     f = tmp_path / "broken.srt"
     f.write_text(
-        "1\\n00:00:01,000 --> 00:00:03,000\\nValid cue.\\n\\n"
-        "2\\n00:00:04,000 --> not-a-time\\nBroken cue.\\n",
+        "1\n00:00:01,000 --> 00:00:03,000\nValid cue.\n\n"
+        "2\n00:00:04,000 --> not-a-time\nBroken cue.\n",
         encoding="utf-8",
     )
     report = inspect_subtitles(f)
@@ -52,8 +52,8 @@ def test_malformed_cue_block_is_not_silently_ignored(tmp_path: Path) -> None:
 def test_vtt_note_metadata_is_ignored_and_valid_cue_passes(tmp_path: Path) -> None:
     f = tmp_path / "sample.vtt"
     f.write_text(
-        "WEBVTT\\n\\nNOTE This is metadata\\nignored note text\\n\\n"
-        "00:01.000 --> 00:03.000\\nValid cue.\\n",
+        "WEBVTT\n\nNOTE This is metadata\nignored note text\n\n"
+        "00:01.000 --> 00:03.000\nValid cue.\n",
         encoding="utf-8",
     )
     report = inspect_subtitles(f)
