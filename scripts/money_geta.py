@@ -398,8 +398,12 @@ def run_process_source(args: argparse.Namespace) -> int:
         write_manifest(session, stage="downloading", source_host=urlsplit(url).netloc,
                        rights_confirmed=True, workflow="download-and-analyze")
         source = download_source(url, session, args.ffmpeg_location)
+        source_digest = hashlib.sha256()
+        with source.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                source_digest.update(chunk)
         write_manifest(session, stage="source_ready", source_path=str(source),
-                       file_size=source.stat().st_size, top=args.top,
+                       file_size=source.stat().st_size, source_sha256=source_digest.hexdigest(), top=args.top,
                        min_seconds=args.min_seconds, max_seconds=args.max_seconds)
     except (OSError, RuntimeError, ValueError) as exc:
         if session is not None:
@@ -455,6 +459,7 @@ def resume_source_session(args: argparse.Namespace) -> int:
         _reject_symlink_components(source_input)
         source = source_input.resolve(strict=True)
         expected_size = manifest["file_size"]
+        expected_sha256 = manifest.get("source_sha256")
         top = manifest["top"]
         minimum = manifest["min_seconds"]
         maximum = manifest["max_seconds"]
@@ -466,6 +471,9 @@ def resume_source_session(args: argparse.Namespace) -> int:
         return 2
     if not isinstance(expected_size, int) or source.stat().st_size != expected_size:
         print("BLOCKED: source file size differs from the recorded checkpoint.")
+        return 2
+    if not isinstance(expected_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+        print("BLOCKED: original source SHA-256 is missing or invalid.")
         return 2
     if not isinstance(top, int) or isinstance(top, bool) or not 1 <= top <= 30:
         print("BLOCKED: recorded top-candidate parameter is invalid.")
@@ -481,7 +489,11 @@ def resume_source_session(args: argparse.Namespace) -> int:
     with source.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
-    write_manifest(session, stage="analyzing", source_sha256=digest.hexdigest(),
+    actual_sha256 = digest.hexdigest()
+    if actual_sha256 != expected_sha256:
+        print("BLOCKED: source SHA-256 differs from the original checkpoint.")
+        return 2
+    write_manifest(session, stage="analyzing", source_sha256=actual_sha256,
                    resume_count=1, resume_authorized_at=datetime.now(timezone.utc).isoformat())
     analysis_args = argparse.Namespace(
         gtavi_dir=args.gtavi_dir, gtavi_python=args.gtavi_python, source=source,
