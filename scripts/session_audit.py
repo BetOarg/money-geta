@@ -16,9 +16,10 @@ COMPLETED_STAGES = {"recorded", "analyzed", "source_ready", "clip_ready"}
 
 def audit_sessions(root: str | Path, *, limit: int = 100) -> dict[str, Any]:
     """Read session manifests without modifying jobs or attempting automatic resume."""
-    base = Path(root).expanduser().resolve()
+    base = Path(root).expanduser()
     if base.is_symlink():
         raise ValueError("Jobs root cannot be a symlink.")
+    base = base.resolve()
     if not base.is_dir():
         return {"jobs_root": str(base), "count": 0, "sessions": [], "note": "jobs root missing"}
     entries: list[dict[str, Any]] = []
