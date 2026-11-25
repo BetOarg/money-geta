@@ -106,3 +106,84 @@ def test_audit_blocks_invalid_stage_type(tmp_path):
     )
     result = audit_sessions(tmp_path)
     assert result["sessions"][0]["status"] == "blocked"
+
+
+def _resumable_source_session(root):
+    from scripts.money_geta import write_manifest
+    session = root / "project" / "live" / "session-test"
+    session.mkdir(parents=True)
+    source = session / "source.mp4"
+    source.write_bytes(b"authorized local media")
+    write_manifest(
+        session,
+        stage="source_ready",
+        workflow="download-and-analyze",
+        rights_confirmed=True,
+        source_path=str(source),
+        file_size=source.stat().st_size,
+        top=8,
+        min_seconds=15,
+        max_seconds=40,
+    )
+    return session, source
+
+
+def test_resume_source_requires_explicit_confirmation(tmp_path, capsys):
+    from argparse import Namespace
+    from scripts.money_geta import resume_source_session
+    session, _ = _resumable_source_session(tmp_path)
+    args = Namespace(
+        confirm_resume=False, jobs_root=tmp_path, session_dir=session,
+        gtavi_dir=tmp_path, gtavi_python=None,
+    )
+    assert resume_source_session(args) == 2
+    assert "explicit --confirm-resume" in capsys.readouterr().out
+
+
+def test_resume_source_runs_only_verified_pristine_checkpoint(tmp_path, monkeypatch):
+    from argparse import Namespace
+    import scripts.money_geta as cli
+    session, source = _resumable_source_session(tmp_path)
+    called = {}
+    def fake_run_moments(args, session_dir=None):
+        called["source"] = args.source
+        called["session"] = session_dir
+        called["top"] = args.top
+        return 0
+    monkeypatch.setattr(cli, "run_moments", fake_run_moments)
+    args = Namespace(
+        confirm_resume=True, jobs_root=tmp_path, session_dir=session,
+        gtavi_dir=tmp_path, gtavi_python=None,
+    )
+    assert cli.resume_source_session(args) == 0
+    assert called == {"source": source.resolve(), "session": session.resolve(), "top": 8}
+    manifest = json.loads((session / "money-geta.json").read_text())
+    assert manifest["stage"] == "analyzing"
+    assert manifest["resume_count"] == 1
+    assert manifest["source_sha256"]
+
+
+def test_resume_source_blocks_existing_partial_analysis_outputs(tmp_path, capsys):
+    from argparse import Namespace
+    from scripts.money_geta import resume_source_session
+    session, _ = _resumable_source_session(tmp_path)
+    (session / "jobs").mkdir()
+    args = Namespace(
+        confirm_resume=True, jobs_root=tmp_path, session_dir=session,
+        gtavi_dir=tmp_path, gtavi_python=None,
+    )
+    assert resume_source_session(args) == 2
+    assert "possible partial outputs" in capsys.readouterr().out
+
+
+def test_resume_source_blocks_changed_source_size(tmp_path, capsys):
+    from argparse import Namespace
+    from scripts.money_geta import resume_source_session
+    session, source = _resumable_source_session(tmp_path)
+    source.write_bytes(b"changed source bytes")
+    args = Namespace(
+        confirm_resume=True, jobs_root=tmp_path, session_dir=session,
+        gtavi_dir=tmp_path, gtavi_python=None,
+    )
+    assert resume_source_session(args) == 2
+    assert "size differs" in capsys.readouterr().out
